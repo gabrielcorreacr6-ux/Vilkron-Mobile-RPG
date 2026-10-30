@@ -1,0 +1,139 @@
+VILKRON — jogo 2.5D (mapa 2D, personagens 3D)
+=============================================
+
+COMO PUBLICAR NO GITHUB PAGES (pelo celular)
+--------------------------------------------
+O GitHub não descompacta zip sozinho. Por isso existe um robô (GitHub Action)
+que descompacta qualquer .zip enviado para o repositório:
+
+1. No repositório: Add file > Create new file.
+2. No nome do arquivo escreva exatamente:  .github/workflows/descompactar.yml
+   (as barras criam as pastas sozinhas)
+3. Cole o texto do robô (está no fim deste arquivo) e toque em Commit changes.
+4. Em 1 ou 2 minutos o robô abre os .zip, apaga os .zip e o site é atualizado.
+   Para acompanhar: aba Actions.
+5. Nas próximas atualizações é só enviar o novo .zip (Add file > Upload files).
+   O seu config-online.js preenchido nunca é apagado pelo robô.
+
+ONDE FICA CADA COISA
+--------------------
+index.html        -> a tela do jogo (HUD, botões, estilos)
+jogo.js           -> regras do jogo. Números de equilíbrio no bloco CONFIG, no começo.
+mapas.js          -> o desenho dos 6 mapas (caminhos, rios, mobs, rotas dos minions)
+skins.js          -> heróis, animações, armas e texturas
+rede.js           -> modo online: login, salvar no servidor, ver os outros jogadores
+painel.js         -> telas online: login, nick, loja de skins, amigos, moderação,
+                     menu do administrador (☰) e o minimapa
+config-online.js  -> o endereço e a chave do seu Supabase (vazio = jogo offline)
+supabase.sql      -> o banco de dados (rodar uma vez no Supabase)
+
+LIGAR O MODO ONLINE (Supabase, grátis)
+--------------------------------------
+A. Criar o projeto
+   1. supabase.com > Start your project > entre com o GitHub.
+   2. New project: nome "vilkron", crie uma senha do banco (guarde), região São Paulo.
+B. Criar o banco
+   3. Menu SQL Editor > New query.
+   4. Abra o supabase.sql no GitHub (toque no arquivo > botão Raw), copie tudo,
+      cole no SQL Editor e toque em Run. Deve aparecer "Success".
+C. Login com Google
+   5. console.cloud.google.com > crie um projeto "Vilkron".
+   6. APIs e serviços > Tela de consentimento OAuth (ou "Google Auth Platform"):
+      tipo Externo, nome do app Vilkron, seu e-mail. Publique o app (Em produção).
+   7. Credenciais (Clientes) > Criar ID do cliente OAuth > Aplicativo da Web.
+      Em "URIs de redirecionamento autorizados" coloque:
+         https://SEU-PROJETO.supabase.co/auth/v1/callback
+      (o endereço aparece no Supabase em Authentication > Sign In / Providers > Google)
+   8. Copie o ID do cliente e a Chave secreta.
+   9. Supabase > Authentication > Sign In / Providers > Google > ative,
+      cole o ID e a chave secreta > Save.
+  10. Supabase > Authentication > URL Configuration:
+         Site URL:       https://gabrielcorreacr6-ux.github.io/Vilkron-Mobile-RPG/
+         Redirect URLs:  https://gabrielcorreacr6-ux.github.io/Vilkron-Mobile-RPG/
+D. Ligar o jogo ao banco
+  11. Supabase > Project Settings > API (ou Data API / API Keys):
+      copie o Project URL e a chave anon/publishable (NUNCA a service_role/secret).
+  12. No GitHub abra config-online.js > lápis (editar) > cole os dois valores > Commit.
+
+ADMINISTRADOR
+-------------
+Quem entrar com gabrieldejesus617@gmail.com vira administrador automaticamente
+ao criar o nick. Para trocar, edite a função email_admin() no supabase.sql e rode de novo.
+O botão ☰ (canto superior direito) só aparece para o administrador:
+  Jogadores    -> buscar por ID ou nick; doar ouro; dar/tirar estrelas e XP (tirar
+                  exige motivo, que vai como mensagem); banir (dias, meses, anos,
+                  para sempre) e tirar banimento; dar skin (permanente ou teste
+                  de 1, 3 ou 7 dias); nomear/retirar moderador e o pagamento dele.
+  Banimentos   -> relatório: quem foi banido, quem baniu, motivo, até quando.
+  Recompensas  -> XP e ouro de cada mob em cada mapa; prêmio da batalha entre
+                  jogadores (normal, experiente derruba novato, novato derruba experiente).
+  Prêmios      -> o que cada mob pode soltar: skin (permanente/teste), item ou ouro, com chance.
+  Loja         -> colocar skin na loja com data de entrada, data de saída e unidades.
+  Moderadores  -> lista com o pagamento de cada um.
+  Meus poderes -> imortal e invisível.
+
+MODERADORES
+-----------
+No menu ⋮ aparece "Moderação": banir/tirar banimento (pede ID, tempo e motivo),
+punir (tira de 1 a 5 estrelas com motivo), doar até 1000 de ouro por jogador por dia
+(pede o ID) e ficar invisível (só o administrador vê). Invisível não ataca jogadores
+nem ganha recompensa de batalha. O pagamento cai sozinho quando o moderador entra.
+
+SKINS DOS HERÓIS
+----------------
+Uma skin é da CLASSE e vale para o homem e a mulher dela. Arquivos:
+   assets/chars/<classe>_m_<skin>.glb  e  assets/chars/<classe>_f_<skin>.glb
+Ex.: soldado_m_dourado.glb e soldado_f_dourado.glb -> skin "dourado" do Soldado.
+Skin de soldado nunca aparece para mago, suporte ou atirador.
+Se o arquivo ainda não foi enviado, o jogo mostra o modelo padrão.
+
+ARTE QUE AINDA FALTA (o jogo usa forma provisória até o arquivo existir)
+--------------------------------------------------------------------------
+assets/mobs/   maestro_default.glb, veterano_default.glb, dragao_default.glb,
+               barao_default.glb, golem_default.glb   (aranha e serpente são feitas por código)
+               Variantes por mapa: <mob>_chuva.glb, <mob>_anciao.glb, <mob>_ascensao.glb
+assets/minions/ frente_neutro.glb, balistico_neutro.glb, carregador_neutro.glb
+               (e _azul / _vermelho para as arenas)
+assets/tex/    grama_mapa2.jpg, grama_mapa3.jpg, grama_repouso.jpg, areia_arena.jpg,
+               caminho_pedra.jpg  (enquanto não existem, o jogo usa a grama do mapa 1 tingida)
+
+TEXTO DO ROBÔ (.github/workflows/descompactar.yml)
+--------------------------------------------------
+name: Descompactar o jogo
+on:
+  push:
+    paths:
+      - '*.zip'
+      - '.github/workflows/descompactar.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+jobs:
+  descompactar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Abrir os zips
+        run: |
+          shopt -s nullglob
+          zips=( *.zip )
+          [ ${#zips[@]} -eq 0 ] && exit 0
+          for z in "${zips[@]}"; do
+            if grep -q "supabase.co" config-online.js 2>/dev/null; then
+              unzip -o "$z" -x config-online.js '.github/*' || [ $? -eq 11 ]
+            else
+              unzip -o "$z" -x '.github/*' || [ $? -eq 11 ]
+            fi
+            git rm -q --cached "$z" || true
+            rm -f "$z"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Descompacta os arquivos do jogo" || exit 0
+          git push
+      - name: Atualizar o site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST "repos/${{ github.repository }}/pages/builds" || true
