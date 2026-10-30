@@ -244,6 +244,133 @@
   function disco(r, tex, rep, x, z, y, tint) {
     return camada(uvRep(new THREE.CircleGeometry(r, 48), rep, rep), new THREE.MeshLambertMaterial({ map: Skins.textura(tex, 1, 1), color: tint || 0xffffff }), x, z, y);
   }
+  // manchas grandes claras e escuras por cima da grama: tira a cara de azulejo repetido
+  function manchasGrama(GW, GH, semente) {
+    if (!temDOM) return;
+    const rnd = semeado(semente * 97 + 13);
+    const t = canvasTex(512, 512, g => {
+      g.clearRect(0, 0, 512, 512);
+      for (let i = 0; i < 70; i++) {
+        const x = rnd() * 512, y = rnd() * 512, r = 30 + rnd() * 90, escura = rnd() < 0.62;
+        const grad = g.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, escura ? 'rgba(18,40,14,0.55)' : 'rgba(214,206,110,0.32)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+      }
+    });
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    const m = camada(uvRep(new THREE.PlaneGeometry(GW, GH), GW / 90, GH / 90),
+      new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.85 }), 0, 0, 0.005);
+    return m;
+  }
+
+  // água: cor mais funda, correnteza andando e um segundo reflexo por cima
+  function agua(d) {
+    const rios = d.rios || [], lagos = d.lagos || [];
+    if (!rios.length && !lagos.length) return;
+    const base = Skins.textura('rio', 1, 1), brilho = Skins.textura('rio', 1, 1, 'brilho');
+    const lago = Skins.textura('lago', 1, 1), lagoBrilho = Skins.textura('lago', 1, 1, 'brilho');
+    const fundo = 0x3f7f96;
+    rios.forEach(r => {
+      faixa(r.pts, r.largura, 'rio', 5, 0.02, fundo);
+      faixaTex(r.pts, r.largura * 0.86, brilho, 3, 0.025, { transparent: true, opacity: 0.32, color: 0xd8f4ff });
+    });
+    lagos.forEach(l => {
+      disco(l.r, 'lago', 2.2, l.x, l.z, 0.02, fundo);
+      camada(uvRep(new THREE.CircleGeometry(l.r * 0.9, 48), 1.6, 1.6),
+        new THREE.MeshBasicMaterial({ map: lagoBrilho, transparent: true, opacity: 0.28, color: 0xd8f4ff }), l.x, l.z, 0.025);
+    });
+    E.efeitos.push({ atualizar(dt) {
+      if (base.offset) { base.offset.x -= dt * 0.05; brilho.offset.x -= dt * 0.11; brilho.offset.y += dt * 0.015; }
+      if (lago.offset) { lago.offset.x += dt * 0.008; lagoBrilho.offset.x -= dt * 0.012; lagoBrilho.offset.y += dt * 0.01; }
+    } });
+  }
+  function faixaTex(pts, largura, tex, rep, y, opc) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+      const L = Math.hypot(bx - ax, bz - az);
+      const m = camada(uvRep(new THREE.PlaneGeometry(L + largura * 0.6, largura), (L + largura * 0.6) / rep, largura / rep),
+        new THREE.MeshBasicMaterial(Object.assign({ map: tex }, opc)), (ax + bx) / 2, (az + bz) / 2, y);
+      m.rotation.z = -Math.atan2(bz - az, bx - ax);
+    }
+  }
+
+  // Árvores em lote: um desenho só para centenas de árvores (leve no celular).
+  // A câmera nunca gira, então cada árvore é um quadro inclinado de frente para ela.
+  const INCLINACAO = Math.atan2(12.2, 11);
+  const ASPECTO = { arvore_1: 512 / 478, pinheiro_1: 297 / 512 };
+  function bosque(lista) {
+    const tipos = {};
+    lista.forEach(a => { (tipos[a.img] = tipos[a.img] || []).push(a); });
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), esc = new THREE.Vector3(), cor = new THREE.Color();
+    q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -INCLINACAO);
+    Object.keys(tipos).forEach(img => {
+      const l = tipos[img], anc = MAPAS.ANCORAS[img] !== undefined ? MAPAS.ANCORAS[img] : 0.03;
+      const geo = new THREE.PlaneGeometry(ASPECTO[img] || 1, 1);
+      geo.translate(0, 0.5 - anc, 0);
+      const mat = new THREE.MeshBasicMaterial({ alphaTest: 0.4, side: THREE.DoubleSide });
+      const malha = new THREE.InstancedMesh(geo, mat, l.length);
+      malha.name = 'bosque_' + img;
+      l.forEach((a, i) => {
+        pos.set(a.x, 0, a.z); esc.set(a.h, a.h, 1);
+        m4.compose(pos, q, esc); malha.setMatrixAt(i, m4);
+        cor.set(a.cor); malha.setColorAt(i, cor);
+      });
+      malha.instanceMatrix.needsUpdate = true;
+      if (malha.instanceColor) malha.instanceColor.needsUpdate = true;
+      malha.frustumCulled = false;
+      malha.renderOrder = 1;
+      E.mundo.add(malha);
+      const usar = t => { mat.map = t; mat.needsUpdate = true; };
+      if (R.cacheSprite[img]) usar(R.cacheSprite[img]);
+      else if (temDOM) R.texLoader.load('assets/sprites/' + img + '.png', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite[img] = t; usar(t); });
+    });
+    // sombras de todas as árvores, também em lote
+    const sg = new THREE.PlaneGeometry(1, 0.65); sg.rotateX(-Math.PI / 2);
+    const sombras = new THREE.InstancedMesh(sg, new THREE.MeshBasicMaterial({ map: R.sombraTex, transparent: true, depthWrite: false, opacity: 0.9 }), lista.length);
+    const qs = new THREE.Quaternion();
+    lista.forEach((a, i) => { pos.set(a.x, 0.06, a.z); const r = a.h * 0.62; esc.set(r, 1, r); m4.compose(pos, qs, esc); sombras.setMatrixAt(i, m4); });
+    sombras.instanceMatrix.needsUpdate = true; sombras.frustumCulled = false; sombras.renderOrder = 0;
+    E.mundo.add(sombras);
+    return lista.length;
+  }
+
+  // Mais pontos de mob: cópias de cada espécie perto dos caminhos, sempre nos mesmos
+  // lugares para todos os jogadores (sorteio com semente fixa)
+  function mobsDoMapa(d) {
+    if (d._mobsTodos) return d._mobsTodos;
+    const base = (d.mobs || []).slice();
+    const extras = [], rnd = semeado((d.floresta ? d.floresta.semente : 5) * 131 + 7);
+    const [W, H] = d.tam;
+    const livre = (x, z) => {
+      if (Math.abs(x) > W / 2 - 14 || Math.abs(z) > H / 2 - 14) return false;
+      if (naAgua(x, z) || naAguaFolga(x, z, 4)) return false;
+      if (d.aguaBase && !naIlha(x, z)) return false;
+      if (zonaSegura(x, z) || Math.hypot(x - d.entrada[0], z - d.entrada[1]) < 24) return false;
+      if (Math.hypot(x - d.aeroporto.x, z - d.aeroporto.z) < 20) return false;
+      if ((d.arenas || []).some(a => dentroArena(a, x, z, 10))) return false;
+      if (d.eventoRank && Math.hypot(x - d.eventoRank.x, z - d.eventoRank.z) < d.eventoRank.r + 6) return false;
+      if (d.podio && Math.hypot(x - d.podio.x, z - d.podio.z) < d.podio.zonaSegura + 6) return false;
+      if ((d.pracas || []).some(p => Math.abs(x - p.x) < p.w / 2 + 10 && Math.abs(z - p.z) < p.h / 2 + 10)) return false;
+      if (base.concat(extras).some(m => Math.hypot(x - m.x, z - m.z) < 22)) return false;
+      if ((d.decor || []).some(o => Math.hypot(x - o.x, z - o.z) < 8)) return false;
+      const c = (d.caminhos || []).length ? Math.min(...d.caminhos.map(c2 => distLinha(x, z, c2.pts) - c2.largura / 2)) : 10;
+      return c > 5 && c < 13;          // pertinho do caminho: dá para achar
+    };
+    const especies = Array.from(new Set(base.map(m => m.tipo))).filter(t => t !== 'golem');
+    const COPIAS = d.copiasMob !== undefined ? d.copiasMob : 2;
+    especies.forEach(tipo => {
+      for (let k = 0; k < COPIAS; k++) {
+        for (let tent = 0; tent < 600; tent++) {
+          const x = (rnd() - 0.5) * W, z = (rnd() - 0.5) * H;
+          if (livre(x, z)) { extras.push({ tipo, x: Math.round(x), z: Math.round(z), extra: true }); break; }
+        }
+      }
+    });
+    d._mobsTodos = base.concat(extras);
+    return d._mobsTodos;
+  }
+
   function sombra(x, z, raio, pai) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(raio * 2, raio * 1.3),
       new THREE.MeshBasicMaterial({ map: R.sombraTex, transparent: true, depthWrite: false }));
@@ -334,13 +461,15 @@
       camada(uvRep(new THREE.PlaneGeometry(W + 60, H + 60), (W + 60) / 8, (H + 60) / 8), new THREE.MeshLambertMaterial({ map: Skins.textura('rio', 1, 1) }), 0, 0, 0);
       d.ilhas.forEach(i => { disco(i.r + 2.5, 'margem_areia', (i.r + 2.5) / 3, i.x, i.z, 0.01); disco(i.r, d.chao.tex, i.r / rep, i.x, i.z, 0.02, d.chao.tint); });
     } else {
-      camada(uvRep(new THREE.PlaneGeometry(W + 60, H + 60), (W + 60) / rep, (H + 60) / rep),
+      const GW = W + 120, GH = H + 120;     // o chão vai além da borda, por baixo da floresta
+      camada(uvRep(new THREE.PlaneGeometry(GW, GH), GW / rep, GH / rep),
         new THREE.MeshLambertMaterial({ map: texChao(d.chao.tex, d.chao.reserva, 1, 1), color: d.chao.tint }), 0, 0, 0);
+      manchasGrama(GW, GH, d.semente || 7);
     }
-    (d.rios || []).forEach(r => { faixa(r.pts, r.largura + 4, 'margem_areia', 5, 0.01); });
-    (d.lagos || []).forEach(l => disco(l.r + 2.2, 'margem_areia', 3, l.x, l.z, 0.01));
-    (d.rios || []).forEach(r => { faixa(r.pts, r.largura, 'rio', 4, 0.02); });
-    (d.lagos || []).forEach(l => disco(l.r, 'lago', 2, l.x, l.z, 0.02));
+    const margem = 0xcdbb92;
+    (d.rios || []).forEach(r => { faixa(r.pts, r.largura + 4, 'margem_areia', 5, 0.01, margem); });
+    (d.lagos || []).forEach(l => disco(l.r + 2.2, 'margem_areia', 3, l.x, l.z, 0.01, margem));
+    agua(d);
     (d.caminhos || []).forEach(c => faixa(c.pts, c.largura, 'caminho_terra', 4, 0.03));
     (d.pracas || []).forEach(p => camada(uvRep(new THREE.PlaneGeometry(p.w, p.h), p.w / 4, p.h / 4),
       new THREE.MeshLambertMaterial({ map: Skins.textura('concreto_praca', 1, 1) }), p.x, p.z, 0.04));
@@ -360,28 +489,67 @@
     E.moitas = (d.moitas || []).slice();
     E.moitas.forEach(([x, z]) => peca('moita_1', 1.9, x, z));
 
-    // floresta
-    const f = d.floresta, rnd = semeado(f.semente);
+    // floresta: miolo + uma mata fechada em toda a borda (é ela que segura o jogador)
+    const mobs = mobsDoMapa(d);
+    const f = d.floresta, rnd = semeado(f.semente), arvores = [];
+    const corArvore = new THREE.Color(f.tint || '#ffffff');
+    const sombria = () => {
+      // árvores mais escuras e variadas (algumas quase negras no meio da mata)
+      const k = 0.42 + rnd() * 0.34, c = corArvore.clone().multiplyScalar(k);
+      c.b *= 0.92 + rnd() * 0.12; c.r *= 0.86 + rnd() * 0.1;
+      return c;
+    };
+    const podeArvore = (x, z, borda) => {
+      if (f.soIlhas) { if (!d.ilhas.some(i => Math.hypot(x - i.x, z - i.z) < i.r - 3)) return false; }
+      if (naAgua(x, z) || (!d.aguaBase && naAguaFolga(x, z, borda ? 2 : 3))) return false;
+      if (noCaminho(x, z, borda ? 3 : 4.5)) return false;                      // caminho sempre livre
+      if ((d.pracas || []).some(p => Math.abs(x - p.x) < p.w / 2 + 4 && Math.abs(z - p.z) < p.h / 2 + 4)) return false;
+      if (Math.hypot(x - d.aeroporto.x, z - d.aeroporto.z) < 15) return false;
+      if ((d.decor || []).some(o => Math.hypot(x - o.x, z - o.z) < 5)) return false;
+      if (mobs.some(m => Math.hypot(x - m.x, z - m.z) < 7)) return false;
+      if ((d.arenas || []).some(a => dentroArena(a, x, z, 7))) return false;
+      if (d.eventoRank && Math.hypot(x - d.eventoRank.x, z - d.eventoRank.z) < d.eventoRank.r + 4) return false;
+      if (d.podio && Math.hypot(x - d.podio.x, z - d.podio.z) < d.podio.zonaSegura) return false;
+      if (Math.hypot(x - d.entrada[0], z - d.entrada[1]) < 8) return false;
+      if (E.moitas.some(m => Math.hypot(x - m[0], z - m[1]) < 3)) return false;
+      return true;
+    };
+    const plantar = (x, z, maior) => {
+      const pinho = rnd() < 0.5;
+      const h = (pinho ? 4.6 + rnd() * 1.6 : 3.8 + rnd() * 1.4) * (maior ? 1.15 + rnd() * 0.25 : 1);
+      arvores.push({ img: pinho ? 'pinheiro_1' : 'arvore_1', h, x, z, cor: sombria() });
+    };
+    // miolo: bem mais árvores que antes
+    // em bosques: a maioria nasce perto de outra árvore, deixando clareiras entre eles
+    const alvo = Math.round(f.qtd * (f.soIlhas ? 1.6 : 3.4));
     let postas = 0, tent = 0;
-    while (postas < f.qtd && tent < f.qtd * 30) {
+    while (postas < alvo && tent < alvo * 30) {
       tent++;
-      const x = (rnd() - 0.5) * (W - 6), z = (rnd() - 0.5) * (H - 6);
-      if (f.soIlhas) { if (!d.ilhas.some(i => Math.hypot(x - i.x, z - i.z) < i.r - 3)) continue; }
-      if (naAgua(x, z) || (!d.aguaBase && naAguaFolga(x, z, 3))) continue;
-      if (noCaminho(x, z, 3.5)) continue;
-      if ((d.pracas || []).some(p => Math.abs(x - p.x) < p.w / 2 + 4 && Math.abs(z - p.z) < p.h / 2 + 4)) continue;
-      if (Math.hypot(x - d.aeroporto.x, z - d.aeroporto.z) < 15) continue;
-      if ((d.decor || []).some(o => Math.hypot(x - o.x, z - o.z) < 5)) continue;
-      if ((d.mobs || []).some(m => Math.hypot(x - m.x, z - m.z) < 7)) continue;
-      if ((d.arenas || []).some(a => dentroArena(a, x, z, 7))) continue;
-      if (d.eventoRank && Math.hypot(x - d.eventoRank.x, z - d.eventoRank.z) < d.eventoRank.r + 4) continue;
-      if (d.podio && Math.hypot(x - d.podio.x, z - d.podio.z) < d.podio.zonaSegura) continue;
-      if (Math.hypot(x - d.entrada[0], z - d.entrada[1]) < 8) continue;
-      if (E.moitas.some(m => Math.hypot(x - m[0], z - m[1]) < 3)) continue;
-      const pinho = rnd() < 0.45;
-      peca(pinho ? 'pinheiro_1' : 'arvore_1', pinho ? 4.6 + rnd() * 1.4 : 3.8 + rnd() * 1.2, x, z, { tint: f.tint });
-      postas++;
+      let x, z;
+      if (postas > 8 && rnd() < 0.65) {
+        const viz = arvores[Math.floor(rnd() * postas)], ang = rnd() * 6.283, dd = 2.4 + rnd() * 3.2;
+        x = viz.x + Math.cos(ang) * dd; z = viz.z + Math.sin(ang) * dd;
+        if (Math.abs(x) > W / 2 - 3 || Math.abs(z) > H / 2 - 3) continue;
+      } else { x = (rnd() - 0.5) * (W - 6); z = (rnd() - 0.5) * (H - 6); }
+      if (!podeArvore(x, z, false)) continue;
+      plantar(x, z, false); postas++;
     }
+    // borda: faixa fechada de mata, de 6 m para dentro até 34 m para fora do limite
+    if (!d.aguaBase) {
+      const passo = 2.7, dentro = 6, fora = 34;
+      for (let x = -W / 2 - fora; x <= W / 2 + fora; x += passo) {
+        for (let z = -H / 2 - fora; z <= H / 2 + fora; z += passo) {
+          const dx = W / 2 - Math.abs(x), dz = H / 2 - Math.abs(z);
+          if (Math.min(dx, dz) > dentro) continue;                              // só a faixa da borda
+          const jx = x + (rnd() - 0.5) * passo * 0.9, jz = z + (rnd() - 0.5) * passo * 0.9;
+          const naMata = Math.min(W / 2 - Math.abs(jx), H / 2 - Math.abs(jz)) < 0;
+          if (!naMata && !podeArvore(jx, jz, true)) continue;
+          if (naMata && (naAgua(jx, jz) || noCaminho(jx, jz, 1.5) || Math.hypot(jx - d.aeroporto.x, jz - d.aeroporto.z) < 12)) continue;
+          plantar(jx, jz, naMata);
+        }
+      }
+    }
+    E.arvores = bosque(arvores);
 
     // especiais
     if (d.eventoRank) montarEventoRank(d.eventoRank);
@@ -391,7 +559,7 @@
     (d.arenas || []).forEach((a, i) => E.arenas.push(montarArena(a, i)));
 
     // mobs, minions e serpente
-    for (const m of (d.mobs || [])) await criarMob(m);
+    for (const m of mobs) await criarMob(m);
     (d.minions || []).forEach((def, i) => E.ondas.push({ def, proxima: 4 + i * 6 }));
     if (d.serpente) await criarSerpente(d.serpente);
 
@@ -622,9 +790,15 @@
   }
 
   /* ---------- projéteis e áreas ---------- */
+  const _boca = THREE.Vector3 ? new THREE.Vector3() : null;
   function atirar(origem, ang, o) {
+    // tiros de arma saem da boca da arma, não do meio do corpo
+    let x0 = origem.x + Math.sin(ang) * 0.6, z0 = origem.z + Math.cos(ang) * 0.6, y0 = 1.1;
+    if (origem.obj && _boca && ['heroi', 'clone', 'remoto'].indexOf(origem.tipo) >= 0 && Skins.pontaArma && Skins.pontaArma(origem.obj, _boca)) {
+      x0 = _boca.x; z0 = _boca.z; y0 = Math.max(0.5, _boca.y);
+    }
     const p = Object.assign({
-      x: origem.x + Math.sin(ang) * 0.6, z: origem.z + Math.cos(ang) * 0.6, y: 1.1,
+      x: x0, z: z0, y: y0,
       dx: Math.sin(ang), dz: Math.cos(ang), vel: 16, restante: 10, dano: 10, raio: 0.5,
       origem, time: origem.time, efeito: null, verdadeiro: false
     }, o);
@@ -751,6 +925,7 @@
       if (alvo) ang = Math.atan2(alvo.x - h.x, alvo.z - h.z);
     }
     h.rot = ang;
+    if (h.classe === 'atirador') { h.miraAng = ang; h.miraAte = E.t + (slot === 1 ? 1.2 : 0.9); }
     let cd = cls.cd[slot];
     if (slot === 0) cd /= bonus().velAtaque;
     h.cds[slot] = E.t + cd;
@@ -813,9 +988,10 @@
         } });
       },
       (h, ang) => {
-        h.travadoAte = E.t + 0.7;   // rajada não pode ser interrompida
+        h.travadoAte = E.t + 0.95;   // rajada não pode ser interrompida
         h.anim.tocar('habilidade1');
-        for (let i = 0; i < 5; i++) agendar(i * 0.12, () => { if (!h.morto) atirar(h, ang, { vel: 32, restante: 12, dano: CLASSES.atirador.dano * 0.6, visual: 'bala', tamanho: 0.7 }); });
+        // os tiros começam depois que o rifle sobe
+        for (let i = 0; i < 5; i++) agendar(0.3 + i * 0.12, () => { if (!h.morto) atirar(h, ang, { vel: 32, restante: 12, dano: CLASSES.atirador.dano * 0.6, visual: 'bala', tamanho: 0.7 }); });
       },
       async (h) => {
         h.anim.tocar('habilidade2');
@@ -1323,7 +1499,8 @@
           if (iv.resta <= 0) h.investida = null;
         } else if (!ocupadoHeroi(h) && Entrada.mag > 0.12) {
           const dir = Math.atan2(Entrada.x, Entrada.z);
-          h.rot = girarPara(h.rot, dir, dt * 12);
+          // atirando: o corpo fica virado para o alvo enquanto as pernas andam
+          h.rot = h.miraAte > E.t ? girarPara(h.rot, h.miraAng, dt * 20) : girarPara(h.rot, dir, dt * 12);
           vel = h.vel * Entrada.mag * lentidao(h);
           h.x += Math.sin(dir) * vel * dt; h.z += Math.cos(dir) * vel * dt;
         }

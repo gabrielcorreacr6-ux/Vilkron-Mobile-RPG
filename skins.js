@@ -82,8 +82,18 @@
     duracoes: { ataque: 0.9, habilidade1: 1.0, habilidade2: 0.8, habilidade3: 1.0, dano: 0.45, morte: 1.6 },
     // Ajustes por classe: qual animação do arquivo usar em cada habilidade
     // (clipe = nome da animação no .glb) e quantas voltas o corpo dá por código.
+    // variacoes: o ataque básico alterna entre esses golpes (os que existirem no arquivo)
+    // andando: atirar correndo (as pernas seguem a corrida, os braços atiram)
     habilidades: {
-      soldado: { habilidade1: { clipe: 'extra_golpe_carregado', voltas: 1 } },
+      soldado: {
+        habilidade1: { clipe: 'extra_golpe_carregado', voltas: 1 },
+        ataque: { variacoes: ['ataque', 'extra_golpe_para_cima', 'extra_golpe_carregado'] }
+      },
+      // pistola no ataque básico (braço esticado); a rajada usa o rifle com as duas mãos
+      atirador: {
+        ataque: { clipe: 'habilidade1', andando: true },
+        habilidade1: { clipe: 'ataque' }
+      },
       // escudo: a animação do Meshy tem 9 s (sobe, segura, desce); no jogo vira 1,2 s
       suporte: { habilidade2: { duracao: 1.2 } }
     },
@@ -101,7 +111,7 @@
     armasDaClasse: {
       soldado:  { padrao: 'espada' },
       suporte:  { padrao: 'cajado' },
-      atirador: { padrao: 'rifle', habilidade1: 'pistola' }
+      atirador: { padrao: 'pistola', habilidade1: 'rifle' }
     },
     animacoes: {
       humanoide: [],   // ex.: ['parado','andar','correr','dano','morte']
@@ -463,6 +473,7 @@
       if (!this.mixer) {
         this.mixer = new THREE.AnimationMixer(this.corpo);
         this.mixer.addEventListener('finished', e => {
+          if (this.acaoCima && e.action === this.acaoCima) { this.acaoCima.fadeOut(0.15); this.acaoCima = null; if (this.estado === 'ataque') this._concluir(); return; }
           if (e.action === this.acoes[this.estado]) this._concluir();
         });
       }
@@ -481,6 +492,32 @@
 
     tem(estado) { return !!this.acoes[estado]; }
 
+    // outro golpe para o ataque básico: cada ataque usa o próximo da lista
+    adicionarVariacaoAtaque(clip) {
+      if (!this.mixer || !clipeServe(this.corpo, clip)) return false;
+      if (!this.varAtaque) this.varAtaque = [{ acao: this.acoes.ataque, escala: this.escalas.ataque }];
+      const c = clip.clone(); c.name = 'ataque_v' + this.varAtaque.length;
+      noLugar(c);
+      const acao = this.mixer.clipAction(c);
+      acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true;
+      this.varAtaque.push({ acao, escala: c.duration > 0 ? c.duration / CATALOGO.duracoes.ataque : 1 });
+      this.iVar = -1;
+      return true;
+    }
+
+    // atirar andando: só tronco, braços e cabeça; as pernas continuam a andar/correr
+    adicionarAtaqueAndando(clip, soCima) {
+      if (!this.mixer || !clipeServe(this.corpo, clip)) return false;
+      const c = clip.clone(); c.name = 'ataque_andando';
+      if (soCima) c.tracks = c.tracks.filter(t => /spine|neck|head|shoulder|arm|hand/i.test(THREE.PropertyBinding.parseTrackName(t.name).nodeName || ''));
+      noLugar(c);
+      if (!c.tracks.length) return false;
+      const acao = this.mixer.clipAction(c);
+      acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true;
+      this.ataqueAndando = { acao, escala: clip.duration > 0 ? clip.duration / CATALOGO.duracoes.ataque : 1 };
+      return true;
+    }
+
     // Chamar todo quadro com a velocidade atual: escolhe parado/andar/correr sozinho
     mover(velocidade) {
       this.velMov = velocidade;
@@ -497,6 +534,25 @@
       } else if (this.morto) return;
       if (estado === this.estado && !UMA_VEZ[estado]) return;
       if (estado === 'morte') this.morto = true;
+      // ataque correndo: braços atiram por cima da corrida, sem parar as pernas
+      if (estado === 'ataque' && this.ataqueAndando && this.velMov > 0.3 && this.acoes[this.base]) {
+        this.estado = 'ataque'; this.tEstado = 0;
+        this.aoTerminar = op.aoTerminar || null; this.aoAcertar = op.aoAcertar || null;
+        this.momento = op.momento !== undefined ? op.momento : 0.5;
+        if (this.acaoAtual !== this.acoes[this.base]) this._tocarAcao(this.base, 0.15);
+        const a = this.ataqueAndando;
+        a.acao.reset().setEffectiveTimeScale(a.escala * (op.velocidade || 1)).setEffectiveWeight(6).fadeIn(0.08).play();
+        this.acaoCima = a.acao;
+        return;
+      }
+      if (this.acaoCima) { this.acaoCima.fadeOut(0.1); this.acaoCima = null; }
+      // golpes alternados no ataque básico
+      if (estado === 'ataque' && this.varAtaque && this.varAtaque.length > 1) {
+        this.iVar = (this.iVar + 1) % this.varAtaque.length;
+        const v = this.varAtaque[this.iVar];
+        this.varAtaque.forEach(o => { if (o.acao !== v.acao && o.acao.getEffectiveWeight() > 0) o.acao.fadeOut(0.15); });
+        this.acoes.ataque = v.acao; this.escalas.ataque = v.escala;
+      }
       this.estado = estado; this.tEstado = 0;
       this.aoTerminar = op.aoTerminar || null;
       // aoAcertar: chamado no meio do golpe (momento = fração da animação, padrão 0.5)
@@ -556,7 +612,7 @@
 
       // momento do golpe (para aplicar o dano no instante certo)
       if (this.aoAcertar) {
-        const acao = this.acoes[this.estado];
+        const acao = (this.estado === 'ataque' && this.acaoCima) || this.acoes[this.estado];
         const prog = acao ? acao.time / acao.getClip().duration : p;
         if (prog >= this.momento) { const f = this.aoAcertar; this.aoAcertar = null; f(); }
       }
@@ -710,6 +766,20 @@
     });
     // 1º: nome exato do estado (arquivos preparados para o jogo)
     lista.forEach(clip => { if (ESTADOS.indexOf(clip.name) >= 0 && !anim.tem(clip.name)) anim.adicionarClipe(clip.name, clip); });
+    // variações do ataque básico e ataque andando
+    const cfgA = anim.config && anim.config.ataque;
+    if (cfgA && cfgA.variacoes && anim.tem('ataque')) {
+      cfgA.variacoes.forEach(nome => {
+        const clip = lista.find(c => c.name === nome);
+        if (clip && nome !== (cfgA.clipe || 'ataque')) anim.adicionarVariacaoAtaque(clip);
+      });
+    }
+    if (cfgA && cfgA.andando) {
+      const proprio = lista.find(c => c.name === 'extra_atirar_andando');   // se um dia vier pronto do Meshy
+      const base = lista.find(c => c.name === (cfgA.clipe || 'ataque'));
+      if (proprio) anim.adicionarAtaqueAndando(proprio, false);
+      else if (base) anim.adicionarAtaqueAndando(base, true);
+    }
     // 2º: nomes comuns em inglês (Idle, Walking, Attack...)
     lista.forEach(clip => {
       if (ESTADOS.indexOf(clip.name) >= 0 || /^extra_/.test(clip.name)) return;
@@ -878,7 +948,28 @@
       const X = new THREE.Vector3().crossVectors(Y, Z);
       suporte.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
     }
-    return { nome, obj: suporte, mao, modo: def.modo };
+    // comprimento para a frente (até a boca do cano), medido no próprio modelo
+    let ponta = 0.3;
+    if (THREE.Box3) { const cx = new THREE.Box3().setFromObject(modelo); if (isFinite(cx.max.z)) ponta = Math.max(0.1, cx.max.z); }
+    return { nome, obj: suporte, mao, modo: def.modo, ponta };
+  }
+
+  // Ponto de onde sai o tiro: a boca da arma que está na mão agora (no mundo)
+  const _vp = new THREE.Vector3(), _vf = new THREE.Vector3();
+  function pontaArma(obj, saida) {
+    const anim = obj && obj.userData && obj.userData.animador;
+    if (!anim || !anim.armas || !obj.parent) return false;
+    const quer = (anim.trocasArma && anim.trocasArma[anim.estado]) || anim.armaPadrao;
+    const a = anim.armas[quer];
+    if (!a || !a.obj.visible || !a.obj.getWorldPosition) return false;
+    obj.updateMatrixWorld(true);
+    a.obj.getWorldPosition(_vp);
+    // a boca fica para a frente do personagem (modo 'frente') ou da própria arma
+    if (a.modo === 'frente') { _vf.set(Math.sin(obj.rotation.y), 0, Math.cos(obj.rotation.y)); }
+    else { _vf.set(0, 0, 1); a.obj.getWorldDirection ? a.obj.getWorldDirection(_vf) : null; }
+    const esc = obj.scale ? obj.scale.y : 1;
+    saida.copy(_vp).add(_vf.multiplyScalar(a.ponta * esc));
+    return true;
   }
 
   async function carregarArmas(anim, cfg) {
@@ -926,9 +1017,10 @@
     const chave = Object.keys(CATALOGO.corTexturaFallback).find(k => nome.indexOf(k) === 0);
     return CATALOGO.corTexturaFallback[chave] || '#888888';
   }
-  function textura(nome, repeticaoX, repeticaoY) {
+  // copia: outra cópia independente da mesma imagem (para animar separado)
+  function textura(nome, repeticaoX, repeticaoY, copia) {
     const rx = repeticaoX || 1, ry = repeticaoY || rx;
-    const chave = nome + '|' + rx + '|' + ry;
+    const chave = nome + '|' + rx + '|' + ry + (copia ? '|' + copia : '');
     if (cacheTex[chave]) return cacheTex[chave];
     let tex;
     if (global.document) {
@@ -969,7 +1061,7 @@
 
   global.Skins = {
     CATALOGO, Perfil,
-    criarPersonagem, trocarSkin, trocarCor,
+    criarPersonagem, trocarSkin, trocarCor, pontaArma,
     criarMob, criarMinion, criarAranha, textura,
     animador, atualizar, remover,
     skinsDaClasse, registrarSkin,

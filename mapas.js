@@ -38,7 +38,7 @@
     /* ---------------- 1. FLORESTA ---------------- */
     mapa1: {
       nome: 'Floresta do Início', tam: [220, 160], ceu: '#9fcfe0', nevoa: [45, 95],
-      chao: { tex: 'grama_mapa1', tint: '#ffffff', metrosPorRepeticao: 4 },
+      chao: { tex: 'grama_mapa1', tint: '#dfe8d4', metrosPorRepeticao: 6 },
       entrada: [-88, 6],
       pracas: [{ x: -88, z: 0, w: 24, h: 24 }],
       caminhos: [{ largura: 4.5, pts: [[-76, 0], [-62, -8], [-48, -24], [-30, -38], [-8, -42], [14, -34], [26, -14], [20, 8], [2, 22], [-18, 34], [-32, 52], [-12, 64], [20, 62], [44, 48], [58, 24], [62, 0], [74, -22], [92, -38]] }],
@@ -67,7 +67,7 @@
     /* ---------------- 2. CHUVA ---------------- */
     mapa2: {
       nome: 'Vale da Chuva', tam: [220, 160], ceu: '#7f98a6', nevoa: [32, 80],
-      chao: { tex: 'grama_mapa2', reserva: 'grama_mapa1', tint: '#7fa08a', metrosPorRepeticao: 4 },
+      chao: { tex: 'grama_mapa2', reserva: 'grama_mapa1', tint: '#7fa08a', metrosPorRepeticao: 6 },
       entrada: [88, -6],
       pracas: [{ x: 88, z: 0, w: 22, h: 22 }],
       caminhos: [{ largura: 4.5, pts: [[77, 0], [62, 8], [48, 24], [30, 38], [8, 42], [-14, 34], [-26, 14], [-20, -8], [-2, -22], [18, -34], [32, -52], [12, -64], [-20, -62], [-44, -48], [-58, -24], [-62, 0], [-74, 22], [-90, 38]] }],
@@ -96,7 +96,7 @@
     /* ---------------- 3. RANQUEADO ---------------- */
     mapa3: {
       nome: 'Vale Ranqueado', tam: [280, 180], ceu: '#b3d4e0', nevoa: [50, 110],
-      chao: { tex: 'grama_mapa3', reserva: 'grama_mapa1', tint: '#d6d08a', metrosPorRepeticao: 4 },
+      chao: { tex: 'grama_mapa3', reserva: 'grama_mapa1', tint: '#d6d08a', metrosPorRepeticao: 6 },
       entrada: [-118, 6],
       pracas: [{ x: -118, z: 0, w: 22, h: 22 }],
       caminhos: [{ largura: 5, pts: [[-106, 0], [-88, -14], [-66, -24], [-44, -18], [-26, -4], [0, 0], [26, 4], [44, 18], [66, 24], [88, 10], [100, -14], [112, -36], [122, -48]] }],
@@ -126,7 +126,7 @@
     /* ---------------- 4. ARENAS ---------------- */
     arenas: {
       nome: 'Campo das Arenas', tam: [320, 200], ceu: '#a6cbe0', nevoa: [55, 120],
-      chao: { tex: 'grama_mapa1', tint: '#cfe3b0', metrosPorRepeticao: 4 },
+      chao: { tex: 'grama_mapa1', tint: '#cfe3b0', metrosPorRepeticao: 6 },
       entrada: [-140, 46],
       pracas: [{ x: -140, z: 40, w: 22, h: 22 }],
       caminhos: [{ largura: 5, pts: [[-128, 40], [-100, 30], [-70, 6], [-30, 2], [0, 12], [30, 2], [70, 6], [100, 30], [134, 40]] }],
@@ -154,7 +154,7 @@
     /* ---------------- 5. ASCENSÃO ---------------- */
     ascensao: {
       nome: 'Ascensão', tam: [240, 180], ceu: '#8fc4d8', nevoa: [45, 100],
-      chao: { tex: 'grama_mapa1', tint: '#a8d8c0', metrosPorRepeticao: 4 },
+      chao: { tex: 'grama_mapa1', tint: '#a8d8c0', metrosPorRepeticao: 6 },
       aguaBase: true,                // quase tudo é água; terra só nas ilhas e passarelas
       ilhas: [
         { x: -96, z: 0, r: 20 }, { x: -52, z: -36, r: 15 }, { x: -40, z: 40, r: 14 }, { x: -5, z: 0, r: 17 },
@@ -186,7 +186,7 @@
     /* ---------------- 6. REPOUSO ---------------- */
     repouso: {
       nome: 'Jardim do Repouso', tam: [180, 140], ceu: '#c7dfee', nevoa: [50, 100],
-      chao: { tex: 'grama_repouso', reserva: 'grama_mapa1', tint: '#d8f0c0', metrosPorRepeticao: 4 },
+      chao: { tex: 'grama_repouso', reserva: 'grama_mapa1', tint: '#d8f0c0', metrosPorRepeticao: 6 },
       entrada: [-76, 6],
       pracas: [{ x: -76, z: 0, w: 18, h: 18 }, { x: 0, z: -24, w: 34, h: 18 }],
       caminhos: [{ largura: 4.5, pts: [[-66, 0], [-40, -6], [-18, -14], [0, -14], [22, -14], [44, -6], [62, -18], [78, -30]] }],
