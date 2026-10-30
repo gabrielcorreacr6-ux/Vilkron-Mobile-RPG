@@ -1,0 +1,24 @@
+JOGO 2.5D — como subir no GitHub Pages
+======================================
+
+1. Suba TODOS os arquivos e pastas deste zip para o repositório, mantendo as pastas:
+   index.html, jogo.js, mapas.js, skins.js e a pasta assets/
+2. Ative o GitHub Pages (Settings > Pages > branch main, pasta raiz).
+3. Abra o link do Pages no celular.
+
+Onde fica cada coisa
+--------------------
+jogo.js   -> regras do jogo. Os números de equilíbrio (vida, dano, preços,
+             tempos) estão todos no bloco CONFIG, no começo do arquivo.
+mapas.js  -> o desenho dos 6 mapas (caminhos, rios, mobs, rotas dos minions).
+skins.js  -> heróis, animações, armas e texturas.
+
+Arte que ainda falta (o jogo usa uma forma provisória até o arquivo existir)
+--------------------------------------------------------------------------
+assets/mobs/   maestro_default.glb, veterano_default.glb, dragao_default.glb,
+               barao_default.glb, golem_default.glb   (aranha e serpente são feitas por código)
+               Variantes por mapa: <mob>_chuva.glb, <mob>_anciao.glb, <mob>_ascensao.glb
+assets/minions/ frente_neutro.glb, balistico_neutro.glb, carregador_neutro.glb
+               (e _azul / _vermelho para as arenas)
+assets/tex/    grama_mapa2.jpg, grama_mapa3.jpg, grama_repouso.jpg, areia_arena.jpg,
+               caminho_pedra.jpg  (enquanto não existem, o jogo usa a grama do mapa 1 tingida)
