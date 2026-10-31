@@ -89,7 +89,7 @@
 
   /* ---------------- PERFIL ↔ JOGO ---------------- */
   let J = null, base = 0, danoBase = 0, versao = 1, sincT = null, sincronizando = false;
-  const CAMPOS = ['classe', 'genero', 'cor', 'clan', 'classes', 'passes', 'mapa', 'pontosRank', 'inventario', 'skinEquipada', 'temporada', 'eventoArena'];
+  const CAMPOS = ['classe', 'genero', 'cor', 'clan', 'classes', 'passes', 'mapa', 'pontosRank', 'inventario', 'skinEquipada', 'temporada', 'eventoArena', 'viagem', 'retorno'];
 
   // começa o jogo com o que está no servidor (ou com o perfil local na primeira vez)
   Rede.prepararJogo = function () {
@@ -111,6 +111,7 @@
     carregarAjustes();
     carregarAmigos();
     carregarEquipe();
+    carregarChat();
     setInterval(() => sincronizar(), 15000);
     setInterval(() => carregarEquipe(), 20000);
     if (global.document && global.document.addEventListener)
@@ -176,6 +177,7 @@
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensagens', filter: 'para=eq.' + Rede.eu.id }, () => Rede.lerMensagens())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'equipe_membros' }, () => carregarEquipe())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'convites_equipe', filter: 'para=eq.' + Rede.eu.id }, () => carregarEquipe())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat' }, m => receberChat(m.new))
       .subscribe();
   }
 
@@ -255,11 +257,60 @@
   }
   Rede.carregarEquipe = carregarEquipe;
   Rede.carregarAmigos = carregarAmigos;
+  const cacheNick = {};
   Rede.nicks = async ids => {
-    if (!ids.length) return {};
-    const { data } = await sb.from('perfis').select('id, num, nick').in('id', ids);
-    const m = {}; (data || []).forEach(p => { m[p.id] = p; }); return m;
+    const faltam = ids.filter(id => id && !cacheNick[id]);
+    if (faltam.length) {
+      const { data } = await sb.from('perfis').select('id, num, nick').in('id', faltam);
+      (data || []).forEach(p => { cacheNick[p.id] = p; });
+    }
+    const m = {}; ids.forEach(id => { if (cacheNick[id]) m[id] = cacheNick[id]; }); return m;
   };
+  Rede.nickJa = id => cacheNick[id] || null;
+
+  /* ---------------- CONVERSAS (equipe, amigos, privado) ---------------- */
+  // O servidor só entrega o que cada um pode ler (regras do SQL). Silenciados somem só aqui.
+  Rede.chat = { mensagens: [], ids: new Set(), naoLidas: 0, bloqueados: new Set(), silenciados: new Set() };
+  Rede.aoChat = null;            // a tela de conversa se pendura aqui
+  async function carregarChat() {
+    try {
+      const [m, b, si] = await Promise.all([
+        sb.from('chat').select('*').order('id', { ascending: false }).limit(200),
+        sb.from('bloqueios').select('bloqueado'), sb.from('silenciados').select('silenciado')
+      ]);
+      Rede.chat.bloqueados = new Set((b.data || []).map(x => x.bloqueado));
+      Rede.chat.silenciados = new Set((si.data || []).map(x => x.silenciado));
+      const lista = (m.data || []).reverse();
+      Rede.chat.mensagens = lista; Rede.chat.ids = new Set(lista.map(x => x.id));
+      await Rede.nicks(Array.from(new Set(lista.map(x => x.de).concat(lista.map(x => x.para).filter(Boolean)))));
+      if (Rede.aoChat) Rede.aoChat(null);
+    } catch (e) { console.warn('chat', e.message); }
+  }
+  Rede.carregarChat = carregarChat;
+  Rede.calado = id => Rede.chat.silenciados.has(id) || Rede.chat.bloqueados.has(id);
+  async function receberChat(m) {
+    if (!m || Rede.chat.ids.has(m.id)) return;
+    Rede.chat.ids.add(m.id); Rede.chat.mensagens.push(m);
+    if (Rede.chat.mensagens.length > 400) Rede.chat.mensagens.splice(0, 100);
+    await Rede.nicks([m.de]);
+    if (Rede.calado(m.de)) return;
+    // balão sobre a cabeça: mensagens da equipe (e as minhas para a equipe)
+    if (m.tipo === 'equipe') {
+      const ent = m.de === Rede.eu.id ? J.api.E.heroi : (Rede.remotos.get(m.de) || {}).ent;
+      if (ent && J.api.balao) J.api.balao(ent, m.texto);
+    }
+    if (m.de !== Rede.eu.id) Rede.chat.naoLidas++;
+    if (Rede.aoChat) Rede.aoChat(m);
+  }
+  Rede.enviarChat = async (tipo, para, texto) => {
+    const id = await rpc('enviar_chat', { p_tipo: tipo, p_para: para || null, p_texto: texto });
+    // se o aviso ao vivo demorar, a própria mensagem já aparece
+    receberChat({ id, de: Rede.eu.id, tipo, para: para || null, texto: String(texto).trim().slice(0, 200), criado_em: new Date().toISOString(), equipe: null });
+    return id;
+  };
+  Rede.bloquear = async id => { const r = await rpc('bloquear', { p_outro: id }); Rede.chat.bloqueados.add(id); await carregarAmigos(); return r; };
+  Rede.desbloquear = async id => { const r = await rpc('desbloquear', { p_outro: id }); Rede.chat.bloqueados.delete(id); return r; };
+  Rede.silenciar = async (id, sim) => { const r = await rpc('silenciar', { p_outro: id, p_sim: sim }); if (sim) Rede.chat.silenciados.add(id); else Rede.chat.silenciados.delete(id); return r; };
 
   /* ---------------- JOGADORES AO VIVO ---------------- */
   let canal = null, enviarEm = 0, ultimoEnvio = '', ultimoDrop = 0;

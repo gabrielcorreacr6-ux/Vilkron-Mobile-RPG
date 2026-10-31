@@ -663,6 +663,37 @@
     });
     return m;
   }
+  // Rota dos minions por cima do caminho: o começo e o fim ficam iguais (caverna, cais),
+  // e cada ponto do meio é puxado para o caminho mais perto, seguindo as curvas dele.
+  function rotaPeloCaminho(pts) {
+    if (!pts || pts.length < 3 || !(E.def.caminhos || []).length) return pts || [];
+    const proj = ([x, z]) => {
+      let m = null;
+      E.def.caminhos.forEach(c => { for (let i = 0; i < c.pts.length - 1; i++) {
+        const [ax, az] = c.pts[i], [bx, bz] = c.pts[i + 1], dx = bx - ax, dz = bz - az, l = dx * dx + dz * dz;
+        const t = l ? clamp(((x - ax) * dx + (z - az) * dz) / l, 0, 1) : 0, px = ax + t * dx, pz = az + t * dz, d = Math.hypot(x - px, z - pz);
+        if (!m || d < m.d) m = { d, px, pz, c, i, t };
+      } });
+      return m && m.d < 25 && !naAgua(m.px, m.pz) ? m : null;
+    };
+    const saida = [pts[0]];
+    let ant = null;
+    for (let k = 1; k < pts.length - 1; k++) {
+      const p = proj(pts[k]);
+      if (!p) { saida.push(pts[k]); ant = null; continue; }
+      if (ant && ant.c === p.c && ant.i !== p.i) {
+        // segue os pontos do caminho entre as duas projeções (se o caminho não der uma volta grande demais)
+        const passo = p.i > ant.i ? 1 : -1, meio = [];
+        for (let i = ant.i + (passo > 0 ? 1 : 0); passo > 0 ? i <= p.i : i > p.i; i += passo) { const q = p.c.pts[i]; if (!naAgua(q[0], q[1])) meio.push([q[0], q[1]]); }
+        let comp = 0, x0 = ant.px, z0 = ant.pz;
+        meio.concat([[p.px, p.pz]]).forEach(([x, z]) => { comp += Math.hypot(x - x0, z - z0); x0 = x; z0 = z; });
+        if (comp < Math.hypot(p.px - ant.px, p.pz - ant.pz) * 1.8 + 6) meio.forEach(q => saida.push(q));
+      }
+      saida.push([p.px, p.pz]); ant = p;
+    }
+    saida.push(pts[pts.length - 1]);
+    return saida;
+  }
   function ajustarMoitas(d) {
     const livre = (x, z) => !naAgua(x, z) && !noCaminho(x, z, 0.8) && !zonaSegura(x, z) &&
       !(d.pracas || []).some(p => Math.hypot(x - p.x, z - p.z) < Math.max(p.w, p.h) / 2 + 3) &&
@@ -1097,6 +1128,50 @@
           { n: 1, cor, vel: 0.02, subida: (0.3 + 0.05 * Math.min(5, e.seloFumaca)) * (1 - Math.abs(lado) * 3.5), vida: 0.28 });
       }
     }
+  }
+  // ---------- balão de fala sobre a cabeça (chat da equipe) ----------
+  function balao(e, texto) {
+    if (!temDOM || !e || !e.obj) return;
+    if (e.balao && e.balao.parent) e.balao.parent.remove(e.balao);
+    const c = document.createElement('canvas'), g = c.getContext('2d');
+    const fonte = 'bold 26px sans-serif'; g.font = fonte;
+    // quebra em até 3 linhas de ~22 letras
+    const palavras = String(texto).split(/\s+/), linhas = [];
+    let lin = '';
+    palavras.forEach(p => { const t = lin ? lin + ' ' + p : p; if (g.measureText(t).width > 300 && lin) { linhas.push(lin); lin = p; } else lin = t; });
+    if (lin) linhas.push(lin);
+    if (linhas.length > 3) { linhas.length = 3; linhas[2] = linhas[2].slice(0, 20) + '…'; }
+    const larg = Math.min(340, Math.max(...linhas.map(l => g.measureText(l).width)) + 34), alt = linhas.length * 32 + 26;
+    c.width = Math.ceil(larg) + 8; c.height = alt + 18;
+    g.font = fonte; g.fillStyle = 'rgba(255,253,245,0.96)'; g.strokeStyle = 'rgba(30,24,14,0.9)'; g.lineWidth = 3;
+    const r = 14, w = c.width - 6, h = alt;
+    g.beginPath(); g.moveTo(3 + r, 3); g.lineTo(3 + w - r, 3); g.quadraticCurveTo(3 + w, 3, 3 + w, 3 + r); g.lineTo(3 + w, 3 + h - r); g.quadraticCurveTo(3 + w, 3 + h, 3 + w - r, 3 + h);
+    g.lineTo(c.width / 2 + 10, 3 + h); g.lineTo(c.width / 2, c.height - 2); g.lineTo(c.width / 2 - 10, 3 + h);
+    g.lineTo(3 + r, 3 + h); g.quadraticCurveTo(3, 3 + h, 3, 3 + h - r); g.lineTo(3, 3 + r); g.quadraticCurveTo(3, 3, 3 + r, 3); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#1e180e'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    linhas.forEach((l, i) => g.fillText(l, c.width / 2, 3 + 13 + 16 + i * 32));
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+    const mat = new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, depthTest: false });
+    const s = new THREE.Sprite(mat); const k = 0.0072; s.scale.set(c.width * k, c.height * k, 1); s.renderOrder = 20;
+    if (s.center) s.center.set(0.5, 0);
+    E.mundo.add(s); e.balao = s;
+    const dur = Math.min(9, 3.5 + String(texto).length * 0.06);
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt;
+      const alto = (e.altura || 1.8) * (e.obj && e.obj.scale ? e.obj.scale.y : 1) + 1.15 - (e.afundado || 0);
+      s.position.set(e.x, alto, e.z); s.visible = e.obj.visible !== false && !e.morto;
+      mat.opacity = Math.min(1, this.t / 0.15) * Math.min(1, (dur - this.t) / 0.5);
+      if (this.t > dur || e.balao !== s) { if (s.parent) s.parent.remove(s); t.dispose && t.dispose(); return true; }
+    } });
+  }
+  // administrador: vai direto para qualquer mapa, sem passe
+  async function teleportar(mapa) {
+    if (!MAPAS.lista[mapa]) return 'Mapa desconhecido';
+    if (E.heroi && E.heroi.arena) return 'Saia da arena primeiro';
+    P.viagem = null; P.retorno = null;
+    await carregarMapa(mapa);
+    aviso('Teleporte: ' + MAPAS.lista[mapa].nome);
+    return null;
   }
   function desenharBarra(e) {
     const b = e.barra, u = b.userData;
@@ -2863,8 +2938,8 @@
   }
   function pontosFase(r) {
     const d = r.def;
-    if (r.fase === 'ida') return d.ida;
-    if (r.fase === 'volta') return d.volta || [];
+    if (r.fase === 'ida') return d._ida || (d._ida = rotaPeloCaminho(d.ida));
+    if (r.fase === 'volta') return d._volta || (d._volta = rotaPeloCaminho(d.volta || []));
     return [];
   }
   function iaMinion(e, dt) {
@@ -3083,23 +3158,54 @@
   }
 
   /* ======================= AEROPORTO E PASSES ======================= */
+  // Passes são da CLASSE: trocar de herói pede um passe novo para ele. O nível também é o da classe.
+  // (A cidadania era salva como "infinito", que vira vazio ao salvar: por isso sumia. Agora vale pelo tipo.)
+  const ehAdmin = () => !!(global.Rede && global.Rede.eu && global.Rede.eu.papel === 'admin');
+  const passeValido = p => !!(p && (p.tipo === 'cidadania' || p.usos > 0));
+  function passesDaClasse() {
+    P.passes = P.passes || {};
+    const cl = P.classe || 'soldado';
+    // passes antigos (de antes de serem por classe) ficam com a classe que está em uso
+    Object.keys(P.passes).forEach(k => { if (MAPAS.lista[k]) { const v = P.passes[k]; delete P.passes[k]; P.passes[cl] = P.passes[cl] || {}; if (!P.passes[cl][k]) P.passes[cl][k] = v; } });
+    return (P.passes[cl] = P.passes[cl] || {});
+  }
   function comprarPasse(mapa, tipo) {
-    const d = MAPAS.lista[mapa];
-    if (C().estrelas < d.passe.nivel) return 'Precisa de nível ' + d.passe.nivel + ' (estrelas) com esta classe';
+    const d = MAPAS.lista[mapa], ps = passesDaClasse();
+    if (!ehAdmin() && C().estrelas < d.passe.nivel) return 'Precisa de nível ' + d.passe.nivel + ' (estrelas) com esta classe';
     const preco = d.passe.preco[tipo];
     if (P.ouro < preco) return 'Ouro insuficiente';
-    const atual = P.passes[mapa];
-    if (atual && atual.tipo === 'cidadania') return 'Você já tem cidadania em ' + d.nome;
+    const atual = ps[mapa];
+    if (atual && atual.tipo === 'cidadania') return 'Esta classe já tem cidadania em ' + d.nome;
     P.ouro -= preco;
-    if (tipo === 'cidadania') P.passes[mapa] = { tipo, usos: Infinity };
-    else P.passes[mapa] = { tipo, usos: (atual && atual.tipo !== 'cidadania' ? atual.usos : 0) + (tipo === 'ferias' ? 2 : 1) };
+    if (tipo === 'cidadania') ps[mapa] = { tipo, usos: -1 };
+    else ps[mapa] = { tipo, usos: (passeValido(atual) ? atual.usos : 0) + 1 };   // férias = 1 ida (a volta vem junto ao viajar)
     salvar(); hud();
     return null;
   }
+  // Viagem sem cidadania é visita: ao entrar no jogo de novo, o herói volta para o aeroporto de onde saiu.
+  // Férias = ida + volta: ao viajar, ganha a passagem de volta para o mapa de onde saiu.
+  function temVolta(mapa) { const r = P.retorno; return !!(r && r.classe === P.classe && r.mapa === mapa && r.de === E.mapa); }
+  function cidadaniaEm(mapa) { const p = passesDaClasse()[mapa]; return !!(p && p.tipo === 'cidadania'); }
+  // visita sem cidadania acabou ao sair do jogo: volta para o aeroporto de onde saiu
+  function mapaDeInicio() {
+    let inicio = P.mapa && MAPAS.lista[P.mapa] ? P.mapa : 'mapa1', voltou = null;
+    const vg = P.viagem;
+    if (vg && vg.destino === inicio && MAPAS.lista[vg.origem] && !(P.classe === vg.classe && cidadaniaEm(inicio))) {
+      inicio = vg.origem; voltou = MAPAS.lista[vg.origem].nome; P.viagem = null; P.retorno = null;
+    }
+    return { inicio, voltou };
+  }
   async function viajar(mapa) {
-    const p = P.passes[mapa];
-    if (!p || !(p.usos > 0)) return 'Você não tem passe para ' + MAPAS.lista[mapa].nome;
-    if (p.tipo !== 'cidadania') { p.usos--; if (p.usos <= 0) delete P.passes[mapa]; }
+    const ps = passesDaClasse(), p = ps[mapa], origem = E.mapa;
+    const volta = !cidadaniaEm(mapa) && temVolta(mapa);
+    if (!passeValido(p) && !volta) return 'Esta classe não tem passe para ' + MAPAS.lista[mapa].nome;
+    if (cidadaniaEm(mapa)) { P.viagem = null; }
+    else if (volta) { P.retorno = null; P.viagem = (P.viagem && P.viagem.origem !== mapa) ? P.viagem : null; }
+    else {
+      p.usos--; if (p.usos <= 0) delete ps[mapa];
+      if (p.tipo === 'ferias') P.retorno = { classe: P.classe, mapa: origem, de: mapa };
+      P.viagem = { classe: P.classe, origem: (P.viagem && P.viagem.classe === P.classe) ? P.viagem.origem : origem, destino: mapa };
+    }
     salvar();
     await carregarMapa(mapa);
     aviso('Bem-vindo a ' + MAPAS.lista[mapa].nome);
@@ -3388,16 +3494,17 @@
   }
   function telaAeroporto() {
     const linhas = MAPAS.ordem.filter(m => m !== E.mapa).map(m => {
-      const d = MAPAS.lista[m], p = P.passes[m];
-      const tem = p && p.usos > 0;
-      const bloqueado = C().estrelas < d.passe.nivel;
-      return `<div class="linha bloco"><div><b>${d.nome}</b><small>Nível ${d.passe.nivel} · ${tem ? 'seu passe: ' + p.tipo + ' (' + fmt(p.usos) + ' uso' + (p.usos === 1 ? '' : 's') + ')' : 'sem passe'}</small></div>
+      const d = MAPAS.lista[m], p = passesDaClasse()[m];
+      const volta = !passeValido(p) && temVolta(m);
+      const tem = passeValido(p) || volta;
+      const bloqueado = !ehAdmin() && C().estrelas < d.passe.nivel;
+      return `<div class="linha bloco"><div><b>${d.nome}</b><small>Nível ${d.passe.nivel} · ${volta ? 'volta incluída nas férias' : tem ? (p.tipo === 'cidadania' ? 'cidadania: ir e vir para sempre' : 'seu passe: ' + p.tipo + ' (' + p.usos + ' ida' + (p.usos === 1 ? '' : 's') + ')') : 'sem passe'}</small></div>
         <div class="botoes">
           ${['simples', 'ferias', 'cidadania'].map(t => `<button class="acao fina" type="button" data-passe="${m}" data-tipo="${t}" ${bloqueado ? 'disabled' : ''}>${{ simples: 'Simples', ferias: 'Férias', cidadania: 'Cidadania' }[t]} · ${d.passe.preco[t]}</button>`).join('')}
           <button class="acao forte" type="button" data-viajar="${m}" ${tem ? '' : 'disabled'}>Viajar</button>
         </div></div>`;
     }).join('');
-    abrirModal('Aeroporto · zona segura', `<p class="nota">Ouro: <b>${Math.floor(P.ouro)}</b> · Estrelas desta classe: <b>${C().estrelas}</b>. Simples = só ida. Férias = ida e volta. Cidadania = ir e vir para sempre.</p>${linhas}`, el => {
+    abrirModal('Aeroporto · zona segura', `<p class="nota">Ouro: <b>${Math.floor(P.ouro)}</b> · Estrelas desta classe: <b>${C().estrelas}</b>. Os passes são de cada classe: trocar de herói pede um passe novo. Simples = só ida. Férias = ida e volta. Cidadania = ir e vir para sempre. Sem cidadania, ao sair do jogo você volta para o aeroporto de onde partiu.</p>${linhas}`, el => {
       el.querySelectorAll('[data-passe]').forEach(b => b.addEventListener('click', () => { const e = comprarPasse(b.dataset.passe, b.dataset.tipo); aviso(e || 'Passe comprado'); telaAeroporto(); }));
       el.querySelectorAll('[data-viajar]').forEach(b => b.addEventListener('click', async () => { fecharModal(); const e = await viajar(b.dataset.viajar); if (e) aviso(e); }));
     });
@@ -3431,7 +3538,8 @@
       <div class="linha minha"><span>Sua posição</span><b>${meu === null ? 'Entre em um clã para pontuar' : meu}</b></div>`);
   }
   function telaPassaportes() {
-    const l = Object.keys(P.passes).map(m => `<div class="linha"><span>${MAPAS.lista[m].nome}</span><b>${P.passes[m].tipo} · ${fmt(P.passes[m].usos)} uso(s)</b></div>`).join('');
+    const ps = passesDaClasse();
+    const l = Object.keys(ps).filter(m => passeValido(ps[m])).map(m => `<div class="linha"><span>${MAPAS.lista[m].nome}</span><b>${ps[m].tipo === 'cidadania' ? 'cidadania · para sempre' : ps[m].tipo + ' · ' + ps[m].usos + ' uso(s)'}</b></div>`).join('');
     abrirModal('Passaportes', l || '<p class="nota">Você ainda não tem passes. Compre no aeroporto, no fim do mapa.</p>');
   }
   // trocar de herói só na praça do começo do mapa (onde o jogador nasce)
@@ -3663,7 +3771,9 @@
   async function iniciar() {
     if (P.viradaTemporada) { delete P.viradaTemporada; avisarTemporada(); salvar(); }
     iniciarCena(temDOM ? $('jogo') : null);
-    await carregarMapa(P.mapa && MAPAS.lista[P.mapa] ? P.mapa : 'mapa1');
+    const { inicio, voltou } = mapaDeInicio();
+    await carregarMapa(inicio);
+    if (voltou) setTimeout(() => aviso('A viagem acabou: você voltou para ' + voltou + ' (só a cidadania deixa ficar)'), 1500);
     if (temDOM) {
       ligarControles();
       $('carregando').hidden = true;
@@ -3695,10 +3805,10 @@
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
       atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
-      telaHeroi, telaRanking, perfilPadrao, dist, selo, xpProximaEstrela, temporadaAtual, aplicarTemporada
+      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
-    _t: { CONFIG, E, P, R, MIRA_AUX, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
+    _t: { CONFIG, E, P, R, MIRA_AUX, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
   };
   if (temDOM && !global.ESPERAR_LOGIN) global.addEventListener('load', () => Jogo.iniciar().catch(err => {
     const el = $('carregando'); if (el) el.innerHTML = '<div>NÃO FOI POSSÍVEL INICIAR<p>' + (err && err.message || err) + '</p></div>';

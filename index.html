@@ -109,6 +109,18 @@ button { font: inherit; color: inherit; }
 #cinematica .pular:disabled { opacity: 0.6; }
 #cinematica .som { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); padding: 10px 16px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.5); background: rgba(0,0,0,0.55); color: #fff; font-size: 15px; }
 .rotulo.inline { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+#bChat { position: fixed; z-index: 30; left: calc(10px + env(safe-area-inset-left, 0px)); top: calc(118px + env(safe-area-inset-top, 0px)); width: 44px; height: 44px; border-radius: 12px; color: #e9dcc0; display: flex; align-items: center; justify-content: center; padding: 0; }
+#bChat svg { width: 22px; height: 22px; }
+#bChat b { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: #ef4444; color: #fff; font-size: 11px; line-height: 18px; padding: 0 4px; }
+.chatLista { max-height: 46vh; min-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 6px 2px; }
+.msg { align-self: flex-start; max-width: 85%; background: rgba(255,255,255,0.07); border: 1px solid var(--linha); border-radius: 12px 12px 12px 4px; padding: 6px 10px; font-size: 14px; line-height: 1.35; word-wrap: break-word; }
+.msg.eu { align-self: flex-end; background: rgba(227,180,76,0.18); border-color: rgba(227,180,76,0.45); border-radius: 12px 12px 4px 12px; }
+.msg b { display: block; font-size: 11px; color: var(--ouro); }
+.msg small { display: block; font-size: 10px; opacity: 0.6; text-align: right; }
+.chatEnviar { display: flex; gap: 6px; margin-top: 6px; }
+.chatEnviar .campo { flex: 1; }
+.pessoa { display: block; width: 100%; text-align: left; padding: 10px; margin: 4px 0; border-radius: 10px; border: 1px solid var(--linha); background: rgba(255,255,255,0.04); color: inherit; }
+.pessoa small { display: block; opacity: 0.7; font-size: 12px; }
 .evento { border: 1px solid #e3b44c; border-radius: 10px; padding: 8px 10px; margin: 8px 0; background: rgba(227,180,76,0.12); font-size: 13px; line-height: 1.5; }
 .form.meta { border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 8px; }
 .linha { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--linha); flex-wrap: wrap; }
@@ -250,13 +262,13 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
-<script src="servidor.js?v=26"></script>
-<script src="config-online.js?v=26"></script>
-<script src="efeitos.js?v=26"></script>
-<script src="skins.js?v=26"></script>
-<script src="mapas.js?v=26"></script>
-<script src="rede.js?v=26"></script>
-<script src="jogo.js?v=26"></script>
-<script src="painel.js?v=26"></script>
+<script src="servidor.js?v=31"></script>
+<script src="config-online.js?v=31"></script>
+<script src="efeitos.js?v=31"></script>
+<script src="skins.js?v=31"></script>
+<script src="mapas.js?v=31"></script>
+<script src="rede.js?v=31"></script>
+<script src="jogo.js?v=31"></script>
+<script src="painel.js?v=31"></script>
 </body>
 </html>
