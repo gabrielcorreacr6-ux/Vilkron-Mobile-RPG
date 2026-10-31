@@ -12,7 +12,7 @@
     barraca_iso: 0.25, barraca_frente: 0.2, caverna_iso: 0.24, caverna_frente: 0.2,
     cais_iso: 0.12, cais_lado: 0.1, barco_iso: 0.25, barco_lado: 0.2, fonte: 0.22,
     mural: 0.04, banco_1: 0.06, banco_2: 0.06, jardineira: 0.15, vaso_redondo_1: 0.12,
-    vaso_redondo_2: 0.12, arvore_1: 0.02, pinheiro_1: 0.02, moita_1: 0.03,
+    vaso_redondo_2: 0.12, arvore_1: 0.05, pinheiro_1: 0.03, moita_1: 0.03,
     poste_simples: 0.02, poste_duplo: 0.02
   };
 
@@ -203,8 +203,31 @@
     }
   };
 
+  // Curvas suaves: os pontos de caminhos e rios viram uma curva (Catmull-Rom) com um ponto a
+  // cada ~1,5 m. Assim o desenho e as regras (água, caminho) usam exatamente a mesma linha.
+  function suavizar(pts, passo) {
+    if (!pts || pts.length < 3) return pts;
+    const out = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const n = Math.max(2, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / passo));
+      for (let k = 0; k < n; k++) {
+        const t = k / n, t2 = t * t, t3 = t2 * t;
+        const f = (a, b, c, d) => 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+        out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+      }
+    }
+    out.push(pts[pts.length - 1].slice());
+    return out;
+  }
+  Object.keys(lista).forEach(id => {
+    const d = lista[id];
+    (d.caminhos || []).forEach(c => { c.ptsOriginais = c.pts; c.pts = suavizar(c.pts, 1.5); });
+    (d.rios || []).forEach(r => { r.ptsOriginais = r.pts; r.pts = suavizar(r.pts, 1.5); });
+  });
+
   global.MAPAS = {
-    ANCORAS,
+    ANCORAS, suavizar,
     ordem: ['mapa1', 'mapa2', 'mapa3', 'arenas', 'ascensao', 'repouso'],
     lista
   };

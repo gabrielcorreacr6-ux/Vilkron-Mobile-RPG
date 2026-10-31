@@ -163,8 +163,14 @@
     if (container) container.appendChild(R.renderer.domElement);
     R.scene = new THREE.Scene();
     R.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 260);
-    R.scene.add(new THREE.HemisphereLight(0xe8f4ff, 0x4d6b33, 0.85));
-    const sol = new THREE.DirectionalLight(0xfff0d6, 1.05); sol.position.set(10, 18, 8); R.scene.add(sol);
+    R.hemi = new THREE.HemisphereLight(0xe8f4ff, 0x4d6b33, 0.85); R.scene.add(R.hemi);
+    const sol = new THREE.DirectionalLight(0xfff0d6, 1.05); sol.position.set(10, 18, 8); R.scene.add(sol); R.sol = sol;
+    // luzes dos vaga-lumes e da lanterna do herói (só acendem à noite)
+    R.luzesVaga = [];
+    if (THREE.PointLight) {
+      for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xd8ff7a, 0, 7, 2); R.scene.add(l); R.luzesVaga.push(l); }
+      R.lanterna = new THREE.PointLight(0xffd9a0, 0, 13, 1.6); R.scene.add(R.lanterna);
+    }
     // ambiente suave para metais não ficarem pretos
     try {
       const pm = new THREE.PMREMGenerator(R.renderer), env = new THREE.Scene();
@@ -232,7 +238,7 @@
       // se a textura própria do mapa ainda não existe, usa a reserva
       const img = new global.Image();
       img.onerror = () => { const r = Skins.textura(reserva, repX, repY); t.image = r.image; t.needsUpdate = true; setTimeout(() => { t.image = r.image; t.needsUpdate = true; }, 1500); };
-      img.src = 'assets/tex/' + nome + '.jpg';
+      img.src = 'assets/tex/' + nome + '.jpg?v=17';
     }
     return t;
   }
@@ -290,6 +296,12 @@
   function agua(d) {
     const rios = d.rios || [], lagos = d.lagos || [];
     if (!rios.length && !lagos.length) return;
+    const aRaso = 0x3f8f8a, aFundo = 0x06202c;
+    if (R.Fx && R.Fx.agua && R.Fx.agua(aRaso, aFundo)) {
+      rios.forEach(r => camada(fita(r.pts, r.largura + 1.2, 1), R.Fx.agua(aRaso, aFundo, { rio: true }), 0, 0, 0.03));
+      lagos.forEach(l => camada(new THREE.PlaneGeometry((l.r + 0.6) * 2, (l.r + 0.6) * 2), R.Fx.agua(aRaso, aFundo, { radial: true }), l.x, l.z, 0.03));
+      return;
+    }
     const base = Skins.textura('rio', 1, 1), brilho = Skins.textura('rio', 1, 1, 'brilho');
     const lago = Skins.textura('lago', 1, 1), lagoBrilho = Skins.textura('lago', 1, 1, 'brilho');
     const fundo = 0x3f7f96;
@@ -317,10 +329,133 @@
     }
   }
 
-  // Árvores em lote: um desenho só para centenas de árvores (leve no celular).
+  // ---------- fita: faixa lisa seguindo uma curva (caminhos, rios, margens) ----------
+  // uv.x = metros ao longo / rep ; uv.y = 0 numa beirada e 1 na outra
+  function fita(pts, largura, rep) {
+    const n = pts.length, pos = [], uv = [], idx = [];
+    let acum = 0;
+    for (let i = 0; i < n; i++) {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+      let tx = b[0] - a[0], tz = b[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+      const nx = -tz * largura / 2, nz = tx * largura / 2;
+      if (i > 0) acum += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      // o plano é desenhado deitado (rotation.x = -90°): (x, -z) no plano vira (x, z) no chão
+      pos.push(pts[i][0] + nx, -(pts[i][1] + nz), 0, pts[i][0] - nx, -(pts[i][1] - nz), 0);
+      uv.push(acum / rep, 0, acum / rep, 1);
+      if (i < n - 1) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    if (g.setIndex) g.setIndex(idx);
+    if (g.computeVertexNormals) g.computeVertexNormals();
+    return g;
+  }
+  // beiradas irregulares que somem na grama (máscara desenhada uma vez)
+  function texBorda() {
+    if (R.texBorda) return R.texBorda;
+    R.texBorda = canvasTex(256, 64, g => {
+      const img = g.createImageData(256, 64), rnd = semeado(77);
+      const ruido = []; for (let i = 0; i < 64; i++) ruido.push(rnd());
+      const suave = x => { const i = Math.floor(x) % 64, f = x - Math.floor(x); return ruido[i] * (1 - f) + ruido[(i + 1) % 64] * f; };
+      for (let x = 0; x < 256; x++) {
+        const b1 = 0.1 + suave(x / 9) * 0.16 + suave(x / 3.1 + 17) * 0.06, b2 = 0.1 + suave(x / 9 + 31) * 0.16 + suave(x / 3.3 + 5) * 0.06;
+        for (let y = 0; y < 64; y++) {
+          const v = y / 63, borda = Math.min(v / b1, (1 - v) / b2);
+          const a = Math.max(0, Math.min(1, borda)) * (0.92 + 0.08 * rnd());
+          const k = (y * 256 + x) * 4; img.data[k] = img.data[k + 1] = img.data[k + 2] = 255 * a; img.data[k + 3] = 255;
+        }
+      }
+      g.putImageData(img, 0, 0);
+    });
+    R.texBorda.encoding = THREE.LinearEncoding || R.texBorda.encoding;
+    R.texBorda.wrapS = THREE.RepeatWrapping;
+    return R.texBorda;
+  }
+  function materialBorda(tex, cor, rep) {
+    return new THREE.MeshLambertMaterial({ map: Skins.textura(tex, 1, 1), alphaMap: texBorda(), transparent: true, color: cor || 0xffffff, depthWrite: false, side: THREE.DoubleSide });
+  }
+  function caminhoSuave(c, aguaBase) {
+    // um pouco mais largo que o caminho de regra: as beiradas somem na grama
+    const geo = fita(c.pts, c.largura * 1.35, c.largura * 1.35);
+    const m = camada(geo, materialBorda('caminho_terra', aguaBase ? 0xb9a27a : 0xd8c8a8), 0, 0, 0.02);
+    return m;
+  }
+  // ---------- pontes onde o caminho cruza um rio ----------
+  function acharPontes(d) {
+    const pontes = [];
+    if (d.aguaBase) return pontes;
+    (d.caminhos || []).forEach(c => (d.rios || []).forEach(r => {
+      let ini = -1;
+      const dentro = i => distLinha(c.pts[i][0], c.pts[i][1], r.pts) < r.largura / 2 + 1.6;
+      for (let i = 0; i <= c.pts.length; i++) {
+        const nd = i < c.pts.length && dentro(i);
+        if (nd && ini < 0) ini = i;
+        if (!nd && ini >= 0) {
+          const a = c.pts[Math.max(0, ini - 1)], b = c.pts[Math.min(c.pts.length - 1, i)];
+          pontes.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], larg: Math.max(3.2, c.largura * 0.95) });
+          ini = -1;
+        }
+      }
+    }));
+    return pontes;
+  }
+  function naPonte(x, z) {
+    return (E.pontes || []).some(p => distSeg(x, z, p.ax, p.az, p.bx, p.bz) < p.larg / 2);
+  }
+  function montarPonte(p) {
+    const L = Math.hypot(p.bx - p.ax, p.bz - p.az), ang = Math.atan2(p.bx - p.ax, p.bz - p.az);
+    const g = new THREE.Group(); g.position.set((p.ax + p.bx) / 2, 0, (p.az + p.bz) / 2); g.rotation.y = ang;
+    const madeira = cor => new THREE.MeshLambertMaterial({ color: cor });
+    const tabuas = Math.ceil(L / 0.42);
+    for (let i = 0; i < tabuas; i++) {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(p.larg, 0.12, 0.36), madeira(i % 3 === 0 ? 0x5a3e26 : i % 3 === 1 ? 0x6b4a2e : 0x4f3520));
+      t.position.set((Math.random() - 0.5) * 0.08, 0.07, -L / 2 + 0.21 + i * 0.42); t.rotation.y = (Math.random() - 0.5) * 0.04; g.add(t);
+    }
+    [-1, 1].forEach(lado => {
+      const viga = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, L), madeira(0x3f2a18)); viga.position.set(lado * (p.larg / 2 - 0.1), 0.85, 0); g.add(viga);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, L + 0.4), madeira(0x3a2615)); base.position.set(lado * (p.larg / 2 - 0.05), 0.04, 0); g.add(base);
+      for (let k = 0; k <= Math.ceil(L / 2.2); k++) {
+        const z = -L / 2 + Math.min(L, k * 2.2);
+        const poste = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.95, 0.16), madeira(0x3f2a18)); poste.position.set(lado * (p.larg / 2 - 0.1), 0.47, z); g.add(poste);
+      }
+    });
+    E.mundo.add(g);
+    // sombra da ponte na água
+    camada(new THREE.PlaneGeometry(p.larg + 0.8, L), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false }), g.position.x, g.position.z, 0.035).rotation.z = -ang;
+  }
+  // ---------- praça redonda com calçada e meio-fio ----------
+  function texCalcada() {
+    if (R.texCalcada) return R.texCalcada;
+    R.texCalcada = canvasTex(512, 512, g => {
+      g.clearRect(0, 0, 512, 512);
+      g.translate(256, 256);
+      // anéis de pedras e uma rosa dos ventos no centro
+      for (let r = 40; r < 250; r += 26) {
+        const n = Math.round(2 * Math.PI * r / 30);
+        for (let i = 0; i < n; i++) {
+          const a0 = i / n * Math.PI * 2, a1 = (i + 1) / n * Math.PI * 2;
+          g.beginPath(); g.arc(0, 0, r + 11, a0 + 0.012, a1 - 0.012); g.arc(0, 0, r - 11, a1 - 0.012, a0 + 0.012, true); g.closePath();
+          const tom = 0.82 + ((i * 37 + r) % 9) / 50;
+          g.fillStyle = `rgba(${Math.round(255 * tom)},${Math.round(248 * tom)},${Math.round(232 * tom)},0.35)`; g.fill();
+          g.strokeStyle = 'rgba(40,34,28,0.45)'; g.lineWidth = 2; g.stroke();
+        }
+      }
+      g.fillStyle = 'rgba(70,58,44,0.55)';
+      for (let i = 0; i < 8; i++) { g.save(); g.rotate(i / 8 * Math.PI * 2); g.beginPath(); g.moveTo(0, -36); g.lineTo(9, 0); g.lineTo(0, i % 2 ? 22 : 36); g.lineTo(-9, 0); g.closePath(); g.fill(); g.restore(); }
+    });
+    return R.texCalcada;
+  }
+  function pracaRedonda(p) {
+    const r = Math.max(p.w, p.h) / 2 + 1;
+    const guia = camada(new THREE.CircleGeometry(r + 0.6, 64), new THREE.MeshLambertMaterial({ color: 0x5c5a55 }), p.x, p.z, 0.04);
+    camada(uvRep(new THREE.CircleGeometry(r, 64), r / 2.5, r / 2.5), new THREE.MeshLambertMaterial({ map: Skins.textura('concreto_praca', 1, 1), color: 0xd9d2c4 }), p.x, p.z, 0.045);
+    camada(new THREE.CircleGeometry(r * 0.98, 64), new THREE.MeshLambertMaterial({ map: texCalcada(), transparent: true, depthWrite: false }), p.x, p.z, 0.05);
+    return guia;
+  }
   // A câmera nunca gira, então cada árvore é um quadro inclinado de frente para ela.
   const INCLINACAO = Math.atan2(12.2, 11);
-  const ASPECTO = { arvore_1: 512 / 478, pinheiro_1: 297 / 512 };
+  const ASPECTO = { arvore_1: 451 / 640, pinheiro_1: 348 / 640 };
   function bosque(lista) {
     const tipos = {};
     lista.forEach(a => { (tipos[a.img] = tipos[a.img] || []).push(a); });
@@ -345,7 +480,7 @@
       E.mundo.add(malha);
       const usar = t => { mat.map = t; mat.needsUpdate = true; };
       if (R.cacheSprite[img]) usar(R.cacheSprite[img]);
-      else if (temDOM) R.texLoader.load('assets/sprites/' + img + '.png', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite[img] = t; usar(t); });
+      else if (temDOM) R.texLoader.load('assets/sprites/' + img + '.png?v=17', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite[img] = t; usar(t); });
     });
     // sombras de todas as árvores, também em lote
     const sg = new THREE.PlaneGeometry(1, 0.65); sg.rotateX(-Math.PI / 2);
@@ -415,7 +550,7 @@
     };
     if (R.cacheSprite[nome]) aplicar(R.cacheSprite[nome]);
     else if (temDOM) {
-      R.texLoader.load('assets/sprites/' + nome + '.png', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite[nome] = t; aplicar(t); });
+      R.texLoader.load('assets/sprites/' + nome + '.png?v=17', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite[nome] = t; aplicar(t); });
     }
     const temBase = (MAPAS.ANCORAS[nome] || 0) > 0.08;
     if (!temBase && opc.sombra !== false) sombra(x, z, Math.max(0.5, altura * 0.28), opc.pai);
@@ -443,6 +578,7 @@
     const d = E.def;
     if (!d) return false;
     if (d.aguaBase) return !naIlha(x, z) && !noCaminho(x, z);
+    if (E.pontes && E.pontes.length && naPonte(x, z)) return false;
     return (d.rios || []).some(r => distLinha(x, z, r.pts) < r.largura / 2) ||
       (d.lagos || []).some(l => Math.hypot(x - l.x, z - l.z) < l.r);
   }
@@ -452,7 +588,7 @@
     if (Math.hypot(x - d.aeroporto.x, z - d.aeroporto.z) < CONFIG.raioZonaAeroporto) return true;
     if (d.podio && Math.hypot(x - d.podio.x, z - d.podio.z) < d.podio.zonaSegura) return true;
     const p = d.pracas && d.pracas[0];
-    return !!(p && Math.abs(x - p.x) < p.w / 2 && Math.abs(z - p.z) < p.h / 2);
+    return !!(p && Math.hypot(x - p.x, z - p.z) < Math.max(p.w, p.h) / 2 + 1);
   }
   function dentroArena(a, x, z, folga) {
     return Math.abs(x - a.x) < a.w / 2 + (folga || 0) && Math.abs(z - a.z) < a.h / 2 + (folga || 0);
@@ -506,13 +642,15 @@
         new THREE.MeshLambertMaterial({ map: texChao(d.chao.tex, d.chao.reserva, 1, 1), color: d.chao.tint }), 0, 0, 0);
       manchasGrama(GW, GH, d.semente || 7);
     }
-    const margem = 0xcdbb92;
-    (d.rios || []).forEach(r => { faixa(r.pts, r.largura + 4, 'margem_areia', 5, 0.01, margem); });
-    (d.lagos || []).forEach(l => disco(l.r + 2.2, 'margem_areia', 3, l.x, l.z, 0.01, margem));
+    // ordem: caminhos, margens, água (por cima do caminho), pontes, praça
+    E.pontes = acharPontes(d);
+    (d.caminhos || []).forEach(c => caminhoSuave(c, d.aguaBase));
+    const margem = 0x9c8a66;
+    (d.rios || []).forEach(r => camada(fita(r.pts, r.largura + 5, 5), materialBorda('margem_areia', margem, 0.3), 0, 0, 0.012));
+    (d.lagos || []).forEach(l => disco(l.r + 2.2, 'margem_areia', 3, l.x, l.z, 0.012, margem));
     agua(d);
-    (d.caminhos || []).forEach(c => faixa(c.pts, c.largura, 'caminho_terra', 4, 0.03));
-    (d.pracas || []).forEach(p => camada(uvRep(new THREE.PlaneGeometry(p.w, p.h), p.w / 4, p.h / 4),
-      new THREE.MeshLambertMaterial({ map: Skins.textura('concreto_praca', 1, 1) }), p.x, p.z, 0.04));
+    E.pontes.forEach(montarPonte);
+    (d.pracas || []).forEach(p => pracaRedonda(p));
 
     // decoração, aeroporto e interações
     (d.decor || []).forEach(o => {
@@ -535,7 +673,7 @@
     const corArvore = new THREE.Color(f.tint || '#ffffff');
     const sombria = () => {
       // árvores mais escuras e variadas (algumas quase negras no meio da mata)
-      const k = 0.42 + rnd() * 0.34, c = corArvore.clone().multiplyScalar(k);
+      const k = 0.68 + rnd() * 0.32, c = corArvore.clone().multiplyScalar(k);
       c.b *= 0.92 + rnd() * 0.12; c.r *= 0.86 + rnd() * 0.1;
       return c;
     };
@@ -610,8 +748,81 @@
       E.heroi.arena = null;
       E.entidades.push(E.heroi);
     }
+    aplicarAmbiente(d);
     hud();
     gancho('mapaCarregado', id);
+  }
+
+  /* ---------- noite com vaga-lumes (gráfico alto) / dia (gráfico baixo) ---------- */
+  function aplicarAmbiente(d) {
+    const noite = !!(global.Efeitos && global.Efeitos.qualidade === 'alta' && temDOM && !d.semNoite);
+    E.noite = noite;
+    const ceu = noite ? (d.ceuNoite || '#0b1412') : d.ceu;
+    R.scene.background = new THREE.Color(ceu);
+    R.scene.fog = new THREE.Fog(ceu, noite ? 16 : d.nevoa[0], noite ? 62 : d.nevoa[1]);
+    if (R.hemi) {
+      R.hemi.color = new THREE.Color(noite ? 0x7088c8 : 0xe8f4ff); R.hemi.groundColor = new THREE.Color(noite ? 0x121a0e : 0x4d6b33);
+      R.hemi.intensity = noite ? 0.34 : 0.85;
+    }
+    if (R.sol) { R.sol.color = new THREE.Color(noite ? 0x9db4ff : 0xfff0d6); R.sol.intensity = noite ? 0.42 : 1.05; }
+    if (R.lanterna) R.lanterna.intensity = noite ? 1.25 : 0;
+    (R.luzesVaga || []).forEach(l => { l.intensity = 0; });
+    if (global.Efeitos && global.Efeitos.luzAgua) global.Efeitos.luzAgua.value = noite ? 0.55 : 1;
+    // o que não recebe luz (árvores, construções desenhadas) escurece junto
+    const tom = noite ? new THREE.Color(0.42, 0.47, 0.6) : null;
+    E.mundo.traverse(o => {
+      const m = o.material; if (!m || !m.color) return;
+      if (!(o.isSprite || (o.isInstancedMesh || o.name.indexOf('bosque_') === 0))) return;
+      if (!m.userData.corDia) m.userData.corDia = m.color.clone();
+      m.color.copy(m.userData.corDia); if (tom) m.color.multiply(tom);
+    });
+    criarVagalumes(noite);
+  }
+  function criarVagalumes(ligar) {
+    if (R.vagalumes) { R.scene.remove(R.vagalumes.pts); R.vagalumes = null; }
+    if (!ligar || !THREE.Points) return;
+    const N = 150, pos = new Float32Array(N * 3), cor = new Float32Array(N * 3), dados = [];
+    const h = E.heroi || { x: E.def.entrada[0], z: E.def.entrada[1] };
+    for (let i = 0; i < N; i++) {
+      dados.push({ x: h.x + (Math.random() - 0.5) * 70, z: h.z + (Math.random() - 0.5) * 70, y: 0.4 + Math.random() * 2.2,
+        vx: 0, vz: 0, fase: Math.random() * 20, ritmo: 0.5 + Math.random() * 0.9, brilho: 0 });
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(cor, 3));
+    const mat = new THREE.PointsMaterial({ size: 0.32, map: R.texParticula, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.renderOrder = 13;
+    R.scene.add(pts);
+    R.vagalumes = { pts, geo, dados };
+  }
+  function atualizarVagalumes(dt) {
+    const v = R.vagalumes, h = E.heroi;
+    if (R.lanterna && h) R.lanterna.position.set(h.x, 2.6, h.z + 0.5);
+    if (!v || !h) return;
+    const pa = v.geo.attributes.position.array, ca = v.geo.attributes.color.array;
+    const perto = [];
+    v.dados.forEach((f, i) => {
+      // voo preguiçoso, mudando de rumo devagar
+      f.vx += (Math.random() - 0.5) * dt * 2.2; f.vz += (Math.random() - 0.5) * dt * 2.2;
+      f.vx *= 0.985; f.vz *= 0.985;
+      f.x += f.vx * dt; f.z += f.vz * dt; f.y = Math.max(0.3, Math.min(3, f.y + Math.sin(E.t * 1.3 + f.fase) * dt * 0.4));
+      // quem fica longe do herói reaparece do outro lado
+      if (f.x - h.x > 35) f.x -= 70; if (h.x - f.x > 35) f.x += 70;
+      if (f.z - h.z > 35) f.z -= 70; if (h.z - f.z > 35) f.z += 70;
+      // pisca: acende devagar, fica um pouco e apaga
+      const c = (E.t * f.ritmo + f.fase) % 3.2;
+      f.brilho = c < 1.6 ? Math.sin(c / 1.6 * Math.PI) : 0;
+      pa[i * 3] = f.x; pa[i * 3 + 1] = f.y; pa[i * 3 + 2] = f.z;
+      ca[i * 3] = 0.75 * f.brilho; ca[i * 3 + 1] = 1.0 * f.brilho; ca[i * 3 + 2] = 0.35 * f.brilho;
+      if (f.brilho > 0.5) perto.push([Math.hypot(f.x - h.x, f.z - h.z), f]);
+    });
+    v.geo.attributes.position.needsUpdate = true; v.geo.attributes.color.needsUpdate = true;
+    // os 4 mais perto do herói iluminam o chão de verdade
+    perto.sort((a, b) => a[0] - b[0]);
+    (R.luzesVaga || []).forEach((l, i) => {
+      const f = perto[i] && perto[i][1];
+      if (f) { l.position.set(f.x, f.y, f.z); l.intensity = 1.6 * f.brilho; } else l.intensity = 0;
+    });
   }
   function naAguaFolga(x, z, f) {
     const d = E.def;
@@ -2068,6 +2279,7 @@
     gancho('passo', dt);
     atualizarFx(dt);
     if (R.Fx) R.Fx.atualizar(dt);
+    atualizarVagalumes(dt);
     atualizarRastros(dt);
     // estrelinhas girando em cima de quem está atordoado
     if (Math.floor(E.t * 8) !== Math.floor((E.t - dt) * 8)) E.entidades.forEach(e => {

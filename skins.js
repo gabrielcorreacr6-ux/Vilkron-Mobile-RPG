@@ -85,6 +85,7 @@
     // Ajustes por classe: qual animação do arquivo usar em cada habilidade
     // (clipe = nome da animação no .glb) e quantas voltas o corpo dá por código.
     // variacoes: o ataque básico alterna entre esses golpes (os que existirem no arquivo)
+    // combos: o ataque básico segue o combo inteiro, golpe a golpe (ver Animador.tocar)
     // andando: atirar correndo (as pernas seguem a corrida, os braços atiram)
     // Variações: pedaços de combos viram golpes separados (de/ate = fração da animação,
     // golpe = momento do acerto dentro do pedaço). A sequência segue em ordem, como um combo,
@@ -93,19 +94,14 @@
       soldado: {
         habilidade1: { clipe: 'extra_golpe_carregado', voltas: 1 },
         habilidade3: { clipe: 'extra_golpe_chao' },
-        ataque: { variacoes: [
-          { clipe: 'extra_combo', de: 0.0, ate: 0.28, golpe: 0.55 },
-          { clipe: 'extra_combo', de: 0.28, ate: 0.52, golpe: 0.45 },
-          { clipe: 'extra_combo', de: 0.52, ate: 0.95, golpe: 0.2 },
-          { clipe: 'ataque', golpe: 0.38 },
-          { clipe: 'extra_combo_1', de: 0.1, ate: 0.28, golpe: 0.5 },
-          { clipe: 'extra_combo_1', de: 0.28, ate: 0.58, golpe: 0.4 },
-          { clipe: 'extra_combo_1', de: 0.58, ate: 0.8, golpe: 0.55 },
-          { clipe: 'extra_golpe_para_cima', golpe: 0.33 },
-          { clipe: 'extra_combo_2', de: 0.05, ate: 0.3, golpe: 0.8 },
-          { clipe: 'extra_combo_2', de: 0.3, ate: 0.55, golpe: 0.6 },
-          { clipe: 'extra_combo_2', de: 0.55, ate: 0.73, golpe: 0.7 },
-          { clipe: 'extra_combo_2', de: 0.73, ate: 0.97, golpe: 0.4 }
+        // modo combo: cada clipe toca inteiro e sem cortes; cada toque no ataque avança
+        // para o próximo golpe do mesmo combo (golpes = frações da animação em que a espada acerta)
+        ataque: { combos: [
+          { clipe: 'extra_combo', golpes: [0.16, 0.38, 0.6, 0.82] },
+          { clipe: 'ataque', golpes: [0.38], seDuracao: { '3.17': [0.33] } },
+          { clipe: 'extra_combo_1', golpes: [0.19, 0.42, 0.7] },
+          { clipe: 'extra_golpe_para_cima', golpes: [0.33] },
+          { clipe: 'extra_combo_2', golpes: [0.25, 0.45, 0.68, 0.82] }
         ] }
       },
       // atirador de energia: sem arma, a bola sai da mão; só atira parado
@@ -532,6 +528,62 @@
       return true;
     }
 
+    // combo inteiro como ataque básico: o clipe não é cortado, só avança de golpe em golpe
+    adicionarCombo(clip, cfg) {
+      if (!this.mixer || !clipeServe(this.corpo, clip)) return false;
+      const c = clip.clone(); c.name = 'combo_' + (this.combos ? this.combos.length : 0);
+      noLugar(c);
+      const acao = this.mixer.clipAction(c);
+      acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true;
+      let golpes = cfg.golpes || [0.5];
+      if (cfg.seDuracao) Object.keys(cfg.seDuracao).forEach(d => { if (Math.abs(+d - c.duration) < 0.05) golpes = cfg.seDuracao[d]; });
+      (this.combos = this.combos || []).push({ acao, golpes: golpes.slice().sort((a, b) => a - b), dur: c.duration });
+      this.iCombo = -1;
+      return true;
+    }
+
+    // próximo golpe do combo (ou começa o próximo combo da lista)
+    _golpeCombo(op) {
+      const vel = op.velocidade || 1;
+      let c = this.comboAtivo;
+      const continua = c && c.i < c.golpes.length && this.t < c.ate && this.acaoAtual === c.acao;
+      if (!continua) {
+        if (this.t - (this.ultimoAtaque || -99) > 2.5) this.iCombo = -1;   // ficou parado: volta ao primeiro combo
+        this.iCombo = (this.iCombo + 1) % this.combos.length;
+        c = this.comboAtivo = this.combos[this.iCombo]; c.i = 0;
+        Object.keys(this.acoes).forEach(k => { const a = this.acoes[k]; if (a !== c.acao && (a.isRunning() || a.getEffectiveWeight() > 0)) a.fadeOut(0.12); });
+        this.combos.forEach(o => { if (o !== c && o.acao.getEffectiveWeight() > 0) o.acao.fadeOut(0.12); });
+        c.acao.reset();
+        c.acao.time = Math.max(0, c.golpes[0] * c.dur - 0.32);   // começa no preparo do 1º golpe
+        c.acao.setEffectiveWeight(1).fadeIn(0.12).play();
+        this.acaoAtual = c.acao;
+      } else {
+        if (c.acao.stopFading) c.acao.stopFading(); c.acao.setEffectiveWeight(1); c.acao.paused = false;
+      }
+      this.ultimoAtaque = this.t;
+      // velocidade para chegar ao golpe em ~0.4 s (mais rápido com bônus de ataque)
+      const falta = Math.max(0.01, c.golpes[c.i] * c.dur - c.acao.time);
+      const emQuanto = 0.4 / vel;
+      c.acao.setEffectiveTimeScale(Math.max(0.6, Math.min(3, falta / emQuanto)));
+      c.pausaEm = null; c.fimEstado = null; c.ate = this.t + 9;
+      this.acoes.ataque = c.acao; this.escalas.ataque = 1;
+      this.estado = 'ataque'; this.tEstado = 0;
+      this.aoTerminar = op.aoTerminar || null;
+      this.momento = c.golpes[c.i];
+      const acertar = op.aoAcertar;
+      this.aoAcertar = () => {
+        c.i++;
+        if (c.i < c.golpes.length) {
+          // segue o movimento até perto do próximo golpe e segura a guarda ali
+          const prox = c.golpes[c.i] * c.dur, aqui = c.acao.time;
+          c.pausaEm = aqui + (prox - aqui) * 0.45;
+          c.acao.setEffectiveTimeScale(Math.max(0.8, Math.min(2, (c.pausaEm - aqui) / 0.3)));
+        } else c.acao.setEffectiveTimeScale(1.15);   // último golpe: termina o combo
+        c.fimEstado = this.t + 0.22; c.ate = this.t + 1.1;
+        if (acertar) acertar();
+      };
+    }
+
     // atirar andando: só tronco, braços e cabeça; as pernas continuam a andar/correr
     adicionarAtaqueAndando(clip, soCima) {
       if (!this.mixer || !clipeServe(this.corpo, clip)) return false;
@@ -573,6 +625,8 @@
         return;
       }
       if (this.acaoCima) { this.acaoCima.fadeOut(0.1); this.acaoCima = null; }
+      if (estado === 'ataque' && this.combos && this.combos.length) return this._golpeCombo(op);
+      if (this.comboAtivo) { this.comboAtivo.ate = 0; this.comboAtivo = null; }
       // golpes alternados no ataque básico
       if (estado === 'ataque' && this.varAtaque && this.varAtaque.length > 1) {
         if (this.t - (this.ultimoAtaque || -99) > 1.6) this.iVar = -1;   // parou de atacar: combo recomeça
@@ -653,6 +707,22 @@
         const acao = (this.estado === 'ataque' && this.acaoCima) || this.acoes[this.estado];
         const prog = acao ? acao.time / acao.getClip().duration : p;
         if (prog >= this.momento) { const f = this.aoAcertar; this.aoAcertar = null; f(); }
+      }
+
+      const cb = this.comboAtivo;
+      if (cb) {
+        // guarda segurada entre um golpe e outro (anda bem devagar para não congelar)
+        if (cb.pausaEm !== null && cb.acao.time >= cb.pausaEm) { cb.acao.setEffectiveTimeScale(0.12); cb.pausaEm = null; }
+        // o golpe acabou: o jogador já pode andar/usar habilidades
+        if (this.estado === 'ataque' && cb.fimEstado !== null && this.t >= cb.fimEstado) {
+          cb.fimEstado = null; const f = this.aoTerminar; this.aoTerminar = null;
+          this.estado = this.base; this.tEstado = 0; if (f) f();
+        }
+        // andou ou demorou demais: solta o combo e volta à pose normal
+        if (this.estado !== 'ataque' && !this.morto && (this.velMov > 0.05 || this.t >= cb.ate || cb.acao.time >= cb.dur - 0.02)) {
+          this.comboAtivo = null;
+          if (this.acaoAtual === cb.acao) { this.acaoAtual = null; this._tocarAcao(this._baseDisponivel(), 0.25); }
+        }
       }
 
       if (this.tipo === 'aranha') this._aranha(p);
@@ -839,6 +909,13 @@
     lista.forEach(clip => { if (ESTADOS.indexOf(clip.name) >= 0 && !anim.tem(clip.name)) anim.adicionarClipe(clip.name, clip); });
     // variações do ataque básico e ataque andando
     const cfgA = anim.config && anim.config.ataque;
+    if (cfgA && cfgA.combos && anim.tem('ataque')) {
+      cfgA.combos.forEach(v => {
+        const nome = v.clipe === 'ataque' ? (cfgA.clipe || 'ataque') : v.clipe;
+        const clip = lista.find(c => c.name === nome);
+        if (clip) anim.adicionarCombo(clip, v);
+      });
+    }
     if (cfgA && cfgA.variacoes && anim.tem('ataque')) {
       cfgA.variacoes.forEach(v => {
         if (typeof v === 'string') v = { clipe: v };
@@ -1230,7 +1307,7 @@
       const ctx = cv.getContext('2d');
       ctx.fillStyle = corFallback(nome); ctx.fillRect(0, 0, 4, 4);
       tex = new THREE.CanvasTexture(cv);
-      new THREE.TextureLoader().load(`${BASE}tex/${nome}.jpg`, img => {
+      new THREE.TextureLoader().load(`${BASE}tex/${nome}.jpg?v=17`, img => {
         tex.image = img.image; tex.needsUpdate = true;
       }, undefined, () => {});
     } else {
