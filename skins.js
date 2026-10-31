@@ -32,7 +32,9 @@
       suporte:  { nome: 'Suporte',  corPadrao: '#3fc1b0', skins: [
         { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 } ] },
       soldado:  { nome: 'Soldado',  corPadrao: '#c0392b', skins: [
-        { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 } ] },
+        { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
+        // armas: espada própria da skin (assets/armas/espada_lava.glb); os efeitos de fogo ficam no jogo.js (TEMAS)
+        { id: 'lava', nome: 'Cavaleiro de Lava', aceitaCor: false, preco: 0, armas: { padrao: 'espada_lava' } } ] },
       mago:     { nome: 'Mago',     corPadrao: '#8e44ad', skins: [
         { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 } ] },
       atirador: { nome: 'Atirador', corPadrao: '#d68910', skins: [
@@ -125,6 +127,7 @@
     // 'frente' = cano sempre para onde o personagem olha.
     armas: {
       espada:  { modo: 'empunhar' },
+      espada_lava: { modo: 'empunhar' },
       cajado:  { modo: 'vertical' },
       rifle:   { modo: 'frente' },
       pistola: { modo: 'frente' }
@@ -1004,7 +1007,7 @@
     const info = { tipo: 'personagem', classe: o.classe, genero: o.genero, skin: skin.id, cor };
     const raiz = montar(corpo, info, 'humanoide', ALTURA_HEROI, gltf,
       [`${o.classe}_${o.genero}`, o.classe, 'humanoide']);
-    const armas = CATALOGO.armasDaClasse[o.classe];
+    const armas = skin.armas || CATALOGO.armasDaClasse[o.classe];
     if (gltf && armas && !o.semArmas) carregarArmas(raiz.userData.animador, armas);   // em segundo plano
     return raiz;
   }

@@ -369,6 +369,9 @@
   }
 
   /* ======================= FORMULÁRIOS REUSADOS ======================= */
+  // sugestões de skins já cadastradas (o campo continua aceitando qualquer nome)
+  const listaSkins = () => `<datalist id="dlSkins">${Object.keys(CLASSES_NOMES).map(c => ((global.Skins.CATALOGO.classes[c] || {}).skins || [])
+    .filter(k => k.id !== 'default').map(k => `<option value="${k.id}">${CLASSES_NOMES[c]} · ${esc(k.nome || k.id)}</option>`).join('')).join('')}</datalist>`;
   const selClasse = (id) => `<select id="${id}" class="campo">${Object.keys(CLASSES_NOMES).map(c => `<option value="${c}">${CLASSES_NOMES[c]}</option>`).join('')}</select>`;
   const formBan = `
     <div class="form">
@@ -439,8 +442,8 @@
   let jogadorSel = null;
   function telaAdmin(aba) {
     if (typeof aba !== 'string') aba = 'jogadores';
-    const abas = { jogadores: 'Jogadores', banimentos: 'Banimentos', recompensas: 'Recompensas', premios: 'Prêmios dos mobs', loja: 'Loja de skins', moderadores: 'Moderadores', poderes: 'Meus poderes' };
-    const f = { jogadores: admJogadores, banimentos: admBanimentos, recompensas: admRecompensas, premios: admPremios, loja: admLoja, moderadores: admModeradores, poderes: admPoderes }[aba];
+    const abas = { jogadores: 'Jogadores', banimentos: 'Banimentos', recompensas: 'Recompensas', premios: 'Prêmios dos mobs', loja: 'Loja de skins', evento: 'Evento da arena', moderadores: 'Moderadores', poderes: 'Meus poderes' };
+    const f = { jogadores: admJogadores, banimentos: admBanimentos, recompensas: admRecompensas, premios: admPremios, loja: admLoja, evento: admEvento, moderadores: admModeradores, poderes: admPoderes }[aba];
     f(abasHtml(abas, aba), el => ligarAbas(el, telaAdmin));
   }
   const adm = (topo, html, ligar, montarAbas) => modal('Administrador', topo + html, el => { montarAbas(el); if (ligar) ligar(el); });
@@ -464,7 +467,8 @@
           <button class="acao forte" id="aEst" type="button">Aplicar</button></div>
         <h4>Banimento</h4>${formBan}
         <h4>Dar skin</h4>
-        <div class="form"><div class="linha2">${selClasse('aSkClasse')}<input id="aSkId" class="campo" placeholder="nome do arquivo da skin"></div>
+        <div class="form"><div class="linha2">${selClasse('aSkClasse')}<input id="aSkId" class="campo" list="dlSkins" placeholder="skin (ex.: lava)">${listaSkins()}</div>
+          <p class="nota">Doar não tira a skin de você.</p>
           <select id="aSkDias" class="campo"><option value="0">Permanente</option><option value="1">Teste 1 dia</option><option value="3">Teste 3 dias</option><option value="7">Teste 7 dias</option></select>
           <button class="acao forte" id="aSk" type="button">Dar skin</button></div>
         <h4>Moderador</h4>
@@ -628,7 +632,7 @@
       }).join('') || '<p class="nota">Nenhuma skin cadastrada.</p>'}
       <h3 class="sub">Colocar skin na loja</h3>
       <div class="form">
-        <div class="linha2">${selClasse('lClasse')}<input id="lSkin" class="campo" placeholder="nome do arquivo"></div>
+        <div class="linha2">${selClasse('lClasse')}<input id="lSkin" class="campo" list="dlSkins" placeholder="skin (ex.: lava)">${listaSkins()}</div>
         <input id="lNome" class="campo" placeholder="Nome que aparece na loja">
         <input id="lPreco" class="campo" type="number" min="0" placeholder="Preço em ouro">
         <label class="rotulo">Entra na loja em<input id="lIni" class="campo" type="datetime-local" value="${local(agora)}"></label>
@@ -649,6 +653,64 @@
           p_inicio: new Date(el.querySelector('#lIni').value).toISOString(), p_fim: new Date(el.querySelector('#lFim').value).toISOString(),
           p_estoque: Number(el.querySelector('#lEst').value) || 0 }), 'Skin colocada na loja');
         if (r !== undefined) telaAdmin('loja');
+      });
+    }, abas);
+  }
+
+  // ---- evento da arena: prêmios por vitórias seguidas, no período que o admin escolher ----
+  async function admEvento(topo, abas) {
+    const aj = await global.Rede.carregarAjustes();
+    const ev = aj.arena_evento && aj.arena_evento.id ? aj.arena_evento : null;
+    const agora = new Date();
+    const local = d => { const x = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return x.toISOString().slice(0, 16); };
+    const metas = (ev && ev.metas) || [];
+    const estado = !ev ? 'nenhum evento' : !ev.ativo ? 'desligado' : new Date(ev.inicio) > agora ? 'agendado' : new Date(ev.fim) < agora ? 'encerrado' : 'acontecendo agora';
+    const linhaMeta = (m, i) => `<div class="form meta" data-meta="${i}">
+        <div class="linha2"><input class="campo" type="number" min="1" data-k="vitorias" placeholder="Vitórias seguidas" value="${m.vitorias || ''}">
+          <input class="campo" type="number" min="0" data-k="ouro" placeholder="Ouro" value="${m.ouro || ''}"></div>
+        <div class="linha2"><input class="campo" type="number" min="0" data-k="xp" placeholder="XP" value="${m.xp || ''}">
+          <select class="campo" data-k="classe">${Object.keys(CLASSES_NOMES).map(c => `<option value="${c}" ${m.skin && m.skin.classe === c ? 'selected' : ''}>${CLASSES_NOMES[c]}</option>`).join('')}</select></div>
+        <div class="linha2"><input class="campo" list="dlSkins" data-k="skin" placeholder="Skin (vazio = sem skin)" value="${esc((m.skin && m.skin.id) || '')}">
+          <select class="campo" data-k="dias"><option value="0">Permanente</option>${[1, 3, 7].map(d => `<option value="${d}" ${m.skin && +m.skin.dias === d ? 'selected' : ''}>Teste ${d} dia(s)</option>`).join('')}</select></div>
+        <button class="acao fina" type="button" data-tirarmeta="${i}">Tirar esta meta</button></div>`;
+    const html = `
+      <p class="nota">Durante o período do evento, quem ganhar a quantidade de partidas seguidas na arena recebe o prêmio (uma vez por meta). Perder zera a sequência.</p>
+      <p class="nota">Situação: <b>${estado}</b></p>
+      <div class="form">
+        <input id="eNome" class="campo" maxlength="40" placeholder="Nome do evento (ex.: Noite das Bruxas)" value="${esc((ev && ev.nome) || '')}">
+        <label class="rotulo">Começa em<input id="eIni" class="campo" type="datetime-local" value="${local(ev ? new Date(ev.inicio) : agora)}"></label>
+        <label class="rotulo">Termina em<input id="eFim" class="campo" type="datetime-local" value="${local(ev ? new Date(ev.fim) : new Date(agora.getTime() + 864e5))}"></label>
+        <label class="rotulo"><input id="eAtivo" type="checkbox" ${!ev || ev.ativo ? 'checked' : ''}> Evento ligado</label>
+      </div>
+      <h3 class="sub">Metas e prêmios</h3>
+      ${listaSkins()}
+      <div id="eMetas">${(metas.length ? metas : [{ vitorias: 10 }]).map(linhaMeta).join('')}</div>
+      <div class="botoes"><button class="acao" id="eMais" type="button">+ Meta</button>
+        <button class="acao forte" id="eSalvar" type="button">Salvar evento</button></div>
+      <p class="nota">Salvar um evento novo (outro nome ou outras datas) zera as sequências e os prêmios já pegos.</p>`;
+    adm(topo, html, el => {
+      const ler = () => Array.from(el.querySelectorAll('.meta')).map(d => {
+        const v = k => d.querySelector(`[data-k="${k}"]`).value.trim();
+        const m = { vitorias: Number(v('vitorias')) || 0, ouro: Number(v('ouro')) || 0, xp: Number(v('xp')) || 0 };
+        if (v('skin')) m.skin = { classe: v('classe'), id: v('skin').toLowerCase(), dias: Number(v('dias')) || 0 };
+        return m;
+      });
+      el.querySelector('#eMais').addEventListener('click', () => {
+        const box = el.querySelector('#eMetas'), n = box.querySelectorAll('.meta').length;
+        box.insertAdjacentHTML('beforeend', linhaMeta({}, n));
+      });
+      el.querySelector('#eMetas').addEventListener('click', e => { const b = e.target.closest('[data-tirarmeta]'); if (b) b.parentElement.remove(); });
+      el.querySelector('#eSalvar').addEventListener('click', async () => {
+        const metas = ler().filter(m => m.vitorias > 0);
+        if (!metas.length) return aviso('Coloque pelo menos uma meta com o número de vitórias');
+        if (metas.some(m => !m.ouro && !m.xp && !m.skin)) return aviso('Toda meta precisa de um prêmio (ouro, XP ou skin)');
+        if (metas.some(m => m.skin && !/^[a-z0-9_]{2,24}$/.test(m.skin.id))) return aviso('Nome da skin: letras minúsculas, números ou _');
+        const ini = new Date(el.querySelector('#eIni').value), fim = new Date(el.querySelector('#eFim').value);
+        if (!(fim > ini)) return aviso('O fim precisa ser depois do começo');
+        const nome = el.querySelector('#eNome').value.trim() || 'Evento da arena';
+        const valor = { id: nome + '|' + ini.toISOString() + '|' + fim.toISOString(), nome, ativo: el.querySelector('#eAtivo').checked,
+          inicio: ini.toISOString(), fim: fim.toISOString(), metas };
+        if (await tentar(() => global.Rede.rpc('salvar_config', { p_chave: 'arena_evento', p_valor: valor }), 'Evento salvo') !== undefined) telaAdmin('evento');
       });
     }, abas);
   }
@@ -706,7 +768,7 @@
       (def.caminhos || []).forEach(c2 => linha(c2.pts, c2.largura, '#a88a5a'));
       (def.rios || []).forEach(r => linha(r.pts, r.largura, '#3f8fbf'));
       g.fillStyle = '#3f8fbf'; (def.lagos || []).forEach(l => { g.beginPath(); g.arc(px(l.x), pz(l.z), l.r * sx, 0, 7); g.fill(); });
-      g.fillStyle = '#c9b48a'; (def.pracas || []).forEach(p => g.fillRect(px(p.x - p.w / 2), pz(p.z - p.h / 2), p.w * sx, p.h * sz));
+      g.fillStyle = '#c9b48a'; (def.pracas || []).forEach(p => { g.beginPath(); g.arc(px(p.x), pz(p.z), (Math.max(p.w, p.h) / 2 + 1) * sx, 0, 7); g.fill(); });
       (def.arenas || []).forEach(a => { g.strokeStyle = '#e3b44c'; g.lineWidth = 1.5; g.strokeRect(px(a.x - a.w / 2), pz(a.z - a.h / 2), a.w * sx, a.h * sz); });
       if (def.aeroporto) { g.fillStyle = '#f3ecd8'; g.font = 'bold ' + Math.max(10, 8 * sx) + 'px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('✈', px(def.aeroporto.x), pz(def.aeroporto.z)); }
       return f;

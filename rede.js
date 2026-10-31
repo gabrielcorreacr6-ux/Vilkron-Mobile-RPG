@@ -68,7 +68,7 @@
     if (error) throw new Error(traduzir(error.message));
   };
   Rede.aoRecuperarSenha = null;
-  sb.auth.onAuthStateChange(ev => { if (ev === 'PASSWORD_RECOVERY' && Rede.aoRecuperarSenha) Rede.aoRecuperarSenha(); });
+  if (sb.auth.onAuthStateChange) sb.auth.onAuthStateChange(ev => { if (ev === 'PASSWORD_RECOVERY' && Rede.aoRecuperarSenha) Rede.aoRecuperarSenha(); });
   Rede.sair = async () => { try { await sincronizar(true); } catch (e) {} await sb.auth.signOut(); global.location.reload(); };
   Rede.sessao = async () => (await sb.auth.getSession()).data.session;
   Rede.uid = () => Rede.eu && Rede.eu.id;
@@ -89,7 +89,7 @@
 
   /* ---------------- PERFIL ↔ JOGO ---------------- */
   let J = null, base = 0, danoBase = 0, versao = 1, sincT = null, sincronizando = false;
-  const CAMPOS = ['classe', 'genero', 'cor', 'clan', 'classes', 'passes', 'mapa', 'pontosRank', 'inventario', 'skinEquipada'];
+  const CAMPOS = ['classe', 'genero', 'cor', 'clan', 'classes', 'passes', 'mapa', 'pontosRank', 'inventario', 'skinEquipada', 'temporada', 'eventoArena'];
 
   // começa o jogo com o que está no servidor (ou com o perfil local na primeira vez)
   Rede.prepararJogo = function () {
@@ -263,6 +263,7 @@
       .on('broadcast', { event: 'apoio' }, m => receberApoio(m.payload))
       .on('broadcast', { event: 'abate' }, m => receberAbate(m.payload))
       .on('broadcast', { event: 'efeito' }, m => receberEfeito(m.payload))
+      .on('broadcast', { event: 'torre' }, m => receberTorre(m.payload))
       .on('presence', { event: 'leave' }, m => removerRemoto(m.key))
       .subscribe(st => { if (st === 'SUBSCRIBED') { canal.track({ nick: Rede.eu.nick }); enviarEm = 0; ultimoEnvio = ''; } });
   }
@@ -277,13 +278,14 @@
       c: P.classe, g: P.genero, k: P.cor, s: (P.skinEquipada || {})[P.classe] || 'default',
       x: +h.x.toFixed(2), z: +h.z.toFixed(2), r: +h.rot.toFixed(2),
       v: Math.max(0, Math.round(h.vida)), vm: h.vidaMax, m: h.morto ? 1 : 0,
-      i: global.Jogo.poderes.invisivel ? 1 : 0, b: J.api.naMoita(h.x, h.z) ? 1 : 0, a: h.arena ? 1 : 0
+      i: global.Jogo.poderes.invisivel ? 1 : 0, b: J.api.naMoita(h.x, h.z) ? 1 : 0, a: h.arena ? 1 : 0,
+      st: ((P.classes || {})[P.classe] || {}).estrelas || 0
     };
   }
 
   function enviarPos(t) {
     const p = minhaPos(); if (!p || !canal) return;
-    const chave = [p.x, p.z, p.r, p.v, p.m, p.i, p.b, p.c, p.g, p.k, p.s].join('|');
+    const chave = [p.x, p.z, p.r, p.v, p.m, p.i, p.b, p.c, p.g, p.k, p.s, p.st].join('|');
     // 5x por segundo quando algo muda; 1x por segundo parado (economiza a cota do Supabase)
     if (t < enviarEm || (chave === ultimoEnvio && t < enviarEm + 0.8)) return;
     enviarEm = t + 0.2; ultimoEnvio = chave;
@@ -319,7 +321,7 @@
   function tirarEntidade(e) {
     const A = J.api, E = A.E;
     global.Skins.remover(e.obj);
-    [e.obj, e.barra, e.sombra].forEach(o => { if (o && o.parent) o.parent.remove(o); });
+    [e.obj, e.barra, e.sombra, e.seloSprite].forEach(o => { if (o && o.parent) o.parent.remove(o); });
     E.entidades = E.entidades.filter(x => x !== e);
     A.E.entidades = E.entidades;
   }
@@ -353,7 +355,9 @@
       const ver = (!p.i || souAdmin) && (!p.b || amigo);
       e.obj.visible = ver;
       if (e.obj.visible && p.i && souAdmin && !e._fantasma) { e._fantasma = true; e.obj.traverse(n => { if (n.isMesh && n.material) [].concat(n.material).forEach(m => { m.transparent = true; m.opacity = 0.4; }); }); }
-      if (r.rotulo) { r.rotulo.visible = ver && !e.morto; r.rotulo.position.set(e.x, 3.1, e.z); }
+      if (r.rotulo) { r.rotulo.visible = ver && !e.morto; r.rotulo.position.set(e.x, 3.3 - (e.afundado || 0), e.z); }
+      // rank: amigos e equipe veem elo + estrelas; os outros só o elo
+      if (p.st !== undefined && J.api.selo) J.api.selo(e, p.st, amigo);
     });
   }
 
@@ -398,6 +402,14 @@
     J.api.controlar(h, { stun: Math.min(5, a.stun || 0), slow: a.slow, antiCura: a.antiCura });
   }
 
+  // dano de outro jogador numa torre de arena: todos veem a mesma torre perdendo vida
+  function receberTorre(d) {
+    if (!d || d.u === Rede.eu.id) return;
+    const A = J.api, ar = (A.E.arenas || []).find(a => a.indice === d.a); if (!ar) return;
+    const t = ar.torres[d.i]; if (!t || t.morto) return;
+    A.causarDano(t, Math.min(Number(d.v) || 0, t.vidaMax * 0.1), null, { semLimite: true, verdadeiro: true, semReacao: true });
+  }
+
   async function receberAbate(a) {
     if (a.de !== Rede.eu.id) return;
     try {
@@ -416,6 +428,21 @@
     G.passo = passo;
     G.mapaCarregado = entrarMapa;
     G.salvou = agendarSinc;
+    G.danoTorre = d => mandar('torre', Object.assign({ u: Rede.eu.id }, d));
+    // renascer perto da equipe: um companheiro vivo neste mapa
+    G.companheiroVivo = () => {
+      let melhor = null;
+      Rede.remotos.forEach((r, uid) => { if (!melhor && r.ent && !r.ent.morto && Rede.equipe.has(uid)) melhor = r.ent; });
+      return melhor;
+    };
+    G.arenaFim = venceu => contarEventoArena(venceu);
+    G.eventoArenaTexto = () => {
+      const ev = eventoAtivo(); if (!ev) return '';
+      const P = J.api.P, seq = (P.eventoArena && P.eventoArena.id === ev.id) ? P.eventoArena.seq : 0;
+      return `<div class="evento"><b>Evento: ${esc(ev.nome || 'Arena')}</b> · até ${new Date(ev.fim).toLocaleDateString('pt-BR')}<br>` +
+        (ev.metas || []).map(m => `${m.vitorias} vitórias seguidas: ${premioTexto(m)}`).join('<br>') +
+        `<br><small>Sua sequência agora: ${seq}</small></div>`;
+    };
     G.acao = (slot, ang) => mandar('acao', { u: Rede.eu.id, s: slot, a: +ang.toFixed(2) });
     G.danoRemoto = (alvo, v, opc) => mandar('dano', { de: Rede.eu.id, para: alvo.uid, v: Math.round(v), vd: opc && opc.verdadeiro ? 1 : 0 });
     G.apoioRemoto = (alvo, tipo) => mandar('apoio', { de: Rede.eu.id, para: alvo.uid, t: tipo });
@@ -448,12 +475,56 @@
     if (J.api.E.mapa) entrarMapa(J.api.E.mapa);
   }
 
+  /* ---------------- EVENTO DA ARENA ---------------- */
+  const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function eventoAtivo() {
+    const ev = global.Jogo.ajustes && global.Jogo.ajustes.arena_evento, agora = new Date();
+    if (!ev || !ev.ativo || !ev.id || new Date(ev.inicio) > agora || new Date(ev.fim) < agora) return null;
+    return ev;
+  }
+  function premioTexto(m) {
+    const p = [];
+    if (m.ouro > 0) p.push(m.ouro + ' de ouro');
+    if (m.xp > 0) p.push(m.xp + ' XP');
+    if (m.skin && m.skin.id) p.push('skin ' + m.skin.id + (m.skin.dias > 0 ? ' (' + m.skin.dias + ' dias)' : ''));
+    return p.join(' + ') || 'nada';
+  }
+  Rede.premioTexto = premioTexto;
+  async function contarEventoArena(venceu) {
+    try { await carregarAjustes(); } catch (e) {}
+    const ev = eventoAtivo(); if (!ev) return;
+    const P = J.api.P;
+    if (!P.eventoArena || P.eventoArena.id !== ev.id) P.eventoArena = { id: ev.id, seq: 0, pegos: [] };
+    const e = P.eventoArena;
+    e.seq = venceu ? e.seq + 1 : 0;
+    J.api.salvar();
+    if (venceu) J.api.aviso('Evento da arena: ' + e.seq + ' vitória(s) seguida(s)');
+    for (let i = 0; i < (ev.metas || []).length; i++) {
+      const m = ev.metas[i];
+      if (e.pegos.indexOf(i) >= 0 || e.seq < m.vitorias) continue;
+      try {
+        const r = await rpc('premio_evento_arena', { p_meta: i, p_seq: e.seq });
+        e.pegos.push(i); J.api.salvar();
+        if (r && !r.repetido) {
+          if (r.ouro) { P.ouro += r.ouro; P.ouroTotal += r.ouro; base += r.ouro; }
+          if (r.xp) J.api.ganhar(r.xp, 0, false);
+          J.api.aviso('Prêmio do evento: ' + premioTexto(m) + '!');
+          if (r.skin) sincronizar(true);
+        }
+      } catch (err) { console.warn('evento', err.message); }
+    }
+  }
+
   /* ---------------- SKINS DO JOGADOR ---------------- */
   // {soldado: {dourado: null (para sempre) | "data de validade"}}
   Rede.minhasSkins = function (classe) {
     const s = (Rede.eu && Rede.eu.skins && Rede.eu.skins[classe]) || {}, agora = new Date();
     const l = [{ id: 'default', ate: null }];
     Object.keys(s).forEach(id => { if (!s[id] || new Date(s[id]) > agora) l.push({ id, ate: s[id] }); });
+    // o administrador tem todas as skins, sem comprar
+    if (Rede.eu && Rede.eu.papel === 'admin' && global.Skins) {
+      ((global.Skins.CATALOGO.classes[classe] || {}).skins || []).forEach(k => { if (!l.some(x => x.id === k.id)) l.push({ id: k.id, ate: null }); });
+    }
     return l;
   };
   Rede.temSkin = (classe, id) => id === 'default' || Rede.minhasSkins(classe).some(s => s.id === id);

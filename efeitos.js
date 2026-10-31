@@ -145,7 +145,7 @@
     }`;
   // ---- água: rasa e clara nas margens, funda e escura no meio, ondulando, com brilho e espuma
   const FRAG_AGUA = RUIDO + `
-    uniform vec3 raso; uniform vec3 fundo; uniform float t; uniform float luz; uniform float fluxo; uniform float radial;
+    uniform vec3 raso; uniform vec3 fundo; uniform float t; uniform float luz; uniform float fluxo; uniform float radial; uniform float linear;
     varying vec2 vUv; varying vec3 vMundo;
     void main() {
       float prof = radial > 0.5 ? 1.0 - length(vUv * 2.0 - 1.0) : 1.0 - abs(vUv.y * 2.0 - 1.0);
@@ -162,18 +162,21 @@
       col += vec3(0.75, 0.9, 1.0) * ondas * 0.28 * (0.4 + 0.6 * fundura);
       col += raso * linhas * 0.18 * (1.0 - fundura * 0.5);
       col = mix(col, vec3(0.92, 0.96, 1.0), clamp(espuma, 0.0, 1.0) * 0.55);
-      float a = smoothstep(0.0, 0.07, prof) * 0.94;
-      gl_FragColor = vec4(col * luz, a);
+      float a = smoothstep(0.0, 0.07, prof);
+      col *= luz;
+      if (linear > 0.5) col = pow(max(col, vec3(0.0)), vec3(2.2));   // com o brilho ligado a tela corrige o gama depois
+      gl_FragColor = vec4(col, a);
     }`;
   Efeitos.agua = (raso, fundo, opc) => {
     if (!pronto()) return null;
     opc = opc || {};
     return new THREE.ShaderMaterial({
-      vertexShader: VERT_MUNDO, fragmentShader: FRAG_AGUA, transparent: true, depthWrite: false,
-      uniforms: { t: tempo, raso: corU(raso), fundo: corU(fundo), luz: Efeitos.luzAgua, fluxo: { value: opc.rio ? 1 : 0 }, radial: { value: opc.radial ? 1 : 0 } }
+      vertexShader: VERT_MUNDO, fragmentShader: FRAG_AGUA, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      uniforms: { t: tempo, raso: corU(raso), fundo: corU(fundo), luz: Efeitos.luzAgua, linear: Efeitos.linear, fluxo: { value: opc.rio ? 1 : 0 }, radial: { value: opc.radial ? 1 : 0 } }
     });
   };
   Efeitos.luzAgua = { value: 1 };   // escurece a água à noite
+  Efeitos.linear = { value: 0 };    // 1 quando o pós-processamento (gama) está ligado
 
   Efeitos.SHADERS = { FRAG_AGUA, RUIDO, VERT_UV, VERT_MUNDO, FRAG_ORBE, FRAG_FOGO, FRAG_ANEL, FRAG_CHAO, VERT_ESCUDO, FRAG_ESCUDO, VERT_RASTRO, FRAG_RASTRO };
 
@@ -268,10 +271,11 @@
       const comp = new THREE.EffectComposer(renderer);
       if (comp.setPixelRatio) comp.setPixelRatio(Math.min(1.5, renderer.getPixelRatio ? renderer.getPixelRatio() : 1));
       comp.addPass(new THREE.RenderPass(cena, camera));
-      const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(w / 2, h / 2), 0.85, 0.45, 0.82);
+      const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(w / 2, h / 2), 0.85, 0.45, 0.9);
       comp.addPass(bloom);
       if (THREE.ShaderPass && THREE.GammaCorrectionShader) comp.addPass(new THREE.ShaderPass(THREE.GammaCorrectionShader));
       comp.bloom = bloom;
+      Efeitos.linear.value = 1;
       return comp;
     } catch (e) { console.warn('bloom desligado', e); return null; }
   };

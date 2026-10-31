@@ -688,3 +688,62 @@ do $$ begin
   begin alter publication supabase_realtime add table public.equipe_membros; exception when others then null; end;
   begin alter publication supabase_realtime add table public.convites_equipe; exception when others then null; end;
 end $$;
+
+-- ===== Vilkron v18: evento da arena (rodar uma vez no SQL Editor) =====
+
+-- o admin passa a poder salvar a configuração do evento da arena
+create or replace function public.salvar_config(p_chave text, p_valor jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform _exigir(array['admin']);
+  if p_chave not in ('mobs', 'pvp', 'drops', 'arena_evento') then raise exception 'Chave inválida'; end if;
+  insert into config (chave, valor) values (p_chave, p_valor)
+    on conflict (chave) do update set valor = excluded.valor;
+end $$;
+
+-- quem já pegou cada prêmio de cada evento (um por jogador)
+create table if not exists public.premios_evento (
+  jogador uuid not null references public.perfis(id) on delete cascade,
+  evento  text not null,
+  meta    int  not null,
+  em      timestamptz not null default now(),
+  primary key (jogador, evento, meta)
+);
+alter table public.premios_evento enable row level security;
+
+-- Prêmio do evento da arena: p_meta = qual meta (0, 1, 2...), p_seq = vitórias seguidas que o jogo contou
+create or replace function public.premio_evento_arena(p_meta int, p_seq int) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare eu perfis; ev jsonb; m jsonb; validade timestamptz; v_ouro int; v_xp int; sk jsonb; dias int;
+begin
+  eu := _eu();
+  select valor into ev from config where chave = 'arena_evento';
+  if ev is null or not coalesce((ev ->> 'ativo')::boolean, false)
+     or now() < (ev ->> 'inicio')::timestamptz or now() > (ev ->> 'fim')::timestamptz then
+    raise exception 'Nenhum evento da arena agora';
+  end if;
+  m := ev -> 'metas' -> p_meta;
+  if m is null then raise exception 'Meta inválida'; end if;
+  if p_seq < coalesce((m ->> 'vitorias')::int, 999999) then raise exception 'Ainda faltam vitórias'; end if;
+  insert into premios_evento (jogador, evento, meta) values (eu.id, ev ->> 'id', p_meta)
+    on conflict do nothing;
+  if not found then return jsonb_build_object('repetido', true); end if;
+  v_ouro := greatest(0, coalesce((m ->> 'ouro')::int, 0));
+  v_xp   := greatest(0, coalesce((m ->> 'xp')::int, 0));
+  sk   := m -> 'skin';
+  if v_ouro > 0 then update perfis set ouro = ouro + v_ouro, ouro_total = ouro_total + v_ouro where id = eu.id; end if;
+  if sk is not null and coalesce(sk ->> 'id', '') <> '' then
+    dias := coalesce((sk ->> 'dias')::int, 0);
+    validade := case when dias > 0 then now() + make_interval(days => dias) end;
+    update perfis set skins = jsonb_set(skins, array[sk ->> 'classe'],
+      coalesce(skins -> (sk ->> 'classe'), '{}'::jsonb) || jsonb_build_object(sk ->> 'id', validade)) where id = eu.id;
+  end if;
+  insert into mensagens (para, de, texto) values (eu.id, null,
+    'Evento ' || coalesce(ev ->> 'nome', 'da arena') || ': ' || (m ->> 'vitorias') || ' vitórias seguidas! Prêmio: ' ||
+    concat_ws(' + ', case when v_ouro > 0 then v_ouro || ' de ouro' end, case when v_xp > 0 then v_xp || ' XP' end,
+      case when sk is not null and coalesce(sk ->> 'id', '') <> '' then 'skin ' || (sk ->> 'id') end));
+  return jsonb_build_object('ouro', v_ouro, 'xp', v_xp, 'skin', sk);
+end $$;
+
+revoke all on function public.premio_evento_arena(int, int) from anon, public;
+grant execute on function public.premio_evento_arena(int, int) to authenticated;

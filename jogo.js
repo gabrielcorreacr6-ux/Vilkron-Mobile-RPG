@@ -15,8 +15,14 @@
     velHeroi: 5.2,
     lentidaoAgua: 0.6,             // na água todos andam a 60% (barco e serpente não)
     respawnMob: 180,               // 3 minutos
-    respawnHeroi: 5,
-    xpPorEstrela: 100,
+    respawnHeroi: 45,        // segundos para voltar depois de cair (fora da arena)
+    // XP de cada estrela: no 1º elo, 50 × a estrela (1ª = 50, 2ª = 100 ... 50ª = 2500);
+    // do 2º elo em diante, 1000 × (elo − 1) × a estrela (2º elo: 1000, 2000...; 3º elo: 2000, 4000...).
+    // O último elo não tem limite de 50 estrelas.
+    xpPrimeiroElo: 50, xpPorEloAcima: 1000,
+    temporadaMeses: 2, temporadaVolta: 2,   // a cada 2 meses a temporada vira e todos voltam 2 elos
+    // cor de cada elo (Beginner ... Immortal God) acima da barra de vida
+    coresElo: ['#b9c0c4', '#7dd38a', '#5aa9ff', '#3ad6c4', '#b58cff', '#ff9d3c', '#ff5a5a', '#ff6fd0', '#ffd34d'],
     estrelasPorRank: 50,
     ranks: ['Beginner', 'Apprentice', 'Junior', 'Experienced', 'Epic', 'Legendary', 'Supremacy', 'Mythical', 'Immortal God'],
     porEstrela: { poder: 0.005, velAtaque: 0.002 },          // 0,5% de poder e 0,2% de vel. de ataque por estrela
@@ -25,6 +31,7 @@
     escalaMapa: { mapa1: 1, mapa2: 1.6, mapa3: 2.4, arenas: 2.4, ascensao: 3.5, repouso: 1 },
     raioZonaAeroporto: 10,
     raioMoita: 1.7,
+    afundarAgua: 0.55,       // quanto o corpo afunda no rio/lago (metros, para um herói de 1,8 m)
     // efeitos dos mobs: lentidão de 10% e crítico de +10% (o documento dizia 0,1%, pequeno demais para sentir)
     mobs: {
       maestro:  { vida: 600, dano: 35, alcance: 8,  intervalo: 1.8, vel: 2.6, projetil: 'notas', xp: 40, ouro: 25 },
@@ -50,7 +57,11 @@
       mago:    { comprimento: 10, base: 9, dano: 1.5, slow: 0.4, dur: 3 },     // triângulo de fogo roxo; dano real
       suporte: { raio: 8, stun: 4, antiCura: 0.5, antiCuraDur: 10, cura: 0.5 }
     },
-    torre: { vida: 3000, dano: 120, alcance: 9, intervalo: 1.2, xp: 80, ouro: 60, golpesParaMinion: 3.5 },
+    torre: { vida: 3000, dano: 120, alcance: 9, intervalo: 1.2, xp: 80, ouro: 60, golpesParaMinion: 3.5,
+      // defesa da torre: cada jogador tira no máximo 10% da vida dela a cada 10 s (precisa de mais gente atacando junto)
+      limitePorJogador: 0.10, janelaLimite: 10,
+      // sem minions por perto, a torre mata o herói em 3 disparos: 20%, 60% e 120% da vida dele (ignora escudo e cura)
+      sequencia: [0.2, 0.6, 1.2], esqueceSequencia: 4 },
     arena: { inscricao: 150, minionsCada: 30, respawnBase: 30, respawnPasso: 20, respawnMax: 120 },
     loja: {
       cura:   { nome: 'Frasco de cura', preco: 30, desc: 'Recupera toda a vida.' },
@@ -112,6 +123,7 @@
   try {
     const s = JSON.parse(global.localStorage.getItem(CHAVE) || 'null');
     if (s) { P = Object.assign(perfilPadrao(), s); P.classes = Object.assign(perfilPadrao().classes, s.classes || {}); }
+    P.viradaTemporada = aplicarTemporada(P);
   } catch (e) { /* sem armazenamento: começa do zero */ }
   let salvarT = null;
   function salvar() {
@@ -126,6 +138,36 @@
     const dentro = i === CONFIG.ranks.length - 1 ? estrelas - i * CONFIG.estrelasPorRank : estrelas % CONFIG.estrelasPorRank;
     return { indice: i, nome: CONFIG.ranks[i], estrelas: dentro };
   }
+  // XP que falta para a próxima estrela, dado quantas estrelas a classe já tem
+  function xpProximaEstrela(estrelas) {
+    const r = rankInfo(estrelas), n = r.estrelas + 1;
+    return r.indice === 0 ? CONFIG.xpPrimeiroElo * n : CONFIG.xpPorEloAcima * r.indice * n;
+  }
+  function subirEstrelas(c) {
+    let subiu = 0;
+    while (c.xp >= xpProximaEstrela(c.estrelas)) { c.xp -= xpProximaEstrela(c.estrelas); c.estrelas++; subiu++; }
+    return subiu;
+  }
+  // temporada: janeiro-fevereiro, março-abril... Na virada, cada classe volta 2 elos (mantém as estrelas de dentro do elo)
+  function temporadaAtual(d) {
+    d = d || new Date();
+    return d.getFullYear() * Math.round(12 / CONFIG.temporadaMeses) + Math.floor(d.getMonth() / CONFIG.temporadaMeses);
+  }
+  function aplicarTemporada(perfil) {
+    const atual = temporadaAtual();
+    if (perfil.temporada === undefined || perfil.temporada === null) { perfil.temporada = atual; return false; }
+    if (perfil.temporada >= atual) return false;
+    const viradas = Math.min(5, atual - perfil.temporada);
+    Object.keys(perfil.classes || {}).forEach(k => {
+      const c = perfil.classes[k], r = rankInfo(c.estrelas || 0);
+      const elo = Math.max(0, r.indice - CONFIG.temporadaVolta * viradas);
+      if (elo === r.indice) return;
+      c.estrelas = elo * CONFIG.estrelasPorRank + Math.min(r.estrelas, CONFIG.estrelasPorRank - 1);
+      c.xp = 0;
+    });
+    perfil.temporada = atual;
+    return true;
+  }
   function bonus() {
     const n = C().estrelas, epico = Math.max(0, n - 4 * CONFIG.estrelasPorRank);
     return {
@@ -139,8 +181,7 @@
     const c = C();
     if (!P.classe) return;
     c.xp += xp; P.ouro += ouro; P.ouroTotal += ouro;
-    let subiu = 0;
-    while (c.xp >= CONFIG.xpPorEstrela) { c.xp -= CONFIG.xpPorEstrela; c.estrelas++; subiu++; }
+    const subiu = subirEstrelas(c);
     c.vitorias++;
     if (!c.protecao && c.vitorias >= CONFIG.vitoriasProtecao) { c.protecao = true; c.vitorias = 0; aviso('Proteção de estrela ativada'); }
     if (motivo) aviso('+' + ouro + ' ouro · +' + xp + ' XP' + (subiu ? ' · +' + subiu + ' estrela' : ''));
@@ -298,6 +339,9 @@
     if (!rios.length && !lagos.length) return;
     const aRaso = 0x3f8f8a, aFundo = 0x06202c;
     if (R.Fx && R.Fx.agua && R.Fx.agua(aRaso, aFundo)) {
+      const leito = cor => new THREE.MeshBasicMaterial({ map: Skins.textura('rio', 1, 1), color: cor, transparent: true });
+      rios.forEach(r => camada(fita(r.pts, r.largura + 0.6, 6), leito(0x2e6f7a), 0, 0, 0.026));
+      lagos.forEach(l => camada(uvRep(new THREE.CircleGeometry(l.r + 0.3, 48), 2, 2), leito(0x2a6573), l.x, l.z, 0.026));
       rios.forEach(r => camada(fita(r.pts, r.largura + 1.2, 1), R.Fx.agua(aRaso, aFundo, { rio: true }), 0, 0, 0.03));
       lagos.forEach(l => camada(new THREE.PlaneGeometry((l.r + 0.6) * 2, (l.r + 0.6) * 2), R.Fx.agua(aRaso, aFundo, { radial: true }), l.x, l.z, 0.03));
       return;
@@ -422,7 +466,7 @@
     });
     E.mundo.add(g);
     // sombra da ponte na água
-    camada(new THREE.PlaneGeometry(p.larg + 0.8, L), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false }), g.position.x, g.position.z, 0.035).rotation.z = -ang;
+    camada(new THREE.PlaneGeometry(p.larg + 0.8, L), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false }), g.position.x, g.position.z, 0.035).rotation.z = ang;
   }
   // ---------- praça redonda com calçada e meio-fio ----------
   function texCalcada() {
@@ -448,8 +492,9 @@
   }
   function pracaRedonda(p) {
     const r = Math.max(p.w, p.h) / 2 + 1;
-    const guia = camada(new THREE.CircleGeometry(r + 0.6, 64), new THREE.MeshLambertMaterial({ color: 0x5c5a55 }), p.x, p.z, 0.04);
-    camada(uvRep(new THREE.CircleGeometry(r, 64), r / 2.5, r / 2.5), new THREE.MeshLambertMaterial({ map: Skins.textura('concreto_praca', 1, 1), color: 0xd9d2c4 }), p.x, p.z, 0.045);
+    // transparent: entra na mesma fila do caminho e é desenhada depois dele (por cima)
+    const guia = camada(new THREE.CircleGeometry(r + 0.6, 64), new THREE.MeshLambertMaterial({ color: 0x5c5a55, transparent: true }), p.x, p.z, 0.04);
+    camada(uvRep(new THREE.CircleGeometry(r, 64), r / 2.5, r / 2.5), new THREE.MeshLambertMaterial({ map: Skins.textura('concreto_praca', 1, 1), color: 0xd9d2c4, transparent: true }), p.x, p.z, 0.045);
     camada(new THREE.CircleGeometry(r * 0.98, 64), new THREE.MeshLambertMaterial({ map: texCalcada(), transparent: true, depthWrite: false }), p.x, p.z, 0.05);
     return guia;
   }
@@ -582,6 +627,60 @@
     return (d.rios || []).some(r => distLinha(x, z, r.pts) < r.largura / 2) ||
       (d.lagos || []).some(l => Math.hypot(x - l.x, z - l.z) < l.r);
   }
+  // construções que não dá para atravessar (toca dos minions, lojas, barracas, fonte)
+  const LARGURA_SPRITE = { caverna_iso: 1.11, caverna_frente: 0.92, loja_azul: 0.78, loja_vermelha: 0.96, barraca_iso: 1.02, barraca_frente: 0.94, fonte: 1.07 };
+  function montarSolidos(d) {
+    E.solidos = [];
+    (d.decor || []).forEach(o => {
+      const asp = LARGURA_SPRITE[o.img]; if (!asp) return;
+      const r = o.h * asp * (/^caverna/.test(o.img) ? 0.4 : 0.36);
+      E.solidos.push({ x: o.x, z: o.z - r * 0.15, r });
+    });
+  }
+  function empurrarSolidos(e) {
+    for (const s of E.solidos || []) {
+      const dx = e.x - s.x, dz = e.z - s.z, d = Math.hypot(dx, dz), min = s.r + (e.raio || 0.6) * 0.6;
+      if (d >= min) continue;
+      if (d < 1e-3) { e.z = s.z + min; continue; }
+      e.x = s.x + dx / d * min; e.z = s.z + dz / d * min;
+    }
+  }
+  // moitas sempre na beira do caminho (nunca em cima): boas para emboscadas
+  function pontoNoCaminho(x, z) {
+    let m = null;
+    (E.def.caminhos || []).forEach(c => {
+      for (let i = 0; i < c.pts.length - 1; i++) {
+        const [ax, az] = c.pts[i], [bx, bz] = c.pts[i + 1], dx = bx - ax, dz = bz - az, l = dx * dx + dz * dz;
+        const t = l ? clamp(((x - ax) * dx + (z - az) * dz) / l, 0, 1) : 0;
+        const px = ax + t * dx, pz = az + t * dz, dd = Math.hypot(x - px, z - pz);
+        if (!m || dd < m.d) m = { d: dd, px, pz, nx: -dz / (Math.sqrt(l) || 1), nz: dx / (Math.sqrt(l) || 1), c };
+      }
+    });
+    return m;
+  }
+  function ajustarMoitas(d) {
+    const livre = (x, z) => !naAgua(x, z) && !noCaminho(x, z, 0.8) && !zonaSegura(x, z) &&
+      !(d.pracas || []).some(p => Math.hypot(x - p.x, z - p.z) < Math.max(p.w, p.h) / 2 + 3) &&
+      !(d.arenas || []).some(a => dentroArena(a, x, z, 3)) && !(E.solidos || []).some(s => Math.hypot(x - s.x, z - s.z) < s.r + 2);
+    return (d.moitas || []).map(([x, z]) => {
+      const m = pontoNoCaminho(x, z); if (!m) return [x, z];
+      const beira = m.c.largura / 2 + CONFIG.raioMoita + 0.6;
+      if (m.d >= beira - 0.3 && m.d <= beira + 4 && livre(x, z)) return [x, z];
+      // lado em que a moita já estava; se não der, o outro lado do caminho
+      let sx = x - m.px, sz = z - m.pz; const l = Math.hypot(sx, sz);
+      if (l > 0.3) { sx /= l; sz /= l; } else { sx = m.nx; sz = m.nz; }
+      for (const lado of [1, -1]) for (const extra of [0, 1.5, 3, 5]) {
+        const nx = m.px + sx * lado * (beira + extra), nz = m.pz + sz * lado * (beira + extra);
+        if (livre(nx, nz)) return [nx, nz];
+      }
+      // sem lugar bom por perto (ex.: no meio do rio): procura em volta, senão some
+      for (let raio = 3; raio <= 12; raio += 3) for (let k = 0; k < 8; k++) {
+        const nx = x + Math.cos(k * Math.PI / 4) * raio, nz = z + Math.sin(k * Math.PI / 4) * raio;
+        if (livre(nx, nz)) return [nx, nz];
+      }
+      return null;
+    }).filter(Boolean);
+  }
   function naMoita(x, z) { return E.moitas.some(m => Math.hypot(x - m[0], z - m[1]) < CONFIG.raioMoita); }
   function zonaSegura(x, z) {
     const d = E.def;
@@ -598,6 +697,10 @@
   const _rb = THREE.Vector3 ? new THREE.Vector3() : null, _rp = THREE.Vector3 ? new THREE.Vector3() : null;
   function atualizarRastros(dt) {
     if (!R.Fx || !R.Fx.Rastro || !Skins.linhaArma) return;
+    // a espada de fogo queima mesmo parada: o laço abaixo só passa por quem tem rastro, então acende aqui
+    for (const e of E.entidades) {
+      if ((e.tipo === 'heroi' || e.tipo === 'remoto') && e.classe === 'soldado' && !e.rastro && tema(e).fogo && !e.morto && e.obj.visible !== false && Skins.linhaArma(e.obj, _rb, _rp)) espadaEmChamas(e, false, dt);
+    }
     for (const e of E.entidades) {
       if ((e.tipo !== 'heroi' && e.tipo !== 'remoto') || e.classe !== 'soldado' || !e.anim) continue;
       const ativo = !e.morto && (!!e.investida || /^(ataque|habilidade1|habilidade3)$/.test(e.anim.estado || ''));
@@ -608,12 +711,14 @@
       if (e.rastro.mesh.parent !== E.mundo) E.mundo.add(e.rastro.mesh);
       const tem = Skins.linhaArma(e.obj, _rb, _rp);
       e.rastro.passo(ativo && tem, tem ? _rb : null, tem ? _rp : null, dt);
+      if (tem && tema(e).fogo && e.obj.visible !== false && !e.morto) espadaEmChamas(e, ativo, dt);
     }
   }
 
   function limparMapa() {
     limparFx();
-    E.entidades.forEach(e => { if (e.anim) Skins.remover(e.obj); });
+    // o herói continua vivo entre um mapa e outro: a animação dele não pode ser desligada
+    E.entidades.forEach(e => { if (e.anim && e !== E.heroi) Skins.remover(e.obj); });
     if (E.mundo) R.scene.remove(E.mundo);
     E.mundo = new THREE.Group(); R.scene.add(E.mundo);
     E.entidades = []; E.projeteis = []; E.efeitos = []; E.interacoes = []; E.moitas = [];
@@ -664,8 +769,15 @@
     anel.renderOrder = 5;
 
     // moitas
-    E.moitas = (d.moitas || []).slice();
-    E.moitas.forEach(([x, z]) => peca('moita_1', 1.9, x, z));
+    montarSolidos(d);
+    E.moitas = ajustarMoitas(d);
+    E.moitas.forEach(([x, z], i) => {
+      // três arbustos juntos: parece um esconderijo de verdade
+      const a = i * 2.4;
+      peca('moita_1', 1.7, x - Math.cos(a) * 0.9, z - 0.35, { tint: 0x6f8063 });
+      peca('moita_1', 1.6, x + Math.cos(a) * 0.95, z - 0.2, { tint: 0x66775c });
+      peca('moita_1', 2.2, x, z + 0.35, { tint: 0x7c8d6e });
+    });
 
     // floresta: miolo + uma mata fechada em toda a borda (é ela que segura o jogador)
     const mobs = mobsDoMapa(d);
@@ -744,6 +856,7 @@
     // herói
     if (E.heroi) {
       E.mundo.add(E.heroi.obj); E.mundo.add(E.heroi.sombra); E.mundo.add(E.heroi.barra);
+      if (E.heroi.seloSprite && E.heroi.seloSprite.isObject3D) E.mundo.add(E.heroi.seloSprite);
       E.heroi.x = d.entrada[0]; E.heroi.z = d.entrada[1]; E.heroi.time = 'jogador';
       E.heroi.arena = null;
       E.entidades.push(E.heroi);
@@ -765,7 +878,7 @@
       R.hemi.intensity = noite ? 0.34 : 0.85;
     }
     if (R.sol) { R.sol.color = new THREE.Color(noite ? 0x9db4ff : 0xfff0d6); R.sol.intensity = noite ? 0.42 : 1.05; }
-    if (R.lanterna) R.lanterna.intensity = noite ? 1.25 : 0;
+    if (R.lanterna) R.lanterna.intensity = noite ? 0.8 : 0;
     (R.luzesVaga || []).forEach(l => { l.intensity = 0; });
     if (global.Efeitos && global.Efeitos.luzAgua) global.Efeitos.luzAgua.value = noite ? 0.55 : 1;
     // o que não recebe luz (árvores, construções desenhadas) escurece junto
@@ -922,6 +1035,51 @@
     E.mundo.add(s);
     return s;
   }
+  // ---------- selo do rank acima da barra de vida ----------
+  // amigos/equipe veem elo + estrelas; os outros só o elo.
+  // Último elo acima de 50 estrelas: estrelas douradas com aura roxa; a cada 150 a mais, fumaça "fervendo".
+  function selo(e, estrelas, comEstrelas) {
+    if (estrelas === undefined || estrelas === null) return;
+    const r = rankInfo(estrelas), ultimo = r.indice === CONFIG.ranks.length - 1;
+    const aura = ultimo && r.estrelas > 50;
+    const chave = r.indice + '|' + (comEstrelas ? r.estrelas : '-');
+    if (e.seloChave === chave) return;
+    e.seloChave = chave;
+    e.seloFumaca = aura && comEstrelas ? Math.floor((r.estrelas - 50) / 150) : 0;
+    if (!temDOM) { e.seloSprite = e.seloSprite || { position: new THREE.Vector3(), visible: true }; return; }
+    if (!e.seloSprite) {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 48;
+      const t = new THREE.CanvasTexture(c);
+      e.seloSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
+      e.seloSprite.scale.set(1.9, 1.9 * 48 / 256, 1); e.seloSprite.renderOrder = 10;
+      e.seloSprite.userData = { c, t };
+      E.mundo.add(e.seloSprite);
+    }
+    const { c, t } = e.seloSprite.userData, g = c.getContext('2d');
+    g.clearRect(0, 0, 256, 48);
+    const nome = r.nome, est = comEstrelas ? ' ' + r.estrelas + ' ★' : '';
+    g.font = 'bold 26px sans-serif'; g.textBaseline = 'middle';
+    const wN = g.measureText(nome).width, wE = est ? g.measureText(est).width : 0, x0 = 128 - (wN + wE) / 2;
+    // fundo discreto
+    g.fillStyle = 'rgba(10,14,12,0.55)';
+    const l = wN + wE + 20; g.beginPath(); if (g.roundRect) g.roundRect(128 - l / 2, 6, l, 36, 12); else g.rect(128 - l / 2, 6, l, 36); g.fill();
+    g.textAlign = 'left';
+    g.fillStyle = CONFIG.coresElo[r.indice]; g.fillText(nome, x0, 25);
+    if (est) {
+      if (aura) { g.shadowColor = '#b04dff'; g.shadowBlur = 14; g.fillStyle = '#ffd34d'; g.fillText(est, x0 + wN, 25); g.fillText(est, x0 + wN, 25); }
+      g.shadowBlur = 0; g.fillStyle = '#ffd34d'; g.fillText(est, x0 + wN, 25);
+    }
+    t.needsUpdate = true;
+  }
+  function atualizarSelo(e, dt) {
+    const s = e.seloSprite;
+    s.visible = !!(e.barra && e.barra.visible);
+    s.position.set(e.x, e.barra.position.y + 0.3, e.z);
+    // fumaça roxa subindo do selo: mais forte a cada 150 estrelas acima de 50
+    if (e.seloFumaca > 0 && s.visible && Math.random() < dt * (2 + e.seloFumaca * 2)) {
+      emitir('media', e.x + (Math.random() - 0.5) * 0.5, s.position.y + 0.15, e.z, { n: 1, cor: Math.random() < 0.5 ? 0x7a2fc4 : 0xb04dff, vel: 0.2, subida: 0.9 + 0.2 * e.seloFumaca, vida: 0.9 });
+    }
+  }
   function desenharBarra(e) {
     const b = e.barra, u = b.userData;
     const frac = clamp(e.vida / e.vidaMax, 0, 1), esc = e.escudo > 0 ? 1 : 0;
@@ -981,6 +1139,23 @@
       v *= b.poder * (1 + E.buffDano);
       if (Math.random() < b.critico + (opc.critExtra || 0)) v *= 1.5;
       if ((alvo.tipo === 'mob' || alvo.tipo === 'minion' || alvo.tipo === 'serpente') && E.heroi.cacadorAte > E.t) v *= 1.5;
+    }
+    // defesa da torre: limite de dano por jogador numa janela de tempo
+    if (alvo.tipo === 'torre' && origem && !opc.semLimite && (deHeroi || remoto(origem))) {
+      const chave = remoto(origem) ? origem.uid : 'eu', cfgT = CONFIG.torre;
+      const lim = (alvo.limites = alvo.limites || {})[chave] = alvo.limites[chave] && E.t - alvo.limites[chave].desde < cfgT.janelaLimite ? alvo.limites[chave] : { desde: E.t, total: 0 };
+      const resta = Math.max(0, alvo.vidaMax * cfgT.limitePorJogador - lim.total);
+      if (v > resta) {
+        v = resta;
+        if ((alvo.avisoDefesa || 0) < E.t) {
+          alvo.avisoDefesa = E.t + 2;
+          anelEfeito(alvo.x, alvo.z, alvo.raio + 1.2, alvo.time === 'azul' ? 0x7ea6ff : 0xff7a7a, 0.5, true);
+          if (deHeroi) aviso('A defesa da torre segurou o golpe: chame mais gente para derrubá-la');
+        }
+      }
+      lim.total += v;
+      if (v <= 0) return 0;
+      if (deHeroi && alvo.arenaRef) gancho('danoTorre', { a: alvo.arenaRef.indice, i: alvo.arenaRef.torres.indexOf(alvo), v: Math.round(v) });
     }
     if (remoto(alvo)) {
       // a vida dele é controlada pelo celular dele: só avisamos o dano
@@ -1206,7 +1381,9 @@
   // Cores dos efeitos de cada herói. Uma skin nova só precisa de uma entrada aqui
   // (ex.: TEMAS.atirador.ceifador = { principal: 0x7dff9a, ... }) para mudar todos os efeitos dela.
   const TEMAS = {
-    soldado:  { padrao: { principal: 0xffd27a, faisca: 0xfff1c4, poeira: 0xcbb38f, brasa: 0xffa23a } },
+    soldado:  { padrao: { principal: 0xffd27a, faisca: 0xfff1c4, poeira: 0xcbb38f, brasa: 0xffa23a },
+                // Cavaleiro de Lava: tudo pega fogo (espada em chamas, espiral, rastro e fogo saindo do chão)
+                lava: { principal: 0xff6a1a, faisca: 0xffc04d, poeira: 0x4a2414, brasa: 0xff3d00, fogo: true } },
     suporte:  { padrao: { principal: 0xfff3b0, cura: 0x6dff9c, brilho: 0xffe08a, selo: 0xfff3b0, controle: 0xff6b6b } },
     mago:     { padrao: { principal: 0xb26bff, brasa: 0xd9a0ff, fumaca: 0x6b4a8f, chama: 0x9b5cff } },
     atirador: { padrao: { principal: 0x7fe0ff, faisca: 0xd9f8ff, explosivo: 0xffa23a, brasa: 0xffd27a } }
@@ -1432,6 +1609,11 @@
           if (i % 2 === 0) pedras(x, z, 3, 0x6b5a48, 4);
           if (i === 0) tremer(h.x, h.z, 0.35, 0.4);
           if (i % 2 === 0) rachaduras(x, z, u.largura * 1.4, 2);
+          if (tm.fogo) {
+            labareda(x, z, 0xff4a10, 2.2 + Math.random() * 0.8, 1.1);
+            agendar(0.08, () => labareda(x + (Math.random() - 0.5) * u.largura, z + (Math.random() - 0.5) * u.largura, 0xff8a2a, 1.4, 0.9));
+            emitir('grande', x, 0.4, z, { n: 3, cor: 0xff3d00, vel: 0.8, subida: 4, vida: 0.6 });
+          }
           area(x, z, u.largura, h, e => { if (atingidos.has(e)) return; atingidos.add(e); causarDano(e, CLASSES.soldado.dano * u.dano, h); });
         });
       }
@@ -1480,7 +1662,35 @@
     } });
   }
   // labareda em pé (shader de fogo); sem shader, usa a imagem do fogo
-  function labareda(x, z, cor, alt, dur) {
+  // chamas subindo pela lâmina (mais fortes no golpe)
+  function espadaEmChamas(e, golpe, dt) {
+    e.fogoAcc = (e.fogoAcc || 0) + dt * (golpe ? 110 : 26);
+    while (e.fogoAcc >= 1) {
+      e.fogoAcc -= 1;
+      const k = 0.15 + Math.random() * 0.85;
+      const x = _rb.x + (_rp.x - _rb.x) * k, y = _rb.y + (_rp.y - _rb.y) * k, z = _rb.z + (_rp.z - _rb.z) * k;
+      const cor = Math.random() < 0.35 ? 0xffc04d : Math.random() < 0.6 ? 0xff6a1a : 0xff3d00;
+      emitir(Math.random() < (golpe ? 0.55 : 0.35) ? 'media' : 'faisca', x, y, z, { n: 1, cor, vel: golpe ? 0.6 : 0.25, subida: golpe ? 1.6 : 1.1, vida: golpe ? 0.4 : 0.5 });
+    }
+  }
+  // espiral de fogo do Giro
+  function espiralFogo(h, raio) {
+    const t0 = E.t, dur = 0.7, bracos = 3;
+    E.efeitos.push({ acc: 0, atualizar(dt) {
+      const t = (E.t - t0) / dur; if (t > 1) return true;
+      this.acc += dt * 90;
+      while (this.acc >= 1) {
+        this.acc -= 1;
+        const b = Math.floor(Math.random() * bracos), r = 0.4 + (raio - 0.4) * t;
+        const a = b / bracos * Math.PI * 2 + t * Math.PI * 3.2;
+        const x = h.x + Math.cos(a) * r, z = h.z + Math.sin(a) * r;
+        emitir(Math.random() < 0.55 ? (Math.random() < 0.3 ? 'grande' : 'media') : 'faisca', x, 0.3 + t * 1.2, z, { n: 1, cor: Math.random() < 0.5 ? 0xff6a1a : 0xffc04d, vel: 1.4, dir: [-Math.sin(a), Math.cos(a)], subida: 1.8, vida: 0.45 });
+      }
+    } });
+    // as chamas acendem em volta seguindo o giro (cada uma mais longe, como uma espiral)
+    for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2.4, r = raio * (0.45 + 0.5 * i / 9); agendar(i * 0.05, () => labareda(h.x + Math.cos(a) * r, h.z + Math.sin(a) * r, 0xff6a1a, 1.6 + i * 0.06, 0.7)); }
+  }
+  function labareda(x, z, cor, alt, dur, devagar) {
     const sh = R.Fx && R.Fx.fogo(cor, 1);
     let m;
     if (sh) {
@@ -1490,7 +1700,10 @@
     m.position.set(x, sh ? 0.05 : alt * 0.4, z); m.renderOrder = 10; E.mundo.add(m);
     E.efeitos.push({ t: 0, atualizar(dt) {
       this.t += dt;
-      if (sh) { deFrente(m); sh.uniforms.forca.value = Math.min(1, this.t / 0.2) * Math.min(1, (dur - this.t) / 0.35); m.scale.y = 0.6 + 0.4 * Math.min(1, this.t / 0.25); }
+      // devagar: o fogo vai baixando aos poucos até apagar (rastro da investida)
+      const resta = devagar ? Math.max(0, 1 - this.t / dur) : Math.min(1, (dur - this.t) / 0.35);
+      if (sh) { deFrente(m); sh.uniforms.forca.value = Math.min(1, this.t / 0.2) * resta; m.scale.y = (0.6 + 0.4 * Math.min(1, this.t / 0.25)) * (devagar ? 0.35 + 0.65 * resta : 1); }
+      else if (devagar && m.scale) m.scale.setScalar(alt * (0.3 + 0.7 * resta));
       if (this.t > dur) { E.mundo.remove(m); return true; }
     } });
   }
@@ -1563,6 +1776,7 @@
       (h) => h.anim.tocar('habilidade1', { momento: 0.5, aoAcertar: () => {
         const tm = tema(h);
         anelEfeito(h.x, h.z, 3.2, tm.principal, 0.45, true);
+        if (tm.fogo) espiralFogo(h, 3.2);
         // redemoinho: faíscas saindo girando + poeira
         for (let i = 0; i < 28; i++) {
           const a = i / 28 * Math.PI * 2;
@@ -2052,8 +2266,8 @@
   /* ======================= ARENAS ======================= */
   function montarArena(a, indice) {
     const g = new THREE.Group(); E.mundo.add(g);
-    camada(uvRep(new THREE.PlaneGeometry(a.w, a.h), a.w / 4, a.h / 4), new THREE.MeshLambertMaterial({ map: texChao('areia_arena', 'margem_areia', 1, 1), color: 0xf0e0c0 }), a.x, a.z, 0.035);
-    camada(uvRep(new THREE.PlaneGeometry(a.w - 8, 5), (a.w - 8) / 4, 1.2), new THREE.MeshLambertMaterial({ map: texChao('caminho_pedra', 'caminho_terra', 1, 1), color: 0xd8d0c0 }), a.x, a.z, 0.045);
+    camada(uvRep(new THREE.PlaneGeometry(a.w, a.h), a.w / 4, a.h / 4), new THREE.MeshLambertMaterial({ map: texChao('areia_arena', 'margem_areia', 1, 1), color: 0xf0e0c0, transparent: true }), a.x, a.z, 0.035);
+    camada(uvRep(new THREE.PlaneGeometry(a.w - 8, 5), (a.w - 8) / 4, 1.2), new THREE.MeshLambertMaterial({ map: texChao('caminho_pedra', 'caminho_terra', 1, 1), color: 0xd8d0c0, transparent: true }), a.x, a.z, 0.045);
     // cercado com portão ao sul
     const pedra = new THREE.MeshStandardMaterial({ color: 0xcfc6b0, roughness: 0.8 });
     const barreira = new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false });
@@ -2103,9 +2317,18 @@
     if (!alvo && E.heroi && !E.heroi.morto && E.heroi.arena === e.arenaRef && inimigos(E.heroi, e) && dist(E.heroi, e) < CONFIG.torre.alcance) alvo = E.heroi;
     if (!alvo) return;
     e.prontoEm = E.t + CONFIG.torre.intervalo;
-    const dano = alvo.tipo === 'minion' ? alvo.vidaMax / CONFIG.torre.golpesParaMinion : CONFIG.torre.dano * (CONFIG.escalaMapa[E.mapa] || 1);
-    const ang = Math.atan2(alvo.x - e.x, alvo.z - e.z);
-    atirar(e, ang, { vel: 20, restante: CONFIG.torre.alcance + 2, dano, y: 5, cor: e.time === 'azul' ? 0x7ea6ff : 0xff7a7a, tamanho: 1.1 });
+    const ang = Math.atan2(alvo.x - e.x, alvo.z - e.z), cor = e.time === 'azul' ? 0x7ea6ff : 0xff7a7a;
+    if (alvo.tipo === 'minion') {
+      atirar(e, ang, { vel: 20, restante: CONFIG.torre.alcance + 2, dano: alvo.vidaMax / CONFIG.torre.golpesParaMinion, y: 5, cor, tamanho: 1.1 });
+      return;
+    }
+    // herói sem minions para protegê-lo: 3 disparos cada vez mais fortes (20%, 60%, 120% da vida)
+    // a contagem fica no herói: duas torres juntas continuam a mesma sequência (3 disparos no total)
+    const cfgT = CONFIG.torre, s = alvo.seqTorre;
+    if (s && E.t - s.em < cfgT.intervalo * 0.9) { e.prontoEm = E.t + 0.2; return; }   // outra torre acabou de atirar nele
+    const n = s && E.t - s.em < cfgT.esqueceSequencia + cfgT.intervalo ? Math.min(cfgT.sequencia.length - 1, s.n + 1) : 0;
+    alvo.seqTorre = { n, em: E.t };
+    atirar(e, ang, { vel: 22, restante: CONFIG.torre.alcance + 2, dano: alvo.vidaMax * cfgT.sequencia[n], verdadeiro: true, y: 5, cor, tamanho: 1.1 + n * 0.45 });
   }
   async function atualizarArenas() {
     for (const a of E.arenas) {
@@ -2144,6 +2367,7 @@
         const eu = E.heroi && E.heroi.arena === a;
         aviso('Arena ' + (a.indice + 1) + ': vitória do time ' + venceu + (eu ? (venceu === 'azul' ? ' · você venceu!' : ' · você perdeu') : ''));
         if (eu && venceu === 'azul') { ganhar(120, 200, true); P.pontosRank += 5; }
+        if (eu) gancho('arenaFim', venceu === E.heroi.time);
       }
     });
   }
@@ -2214,6 +2438,26 @@
     return null;
   }
 
+  // Onde o herói volta: na arena, ao lado da última torre do campo dele (o nexus);
+  // em equipe, perto de um companheiro vivo neste mapa; sozinho, no começo do mapa.
+  function pontoRenascer(h) {
+    if (h.arena) {
+      const a = h.arena, nexus = a.torres.find(t => t.time === h.time && t.nexus);
+      if (nexus) return [nexus.x + (a.x > nexus.x ? 3.5 : -3.5), nexus.z + 2.5];
+      return [a.x - a.w / 2 + 9, a.z + 2];
+    }
+    const amigo = gancho('companheiroVivo');
+    if (amigo && !zonaSeguraBloqueia(amigo)) {
+      for (let k = 0; k < 8; k++) {
+        const ang = k / 8 * Math.PI * 2, x = amigo.x + Math.cos(ang) * 2.5, z = amigo.z + Math.sin(ang) * 2.5;
+        if (!naAgua(x, z) && Math.abs(x) < E.def.tam[0] / 2 && Math.abs(z) < E.def.tam[1] / 2) return [x, z];
+      }
+      return [amigo.x, amigo.z];
+    }
+    return [E.def.entrada[0], E.def.entrada[1]];
+  }
+  function zonaSeguraBloqueia(e) { return !!(e.arena || (E.arenas || []).some(a => dentroArena(a, e.x, e.z, 0))); }
+
   /* ======================= LAÇO ======================= */
   function passo(dt) {
     E.t += dt;
@@ -2229,8 +2473,8 @@
       if (h.morto) {
         if (E.t >= h.renasceEm) {
           h.morto = false; h.vida = h.vidaMax; h.escudo = 0;
-          if (h.arena) { h.x = h.arena.x - h.arena.w / 2 + 9; h.z = h.arena.z + 2; }
-          else { h.x = E.def.entrada[0]; h.z = E.def.entrada[1]; }
+          const lugar = pontoRenascer(h);
+          h.x = lugar[0]; h.z = lugar[1];
           h.anim.tocar('renascer');
         }
         h.anim.mover(0);
@@ -2241,6 +2485,10 @@
           h.x += Math.sin(iv.ang) * v; h.z += Math.cos(iv.ang) * v; iv.resta -= dt;
           const tmI = tema(h);
           emitir('media', h.x - Math.sin(iv.ang) * 0.6, 0.3, h.z - Math.cos(iv.ang) * 0.6, { n: 2, cor: tmI.poeira, vel: 0.8, subida: 0.6, vida: 0.4 });
+          if (tmI.fogo && (iv.fogoX === undefined || Math.hypot(h.x - iv.fogoX, h.z - iv.fogoZ) > 0.8)) {
+            iv.fogoX = h.x; iv.fogoZ = h.z;
+            labareda(h.x - Math.sin(iv.ang) * 0.5, h.z - Math.cos(iv.ang) * 0.5, 0xff5a14, 1.1 + Math.random() * 0.4, 3.2, true);
+          }
           emitir('faisca', h.x, 0.9, h.z, { n: 2, cor: tmI.principal, vel: 3, dir: [-Math.sin(iv.ang), -Math.cos(iv.ang)], espalha: 0.3, vida: 0.25 });
           area(h.x, h.z, 1.4, h, e => {
             if (iv.atingidos.has(e)) return; iv.atingidos.add(e);
@@ -2265,6 +2513,7 @@
       }
       h.x = clamp(h.x, -E.def.tam[0] / 2, E.def.tam[0] / 2);
       h.z = clamp(h.z, -E.def.tam[1] / 2, E.def.tam[1] / 2);
+      empurrarSolidos(h);
     }
     // os outros
     for (const e of E.entidades) {
@@ -2287,6 +2536,7 @@
       const a = E.t * 7, hy = (e.altura || 1.8) * (e.obj && e.obj.scale ? e.obj.scale.y : 1) + 0.25;
       for (let i = 0; i < 3; i++) emitir('faisca', e.x + Math.cos(a + i * 2.09) * 0.45, hy, e.z + Math.sin(a + i * 2.09) * 0.45, { n: 1, cor: 0xffe36b, vel: 0, vida: 0.2 });
     });
+    if (Math.floor(E.t / 60) !== Math.floor((E.t - dt) / 60) && aplicarTemporada(P)) { avisarTemporada(); salvar(); hud(); }
     atualizarOndas(dt); atualizarBarcos(dt); atualizarArenas(); atualizarChuva(dt);
     atualizarProjeteis(dt);
     for (let i = E.efeitos.length - 1; i >= 0; i--) if (E.efeitos[i].atualizar(dt) === true) E.efeitos.splice(i, 1);
@@ -2301,10 +2551,22 @@
     Skins.atualizar(dt);
     // posições na tela
     for (const e of E.entidades) {
-      if (e.tipo !== 'serpente' && e.tipo !== 'torre') { e.obj.position.set(e.x, 0, e.z); e.obj.rotation.y = e.rot; }
-      e.sombra.position.set(e.x, 0.06, e.z); e.sombra.visible = !e.morto && e.tipo !== 'serpente' && e.obj.visible !== false;
-      e.barra.position.set(e.x, (e.altura || 1.8) * (e.obj.scale ? e.obj.scale.y : 1) + 0.5, e.z);
+      if (e.tipo !== 'serpente' && e.tipo !== 'torre') {
+        // dentro do rio/lago o corpo afunda até as coxas (a água cobre as pernas)
+        const fundo = !e.morto && !e.naoAfundaAgua && e.tipo !== 'clone' && naAgua(e.x, e.z) ? CONFIG.afundarAgua * (e.altura || 1.8) / 1.8 : 0;
+        e.afundado = (e.afundado || 0) + (fundo - (e.afundado || 0)) * Math.min(1, dt * 6);
+        e.obj.position.set(e.x, -e.afundado, e.z); e.obj.rotation.y = e.rot;
+        if (e.afundado > 0.2 && (e.respingoEm || 0) < E.t && (e.anim && e.anim.velMov > 0.3)) {
+          e.respingoEm = E.t + 0.35;
+          emitir('faisca', e.x, 0.1, e.z, { n: 4, cor: 0xcfefff, vel: 1.2, subida: 1.4, grav: 6, vida: 0.4 });
+          if (anelEfeito) anelEfeito(e.x, e.z, 0.9, 0xbfe8ff, 0.5, false);
+        }
+      }
+      e.sombra.position.set(e.x, 0.06, e.z); e.sombra.visible = !e.morto && e.tipo !== 'serpente' && e.obj.visible !== false && !(e.afundado > 0.1);
+      e.barra.position.set(e.x, (e.altura || 1.8) * (e.obj.scale ? e.obj.scale.y : 1) + 0.5 - (e.afundado || 0), e.z);
       desenharBarra(e);
+      if (e === E.heroi && P.classe) selo(e, C().estrelas, true);
+      if (e.seloSprite) atualizarSelo(e, dt);
     }
     if (h) visualHeroi(h);
   }
@@ -2363,7 +2625,8 @@
     if (!temDOM || !P.classe) return;
     const c = C(), r = rankInfo(c.estrelas), h = E.heroi;
     $('hudMapa').textContent = E.def ? E.def.nome : '';
-    $('hudRank').innerHTML = `${CLASSES[P.classe].nome} · <b>${r.nome}</b> ★ ${r.estrelas}${r.indice < CONFIG.ranks.length - 1 ? '/50' : ''}` +
+    $('hudRank').innerHTML = `${CLASSES[P.classe].nome} · <b style="color:${CONFIG.coresElo[r.indice]}">${r.nome}</b> ★ ${r.estrelas}${r.indice < CONFIG.ranks.length - 1 ? '/50' : ''}` +
+      ` · <small>${Math.floor(c.xp)}/${xpProximaEstrela(c.estrelas)} XP</small>` +
       (c.protecao ? ' · <span class="prot">proteção</span>' : '');
     $('hudOuro').textContent = Math.floor(P.ouro);
     Object.keys(CONFIG.loja).forEach(k => { const b = $('item_' + k); if (b) { b.querySelector('i').textContent = P.inventario[k] || 0; b.disabled = !P.inventario[k]; } });
@@ -2448,7 +2711,7 @@
         <li><b>Andar:</b> arraste o dedo na metade esquerda da tela.</li>
         <li><b>Atacar:</b> toque no botão de ataque; segure para atacar sem parar.</li>
         <li><b>Habilidades:</b> toque para mirar sozinho, ou arraste o botão para escolher a direção, como nos MOBAs.</li>
-        <li><b>Estrelas:</b> derrotando mobs, minions e jogadores você ganha XP. A cada ${CONFIG.xpPorEstrela} XP vem 1 estrela; 50 estrelas sobem o rank (Beginner até Immortal God). Cada classe tem suas próprias estrelas.</li>
+        <li><b>Estrelas:</b> derrotando mobs, minions e jogadores você ganha XP. Cada estrela pede mais XP que a anterior: no primeiro rank, 50, 100, 150...; a partir do segundo, 1000 a mais por estrela, e o salto cresce 1000 a cada rank. 50 estrelas sobem o rank (Beginner até Immortal God, que não tem limite). A cada 2 meses começa uma nova temporada e todos voltam 2 ranks. Cada classe tem suas próprias estrelas.</li>
         <li><b>Força:</b> cada estrela dá +0,5% de poder e +0,2% de velocidade de ataque. Do Epic em diante também crítico e roubo de vida.</li>
         <li><b>Proteção:</b> a cada ${CONFIG.vitoriasProtecao} vitórias você ganha uma proteção que segura a primeira estrela que você perderia.</li>
         <li><b>Moitas:</b> dentro delas ninguém de fora vê você (aparece o olho cortado).</li>
@@ -2476,6 +2739,8 @@
     const a = E.arenas[indice], h = E.heroi;
     abrirModal('Guichê da Arena ' + (indice + 1), `
       <p>Partidas de 4 contra 4. Cada time tem 6 torres; ganha quem derrubar as 6 do outro.</p>
+      ${gancho('eventoArenaTexto') || ''}
+      <p class="nota">As torres têm defesa: cada jogador tira no máximo ${Math.round(CONFIG.torre.limitePorJogador * 100)}% da vida de uma torre a cada ${CONFIG.torre.janelaLimite} s. Sem minions por perto, a torre derruba um herói em 3 disparos.</p>
       <p class="nota">Na arena, cair só tira estrela se for para o time rival. O tempo para voltar começa em ${CONFIG.arena.respawnBase} s e sobe ${CONFIG.arena.respawnPasso} s a cada 5 minutos, até ${CONFIG.arena.respawnMax} s.</p>
       <p class="nota">Quem não está inscrito só pode assistir de fora do cercado.</p>
       <button class="acao forte" id="bInscrever" type="button" ${h.arena ? 'disabled' : ''}>${h.arena ? 'Você já está inscrito' : 'Inscrever no time azul · ' + CONFIG.arena.inscricao + ' ouro'}</button>`, el => {
@@ -2678,6 +2943,7 @@
     global.requestAnimationFrame(quadro);
   }
   async function iniciar() {
+    if (P.viradaTemporada) { delete P.viradaTemporada; avisarTemporada(); salvar(); }
     iniciarCena(temDOM ? $('jogo') : null);
     await carregarMapa(P.mapa && MAPAS.lista[P.mapa] ? P.mapa : 'mapa1');
     if (temDOM) {
@@ -2693,12 +2959,17 @@
   }
 
   // troca o perfil inteiro (vindo do servidor) sem perder a referência
+  function avisarTemporada() {
+    if (temDOM) setTimeout(() => aviso('Nova temporada! Todos voltaram ' + CONFIG.temporadaVolta + ' elos. Boa subida!'), 1500);
+  }
   function aplicarPerfil(dados) {
     const novo = Object.assign(perfilPadrao(), dados || {});
     novo.classes = Object.assign(perfilPadrao().classes, (dados && dados.classes) || {});
-    Object.keys(novo.classes).forEach(k => { novo.classes[k] = Object.assign({ xp: 0, estrelas: 0, protecao: false, vitorias: 0 }, novo.classes[k]); });
+    Object.keys(novo.classes).forEach(k => { novo.classes[k] = Object.assign({ xp: 0, estrelas: 0, protecao: false, vitorias: 0 }, novo.classes[k]); subirEstrelas(novo.classes[k]); });
+    const virou = aplicarTemporada(novo);
     Object.keys(P).forEach(k => { delete P[k]; });
     Object.assign(P, novo);
+    if (virou) { avisarTemporada(); salvar(); }
     hud();
   }
   const Jogo = global.Jogo = {
@@ -2706,10 +2977,10 @@
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
       atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
-      telaHeroi, telaRanking, perfilPadrao, dist
+      telaHeroi, telaRanking, perfilPadrao, dist, selo, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
-    _t: { CONFIG, E, P, R, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
+    _t: { CONFIG, E, P, R, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
   };
   if (temDOM && !global.ESPERAR_LOGIN) global.addEventListener('load', () => Jogo.iniciar().catch(err => {
     const el = $('carregando'); if (el) el.innerHTML = '<div>NÃO FOI POSSÍVEL INICIAR<p>' + (err && err.message || err) + '</p></div>';
