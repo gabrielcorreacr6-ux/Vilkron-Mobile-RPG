@@ -188,6 +188,7 @@
       .on('broadcast', { event: 'dano' }, m => receberDano(m.payload))
       .on('broadcast', { event: 'apoio' }, m => receberApoio(m.payload))
       .on('broadcast', { event: 'abate' }, m => receberAbate(m.payload))
+      .on('broadcast', { event: 'efeito' }, m => receberEfeito(m.payload))
       .on('presence', { event: 'leave' }, m => removerRemoto(m.key))
       .subscribe(st => { if (st === 'SUBSCRIBED') { canal.track({ nick: Rede.eu.nick }); enviarEm = 0; ultimoEnvio = ''; } });
   }
@@ -289,8 +290,8 @@
     // só o desenho do tiro: o dano chega separado, mandado por quem atirou
     if (a.s === 0 && e.classe !== 'soldado') {
       const cls = global.Jogo.CLASSES[e.classe];
-      const cor = { suporte: 0xfff3b0, mago: 0xc58bff, atirador: 0xffd27a }[e.classe];
-      setTimeout(() => { if (e.obj.parent) J.api.atirar(e, a.a, { soVisual: true, dano: 0, vel: e.classe === 'atirador' ? 30 : 16, restante: cls.alcance, cor, tamanho: 0.8, visual: e.classe === 'atirador' ? 'bala' : undefined }); }, 250);
+      const cor = { suporte: 0xfff3b0, mago: 0xc58bff, atirador: 0x7fe0ff }[e.classe];
+      setTimeout(() => { if (e.obj.parent) J.api.atirar(e, a.a, { soVisual: true, dano: 0, vel: e.classe === 'atirador' ? 24 : 16, restante: cls.alcance, cor, tamanho: 0.9 }); }, 250);
     }
   }
 
@@ -305,8 +306,18 @@
   function receberApoio(a) {
     if (a.para !== Rede.eu.id) return;
     const h = J.api.E.heroi, E = J.api.E; if (!h || h.morto) return;
-    if (a.t === 'cura') h.vida = Math.min(h.vidaMax, h.vida + h.vidaMax * 0.35);
+    if (a.t === 'cura') J.api.curar(h, h.vidaMax * 0.35);
+    if (a.t === 'curaForte') J.api.curar(h, h.vidaMax * 0.5);
     if (a.t === 'escudo') { h.escudo = h.vidaMax * 0.4; h.escudoAte = E.t + 4; J.api.bolha(h, 4); }
+  }
+
+  // stun, lentidão e corte de cura vindos de outro jogador
+  function receberEfeito(a) {
+    if (a.para !== Rede.eu.id || Rede.amigos.has(a.de)) return;
+    const r = Rede.remotos.get(a.de); if (!r) return;
+    const h = J.api.E.heroi; if (!h || h.morto) return;
+    if (J.api.zonaSegura(h.x, h.z) || global.Jogo.poderes.imortal) return;
+    J.api.controlar(h, { stun: Math.min(5, a.stun || 0), slow: a.slow, antiCura: a.antiCura });
   }
 
   async function receberAbate(a) {
@@ -330,6 +341,7 @@
     G.acao = (slot, ang) => mandar('acao', { u: Rede.eu.id, s: slot, a: +ang.toFixed(2) });
     G.danoRemoto = (alvo, v, opc) => mandar('dano', { de: Rede.eu.id, para: alvo.uid, v: Math.round(v), vd: opc && opc.verdadeiro ? 1 : 0 });
     G.apoioRemoto = (alvo, tipo) => mandar('apoio', { de: Rede.eu.id, para: alvo.uid, t: tipo });
+    G.efeitoRemoto = (alvo, ef) => { if (!global.Jogo.poderes.semVantagem) mandar('efeito', Object.assign({ de: Rede.eu.id, para: alvo.uid }, ef)); };
     G.mortoPorJogador = origem => mandar('abate', { de: origem.uid, vitima: Rede.eu.id });
     G.mobAbatido = async e => {
       const t = Date.now(); if (t - ultimoDrop < 4000) return; ultimoDrop = t;

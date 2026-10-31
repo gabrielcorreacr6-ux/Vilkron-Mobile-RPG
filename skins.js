@@ -79,23 +79,45 @@
     formatoAnim: 'fbx',
     // Quanto tempo (segundos) cada animação de uma vez dura no jogo.
     // O clipe é acelerado ou freado para caber. Ajuste à vontade.
-    duracoes: { ataque: 0.9, habilidade1: 1.0, habilidade2: 0.8, habilidade3: 1.0, dano: 0.45, morte: 1.6 },
+    duracoes: { ataque: 0.9, habilidade1: 1.0, habilidade2: 0.8, habilidade3: 1.3, dano: 0.45, morte: 1.6 },
     // Ajustes por classe: qual animação do arquivo usar em cada habilidade
     // (clipe = nome da animação no .glb) e quantas voltas o corpo dá por código.
     // variacoes: o ataque básico alterna entre esses golpes (os que existirem no arquivo)
     // andando: atirar correndo (as pernas seguem a corrida, os braços atiram)
+    // Variações: pedaços de combos viram golpes separados (de/ate = fração da animação,
+    // golpe = momento do acerto dentro do pedaço). A sequência segue em ordem, como um combo,
+    // e recomeça se o jogador parar de atacar.
     habilidades: {
       soldado: {
         habilidade1: { clipe: 'extra_golpe_carregado', voltas: 1 },
-        ataque: { variacoes: ['ataque', 'extra_golpe_para_cima', 'extra_golpe_carregado'] }
+        habilidade3: { clipe: 'extra_golpe_chao' },
+        ataque: { variacoes: [
+          { clipe: 'extra_combo', de: 0.0, ate: 0.28, golpe: 0.55 },
+          { clipe: 'extra_combo', de: 0.28, ate: 0.52, golpe: 0.45 },
+          { clipe: 'extra_combo', de: 0.52, ate: 0.95, golpe: 0.2 },
+          { clipe: 'ataque', golpe: 0.38 },
+          { clipe: 'extra_combo_1', de: 0.1, ate: 0.28, golpe: 0.5 },
+          { clipe: 'extra_combo_1', de: 0.28, ate: 0.58, golpe: 0.4 },
+          { clipe: 'extra_combo_1', de: 0.58, ate: 0.8, golpe: 0.55 },
+          { clipe: 'extra_golpe_para_cima', golpe: 0.33 },
+          { clipe: 'extra_combo_2', de: 0.05, ate: 0.3, golpe: 0.8 },
+          { clipe: 'extra_combo_2', de: 0.3, ate: 0.55, golpe: 0.6 },
+          { clipe: 'extra_combo_2', de: 0.55, ate: 0.73, golpe: 0.7 },
+          { clipe: 'extra_combo_2', de: 0.73, ate: 0.97, golpe: 0.4 }
+        ] }
       },
-      // pistola no ataque básico (braço esticado); a rajada usa o rifle com as duas mãos
+      // atirador de energia: sem arma, a bola sai da mão; pode atirar correndo
       atirador: {
-        ataque: { clipe: 'habilidade1', andando: true },
-        habilidade1: { clipe: 'ataque' }
+        ataque: { andando: true, variacoes: [
+          { clipe: 'ataque', golpe: 0.5 },
+          { clipe: 'extra_lancar_7', de: 0.1, ate: 0.7, golpe: 0.45 },
+          { clipe: 'extra_lancar_4', de: 0.0, ate: 0.65, golpe: 0.42 },
+          { clipe: 'extra_lancar_3', de: 0.1, ate: 0.75, golpe: 0.46 }
+        ] },
+        habilidade3: { clipe: 'habilidade1', duracao: 0.5 }
       },
-      // escudo: a animação do Meshy tem 9 s (sobe, segura, desce); no jogo vira 1,2 s
-      suporte: { habilidade2: { duracao: 1.2 } }
+      mago: { habilidade3: { clipe: 'extra_magia_longa' } },
+      suporte: { habilidade2: { duracao: 1.2 }, habilidade3: { clipe: 'habilidade1' } }
     },
 
     // ARMAS: arquivos em assets/armas/<nome>.glb (origem já no ponto da pegada).
@@ -110,8 +132,7 @@
     // arma de cada classe; uma habilidade pode trocar de arma enquanto dura
     armasDaClasse: {
       soldado:  { padrao: 'espada' },
-      suporte:  { padrao: 'cajado' },
-      atirador: { padrao: 'pistola', habilidade1: 'rifle' }
+      suporte:  { padrao: 'cajado' }
     },
     animacoes: {
       humanoide: [],   // ex.: ['parado','andar','correr','dano','morte']
@@ -493,14 +514,16 @@
     tem(estado) { return !!this.acoes[estado]; }
 
     // outro golpe para o ataque básico: cada ataque usa o próximo da lista
-    adicionarVariacaoAtaque(clip) {
+    adicionarVariacaoAtaque(clip, v) {
+      v = v || {};
       if (!this.mixer || !clipeServe(this.corpo, clip)) return false;
       if (!this.varAtaque) this.varAtaque = [{ acao: this.acoes.ataque, escala: this.escalas.ataque }];
-      const c = clip.clone(); c.name = 'ataque_v' + this.varAtaque.length;
+      let c = (v.de !== undefined || v.ate !== undefined) ? recortar(clip, v.de || 0, v.ate === undefined ? 1 : v.ate) : clip.clone();
+      c.name = 'ataque_v' + this.varAtaque.length;
       noLugar(c);
       const acao = this.mixer.clipAction(c);
       acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true;
-      this.varAtaque.push({ acao, escala: c.duration > 0 ? c.duration / CATALOGO.duracoes.ataque : 1 });
+      this.varAtaque.push({ acao, escala: c.duration > 0 ? c.duration / CATALOGO.duracoes.ataque : 1, golpe: v.golpe });
       this.iVar = -1;
       return true;
     }
@@ -548,6 +571,8 @@
       if (this.acaoCima) { this.acaoCima.fadeOut(0.1); this.acaoCima = null; }
       // golpes alternados no ataque básico
       if (estado === 'ataque' && this.varAtaque && this.varAtaque.length > 1) {
+        if (this.t - (this.ultimoAtaque || -99) > 1.6) this.iVar = -1;   // parou de atacar: combo recomeça
+        this.ultimoAtaque = this.t;
         this.iVar = (this.iVar + 1) % this.varAtaque.length;
         const v = this.varAtaque[this.iVar];
         this.varAtaque.forEach(o => { if (o.acao !== v.acao && o.acao.getEffectiveWeight() > 0) o.acao.fadeOut(0.15); });
@@ -558,6 +583,7 @@
       // aoAcertar: chamado no meio do golpe (momento = fração da animação, padrão 0.5)
       this.aoAcertar = op.aoAcertar || null;
       this.momento = op.momento !== undefined ? op.momento : 0.5;
+      if (estado === 'ataque' && this.varAtaque && this.varAtaque.length > 1 && this.varAtaque[this.iVar].golpe !== undefined) this.momento = this.varAtaque[this.iVar].golpe;
       if (estado === 'dano') this.flash = 0.25;
       const fade = op.fade !== undefined ? op.fade : 0.2;
       if (this.acoes[estado]) this._tocarAcao(estado, fade, op.velocidade);
@@ -769,10 +795,13 @@
     // variações do ataque básico e ataque andando
     const cfgA = anim.config && anim.config.ataque;
     if (cfgA && cfgA.variacoes && anim.tem('ataque')) {
-      cfgA.variacoes.forEach(nome => {
+      cfgA.variacoes.forEach(v => {
+        if (typeof v === 'string') v = { clipe: v };
+        const nome = v.clipe === 'ataque' ? (cfgA.clipe || 'ataque') : v.clipe;
         const clip = lista.find(c => c.name === nome);
-        if (clip && nome !== (cfgA.clipe || 'ataque')) anim.adicionarVariacaoAtaque(clip);
+        if (clip) anim.adicionarVariacaoAtaque(clip, v);
       });
+      if (anim.varAtaque && anim.varAtaque.length > 1) anim.varAtaque.shift();   // a original já está entre as variações
     }
     if (cfgA && cfgA.andando) {
       const proprio = lista.find(c => c.name === 'extra_atirar_andando');   // se um dia vier pronto do Meshy
@@ -786,6 +815,18 @@
       const par = APELIDOS.find(([, re]) => re.test(clip.name));
       if (par && !anim.tem(par[0])) anim.adicionarClipe(par[0], clip);
     });
+  }
+
+  // Pedaço de uma animação (de/ate = fração da duração): vira um clipe novo começando em 0
+  function recortar(clip, de, ate) {
+    const t0 = clip.duration * de, t1 = clip.duration * ate;
+    const trilhas = clip.tracks.map(t => {
+      const n = t.clone();
+      if (n.trim) { n.trim(t0, t1); n.shift(-t0); }
+      return n;
+    });
+    if (THREE.AnimationClip) return new THREE.AnimationClip(clip.name + '_' + de, t1 - t0, trilhas);
+    const c = clip.clone(); c.tracks = trilhas; c.duration = t1 - t0; return c;
   }
 
   // Tira o deslocamento do quadril para frente/lados: o jogo é quem move o boneco
@@ -958,10 +999,19 @@
   const _vp = new THREE.Vector3(), _vf = new THREE.Vector3();
   function pontaArma(obj, saida) {
     const anim = obj && obj.userData && obj.userData.animador;
-    if (!anim || !anim.armas || !obj.parent) return false;
+    if (!anim || !obj.parent) return false;
+    if (!anim.armas) {
+      // sem arma (atirador de energia, mago): sai da mão direita
+      anim._maoDir = anim._maoDir || acharOsso(anim.corpo, 'righthand');
+      if (!anim._maoDir || !anim._maoDir.getWorldPosition) return false;
+      obj.updateMatrixWorld(true);
+      anim._maoDir.getWorldPosition(saida);
+      saida.x += Math.sin(obj.rotation.y) * 0.25; saida.z += Math.cos(obj.rotation.y) * 0.25;
+      return true;
+    }
     const quer = (anim.trocasArma && anim.trocasArma[anim.estado]) || anim.armaPadrao;
     const a = anim.armas[quer];
-    if (!a || !a.obj.visible || !a.obj.getWorldPosition) return false;
+    if (!a || !a.obj.visible || !a.obj.getWorldPosition || a.modo !== 'frente') return false;
     obj.updateMatrixWorld(true);
     a.obj.getWorldPosition(_vp);
     // a boca fica para a frente do personagem (modo 'frente') ou da própria arma

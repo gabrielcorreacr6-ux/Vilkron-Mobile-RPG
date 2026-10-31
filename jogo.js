@@ -41,6 +41,15 @@
       carregador: { vida: 400, dano: 0,  alcance: 0,   intervalo: 9,   xp: 15, ouro: 40 },
       vel: 2.6, perseguir: 2       // seguem só até 2 passos além do alcance
     },
+    // Atirador de energia: habilidade 1 acelera os ataques; habilidade 2 faz as bolas explodirem
+    atirador: { aceleracao: 0.6, aceleracaoDur: 5, explosaoDur: 6, explosaoRaio: 2.5, explosaoCritico: 0.05,
+                saltos: 2, janelaSaltos: 15, distSalto: 8 },
+    // Últimates (4º botão)
+    ultimate: {
+      soldado: { alcance: 10, largura: 1.7, dano: 2.0 },                       // explosão em linha (x dano)
+      mago:    { comprimento: 10, base: 9, dano: 1.5, slow: 0.4, dur: 3 },     // triângulo de fogo roxo; dano real
+      suporte: { raio: 8, stun: 4, antiCura: 0.5, antiCuraDur: 10, cura: 0.5 }
+    },
     torre: { vida: 3000, dano: 120, alcance: 9, intervalo: 1.2, xp: 80, ouro: 60, golpesParaMinion: 3.5 },
     arena: { inscricao: 150, minionsCada: 30, respawnBase: 30, respawnPasso: 20, respawnMax: 120 },
     loja: {
@@ -54,10 +63,10 @@
 
   // Classes: vida, dano, alcance, recargas [ataque, hab1, hab2]
   const CLASSES = {
-    soldado:  { nome: 'Soldado',  vida: 1300, dano: 70, alcance: 2.8, cd: [0.9, 6, 9],   habs: ['Giro', 'Investida'] },
-    suporte:  { nome: 'Suporte',  vida: 950,  dano: 45, alcance: 11,  cd: [1.0, 8, 12],  habs: ['Cura', 'Escudo'] },
-    mago:     { nome: 'Mago',     vida: 850,  dano: 62, alcance: 9.5, cd: [1.0, 7, 12],  habs: ['Chamas', 'Ilusão'] },
-    atirador: { nome: 'Atirador', vida: 900,  dano: 58, alcance: 12,  cd: [0.85, 7, 14], habs: ['Rajada', 'Clone'] }
+    soldado:  { nome: 'Soldado',  vida: 1300, dano: 70, alcance: 2.8, cd: [0.9, 6, 9, 30],    habs: ['Giro', 'Investida', 'Terremoto'] },
+    suporte:  { nome: 'Suporte',  vida: 950,  dano: 45, alcance: 11,  cd: [1.0, 8, 12, 40],   habs: ['Cura', 'Escudo', 'Selo'] },
+    mago:     { nome: 'Mago',     vida: 850,  dano: 62, alcance: 9.5, cd: [1.0, 7, 12, 35],   habs: ['Chamas', 'Ilusão', 'Fogo Roxo'] },
+    atirador: { nome: 'Atirador', vida: 900,  dano: 58, alcance: 12,  cd: [0.85, 12, 14, 20], habs: ['Aceleração', 'Explosão', 'Salto'] }
   };
   const CORES = ['#9aa3a8', '#c0392b', '#2e86de', '#27ae60', '#8e44ad', '#e67e22', '#f1c40f', '#ecf0f1'];
 
@@ -701,6 +710,19 @@
     if (e.velBonusAte > E.t) m *= 1 + e.velBonus;
     return m;
   }
+  // toda cura passa por aqui: "corte de cura" reduz o que entra
+  function curar(e, quanto) {
+    if (!e || e.morto || quanto <= 0) return 0;
+    if (e.antiCuraAte > E.t) quanto *= 1 - (e.antiCura || 0.5);
+    const antes = e.vida; e.vida = Math.min(e.vidaMax, e.vida + quanto); return e.vida - antes;
+  }
+  // efeitos de controle; em jogadores de outro celular vão como aviso
+  function controlar(e, ef) {
+    if (remoto(e)) { gancho('efeitoRemoto', e, ef); return; }
+    if (ef.stun) e.stunAte = Math.max(e.stunAte || 0, E.t + ef.stun);
+    if (ef.slow) aplicarSlow(e, ef.slow[0], ef.slow[1]);
+    if (ef.antiCura) { e.antiCura = ef.antiCura[0]; e.antiCuraAte = E.t + ef.antiCura[1]; }
+  }
   function aplicarSlow(e, pct, dur) { if (pct > 0 && dur > 0) e.slows.push({ pct, ate: E.t + dur }); }
   function preso(e) { return e.stunAte > E.t || e.congeladoAte > E.t; }
 
@@ -715,7 +737,7 @@
     if (deHeroi) {
       const b = bonus();
       v *= b.poder * (1 + E.buffDano);
-      if (Math.random() < b.critico) v *= 1.5;
+      if (Math.random() < b.critico + (opc.critExtra || 0)) v *= 1.5;
       if ((alvo.tipo === 'mob' || alvo.tipo === 'minion' || alvo.tipo === 'serpente') && E.heroi.cacadorAte > E.t) v *= 1.5;
     }
     if (remoto(alvo)) {
@@ -731,10 +753,12 @@
     if (deHeroi) {
       P.danoTotal += v;
       const rv = bonus().rouboVida;
-      if (rv > 0 && E.heroi && !E.heroi.morto) E.heroi.vida = Math.min(E.heroi.vidaMax, E.heroi.vida + v * rv);
+      if (rv > 0 && E.heroi && !E.heroi.morto) curar(E.heroi, v * rv);
       if (E.heroi.ilusao && E.heroi.invisAte > E.t) { E.heroi.invisAte = 0; E.heroi.invulAte = 0; E.heroi.ilusao = false; }
     }
-    if (alvo.anim && v > 0 && alvo.vida > 0 && !opc.semReacao) alvo.anim.tocar('dano');
+    // o herói não perde o golpe/habilidade por levar dano: só reage se estiver livre
+    const atacando = alvo.tipo === 'heroi' && alvo.anim && /^(ataque|habilidade)/.test(alvo.anim.estado || '');
+    if (alvo.anim && v > 0 && alvo.vida > 0 && !opc.semReacao && !atacando) alvo.anim.tocar('dano');
     if (alvo.tipo === 'mob' && origem) alvo.alvo = origem.donoHeroi ? E.heroi : origem;
     if (alvo.vida <= 0) morrer(alvo, origem);
     return v;
@@ -889,7 +913,7 @@
       tipo: 'heroi', time: 'jogador', classe: P.classe, obj, anim: Skins.animador(obj),
       x: velho ? velho.x : E.def.entrada[0], z: velho ? velho.z : E.def.entrada[1], rot: velho ? velho.rot : 0,
       vida: cls.vida, vidaMax: cls.vida, raio: 0.6, vel: CONFIG.velHeroi,
-      cds: [0, 0, 0], arena: velho ? velho.arena : null, cacadorAte: 0, velBonus: 0, velBonusAte: 0
+      cds: [0, 0, 0, 0], arena: velho ? velho.arena : null, cacadorAte: 0, velBonus: 0, velBonusAte: 0
     });
     E.heroi = h;
     hud();
@@ -908,7 +932,7 @@
   }
   function ocupadoHeroi(h) {
     const a = h.anim;
-    return h.morto || preso(h) || h.travadoAte > E.t || (a && ['ataque', 'habilidade1', 'habilidade2'].indexOf(a.estado) >= 0 && h.classe !== 'atirador');
+    return h.morto || preso(h) || h.travadoAte > E.t || (a && ['ataque', 'habilidade1', 'habilidade2', 'habilidade3'].indexOf(a.estado) >= 0 && h.classe !== 'atirador');
   }
   function podeAgir(h) { return !h.morto && !preso(h) && !(h.travadoAte > E.t); }
 
@@ -916,7 +940,8 @@
   function usar(slot, mira) {
     const h = E.heroi; if (!h || !podeAgir(h)) return false;
     if (h.cds[slot] > E.t) return false;
-    if (h.anim && ['ataque', 'habilidade1', 'habilidade2'].indexOf(h.anim.estado) >= 0 && slot !== 0) return false;
+    const saltoLivre = h.classe === 'atirador' && slot === 3;      // o salto pode ser usado no meio de qualquer animação
+    if (h.anim && ['ataque', 'habilidade1', 'habilidade2', 'habilidade3'].indexOf(h.anim.estado) >= 0 && slot !== 0 && !saltoLivre) return false;
     const cls = CLASSES[h.classe];
     let ang = h.rot, alvo = null;
     if (mira) ang = mira.ang;
@@ -925,13 +950,128 @@
       if (alvo) ang = Math.atan2(alvo.x - h.x, alvo.z - h.z);
     }
     h.rot = ang;
-    if (h.classe === 'atirador') { h.miraAng = ang; h.miraAte = E.t + (slot === 1 ? 1.2 : 0.9); }
+    if (h.classe === 'atirador' && slot === 0) { h.miraAng = ang; h.miraAte = E.t + 0.7; }
     let cd = cls.cd[slot];
-    if (slot === 0) cd /= bonus().velAtaque;
+    if (slot === 0) cd /= velAtaque(h);
     h.cds[slot] = E.t + cd;
+    // salto do atirador: 2 pulos dentro de 15 s; depois disso, recarga
+    if (h.classe === 'atirador' && slot === 3) {
+      const c = CONFIG.atirador;
+      if (!h.salto || E.t > h.salto.ate) h.salto = { ate: E.t + c.janelaSaltos, usados: 0 };
+      h.salto.usados++;
+      if (h.salto.usados >= c.saltos) h.salto = null;
+      else h.cds[3] = E.t + 0.4;
+    }
     HABILIDADES[h.classe][slot](h, ang, mira, alvo);
     gancho('acao', slot, ang);
     return true;
+  }
+
+  // velocidade de ataque do herói agora (estrelas + aceleração do atirador)
+  function velAtaque(h) {
+    return bonus().velAtaque * (h && h.aceleradoAte > E.t ? 1 + CONFIG.atirador.aceleracao : 1);
+  }
+  function explosaoEnergia(h, x, z) {
+    const c = CONFIG.atirador;
+    anelEfeito(x, z, c.explosaoRaio, 0xffa23a, 0.45, true);
+    discoEfeito(x, z, c.explosaoRaio * 0.8, 0xffd27a, 0.3);
+    area(x, z, c.explosaoRaio, h, e => causarDano(e, CLASSES.atirador.dano, h, { critExtra: c.explosaoCritico, semReacao: true }));
+  }
+  // ---------- ÚLTIMATES ----------
+  function ultSoldado(h, ang) {
+    const u = CONFIG.ultimate.soldado, atingidos = new Set();
+    h.travadoAte = E.t + 1.1;
+    h.anim.tocar('habilidade3', { momento: 0.78, aoAcertar: () => {
+      // a espada bate no chão e a explosão corre em linha reta
+      for (let i = 0, d = 1.4; d <= u.alcance; i++, d += 1.45) {
+        const x = h.x + Math.sin(ang) * d, z = h.z + Math.cos(ang) * d;
+        agendar(i * 0.055, () => {
+          anelEfeito(x, z, u.largura, 0xffa23a, 0.4, true);
+          discoEfeito(x, z, u.largura * 0.7, 0xffd27a, 0.25);
+          area(x, z, u.largura, h, e => { if (atingidos.has(e)) return; atingidos.add(e); causarDano(e, CLASSES.soldado.dano * u.dano, h); });
+        });
+      }
+    } });
+  }
+  function noTriangulo(px, pz, a, b, c) {
+    const s1 = (b[0] - a[0]) * (pz - a[1]) - (b[1] - a[1]) * (px - a[0]);
+    const s2 = (c[0] - b[0]) * (pz - b[1]) - (c[1] - b[1]) * (px - b[0]);
+    const s3 = (a[0] - c[0]) * (pz - c[1]) - (a[1] - c[1]) * (px - c[0]);
+    return (s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0);
+  }
+  function ultMago(h, ang) {
+    const u = CONFIG.ultimate.mago;
+    h.travadoAte = E.t + 0.9;
+    h.anim.tocar('habilidade3', { momento: 0.5, aoAcertar: () => {
+      // triângulo com uma ponta no mago, abrindo para onde ele mirou
+      const fx = Math.sin(ang), fz = Math.cos(ang), lx = Math.cos(ang), lz = -Math.sin(ang);
+      const A = [h.x + fx * 0.6, h.z + fz * 0.6];
+      const B = [h.x + fx * u.comprimento + lx * u.base / 2, h.z + fz * u.comprimento + lz * u.base / 2];
+      const C = [h.x + fx * u.comprimento - lx * u.base / 2, h.z + fz * u.comprimento - lz * u.base / 2];
+      const dentro = e => noTriangulo(e.x, e.z, A, B, C);
+      const golpe = (mult, slowDur) => {
+        E.entidades.forEach(e => {
+          if (e.morto || !inimigos(e, h) || e === h || e.tipo === 'clone' || !dentro(e)) return;
+          if (e.tipo === 'serpente' && !e.emerso) return;
+          if (remoto(e) && !deMim(h)) return;
+          causarDano(e, CLASSES.mago.dano * mult, h, { verdadeiro: true, semReacao: mult < 1 });
+          controlar(e, { slow: [u.slow, slowDur] });
+        });
+      };
+      golpe(u.dano, 2);                                         // explosão: 150% do dano como dano real + lentidão
+      const fogo = chaoTriangulo(A, B, C, 0x9b5cff, u.dur);
+      for (let k = 1; k <= u.dur / 0.5; k++) agendar(k * 0.5, () => golpe(0.25, 0.6));   // o chão continua queimando
+      for (let k = 0; k < 14; k++) {
+        const r1 = Math.random(), r2 = Math.random(), q = r1 + r2 > 1 ? [1 - r1, 1 - r2] : [r1, r2];
+        const x = A[0] + (B[0] - A[0]) * q[0] + (C[0] - A[0]) * q[1], z = A[1] + (B[1] - A[1]) * q[0] + (C[1] - A[1]) * q[1];
+        const s = projetilVisual('fogo', 0xc58bff, 1.2 + Math.random() * 0.8); s.position.set(x, 0.5, z); E.mundo.add(s);
+        const t0 = Math.random() * 6;
+        E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; s.scale.y = (1 + 0.25 * Math.sin((this.t + t0) * 9)) * s.scale.x; if (this.t > u.dur) { E.mundo.remove(s); return true; } } });
+      }
+      anelEfeito(h.x + fx * u.comprimento * 0.55, h.z + fz * u.comprimento * 0.55, u.base * 0.55, 0xc58bff, 0.5, true);
+      return fogo;
+    } });
+  }
+  function chaoTriangulo(A, B, C, cor, dur) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([A[0], 0, A[1], B[0], 0, B[1], C[0], 0, C[1]], 3));
+    const mat = new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(geo, mat); m.position.y = 0.08; m.renderOrder = 6; E.mundo.add(m);
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt; mat.opacity = 0.35 + 0.15 * Math.sin(this.t * 14) * (1 - this.t / dur);
+      if (this.t > dur) { E.mundo.remove(m); return true; }
+    } });
+    return m;
+  }
+  function ultSuporte(h) {
+    const u = CONFIG.ultimate.suporte;
+    h.travadoAte = E.t + 0.8;
+    h.anim.tocar('habilidade3', { momento: 0.5, aoAcertar: () => {
+      anelEfeito(h.x, h.z, u.raio, 0xfff3b0, 0.8, true);
+      discoEfeito(h.x, h.z, u.raio, 0xfff3b0, 0.5);
+      E.entidades.forEach(e => {
+        if (e.morto || dist(e, h) > u.raio) return;
+        if (aliado(e, h)) {
+          if (remoto(e)) gancho('apoioRemoto', e, 'curaForte');
+          else if (e.tipo !== 'torre') { curar(e, e.vidaMax * u.cura); anelEfeito(e.x, e.z, 1.3, 0x6dff9c, 0.6, true); }
+        } else if (e.tipo !== 'torre' && !(e.tipo === 'serpente' && !e.emerso)) {
+          controlar(e, { stun: u.stun, antiCura: [u.antiCura, u.antiCuraDur] });
+          if (!remoto(e)) anelEfeito(e.x, e.z, 1.1, 0xff6b6b, 0.6, true);
+        }
+      });
+    } });
+  }
+  function ultAtirador(h, ang, mira) {
+    const c = CONFIG.atirador;
+    const d = mira ? clamp(mira.dist, 2, c.distSalto) : c.distSalto;
+    const [W, H] = E.def.tam;
+    anelEfeito(h.x, h.z, 1.2, 0x7fe0ff, 0.35, true);
+    h.x = clamp(h.x + Math.sin(ang) * d, -W / 2 + 1, W / 2 - 1);
+    h.z = clamp(h.z + Math.cos(ang) * d, -H / 2 + 1, H / 2 - 1);
+    h.invulAte = Math.max(h.invulAte, E.t + 0.2);
+    anelEfeito(h.x, h.z, 1.4, 0x7fe0ff, 0.4, true);
+    discoEfeito(h.x, h.z, 1, 0x7fe0ff, 0.2);
+    h.anim.tocar('habilidade3');
   }
 
   const HABILIDADES = {
@@ -947,18 +1087,20 @@
       (h, ang) => {
         h.investida = { ang, resta: 0.55, atingidos: new Set() };
         h.anim.tocar('habilidade2');
-      }
+      },
+      (h, ang) => ultSoldado(h, ang)
     ],
     suporte: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () =>
         atirar(h, h.rot, { vel: 18, restante: CLASSES.suporte.alcance, dano: CLASSES.suporte.dano, cor: 0xfff3b0, tamanho: 0.8 }) }),
       (h) => h.anim.tocar('habilidade1', { momento: 0.55, aoAcertar: () => {
         anelEfeito(h.x, h.z, 7, 0x6dff9c, 0.8, true);
-        E.entidades.forEach(e => { if (!e.morto && aliado(e, h) && dist(e, h) < 7) { if (remoto(e)) gancho('apoioRemoto', e, 'cura'); else e.vida = Math.min(e.vidaMax, e.vida + e.vidaMax * 0.35); } });
+        E.entidades.forEach(e => { if (!e.morto && aliado(e, h) && dist(e, h) < 7) { if (remoto(e)) gancho('apoioRemoto', e, 'cura'); else curar(e, e.vidaMax * 0.35); } });
       } }),
       (h) => h.anim.tocar('habilidade2', { momento: 0.3, aoAcertar: () => {
         E.entidades.forEach(e => { if (!e.morto && aliado(e, h) && dist(e, h) < 6) { if (remoto(e)) { gancho('apoioRemoto', e, 'escudo'); e.escudo = 1; e.escudoAte = E.t + 4; bolha(e, 4); } else { e.escudo = e.vidaMax * 0.4; e.escudoAte = E.t + 4; bolha(e, 4); } } });
-      } })
+      } }),
+      (h) => ultSuporte(h)
     ],
     mago: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () =>
@@ -978,27 +1120,32 @@
         const nx = h.x + Math.sin(ang) * 6, nz = h.z + Math.cos(ang) * 6;
         h.x = clamp(nx, -E.def.tam[0] / 2, E.def.tam[0] / 2); h.z = clamp(nz, -E.def.tam[1] / 2, E.def.tam[1] / 2);
         return clone;
-      }
+      },
+      (h, ang) => ultMago(h, ang)
     ],
     atirador: [
+      // ataque básico: bola de energia que sai da mão
       (h, ang) => {
-        h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () => {
-          atirar(h, h.rot, { vel: 30, restante: CLASSES.atirador.alcance, dano: CLASSES.atirador.dano, visual: 'bala', tamanho: 0.9 });
-          E.entidades.forEach(c => { if (c.tipo === 'clone' && c.donoHeroi && c.atiraJunto && !c.morto) atirar(c, h.rot, { vel: 30, restante: CLASSES.atirador.alcance, dano: CLASSES.atirador.dano * 0.6, visual: 'bala', tamanho: 0.9 }); });
+        h.anim.tocar('ataque', { velocidade: velAtaque(h), momento: 0.45, aoAcertar: () => {
+          const explode = h.explosivoAte > E.t;
+          atirar(h, h.rot, { vel: 24, restante: CLASSES.atirador.alcance, dano: CLASSES.atirador.dano, cor: explode ? 0xffb347 : 0x7fe0ff, tamanho: explode ? 1.15 : 0.95,
+            efeito: explode ? a => explosaoEnergia(h, a.x, a.z) : null });
         } });
       },
-      (h, ang) => {
-        h.travadoAte = E.t + 0.95;   // rajada não pode ser interrompida
+      // Aceleração: ataques básicos mais rápidos por 5 s
+      (h) => {
         h.anim.tocar('habilidade1');
-        // os tiros começam depois que o rifle sobe
-        for (let i = 0; i < 5; i++) agendar(0.3 + i * 0.12, () => { if (!h.morto) atirar(h, ang, { vel: 32, restante: 12, dano: CLASSES.atirador.dano * 0.6, visual: 'bala', tamanho: 0.7 }); });
+        h.aceleradoAte = E.t + CONFIG.atirador.aceleracaoDur;
+        anelEfeito(h.x, h.z, 1.6, 0x7fe0ff, 0.6, true);
       },
-      async (h) => {
+      // Explosão: as bolas que acertam explodem (dano dele + 5% de chance de crítico)
+      (h) => {
         h.anim.tocar('habilidade2');
-        h.velBonus = 0.4; h.velBonusAte = E.t + 5;
-        const c = await criarClone(h, 5, false);
-        if (c) { c.atiraJunto = true; c.seguir = true; }
-      }
+        h.explosivoAte = E.t + CONFIG.atirador.explosaoDur;
+        anelEfeito(h.x, h.z, 1.8, 0xffa23a, 0.6, true);
+      },
+      // Salto: teleporta para onde mirou (2 pulos em até 15 s)
+      (h, ang, mira) => ultAtirador(h, ang, mira)
     ]
   };
   function corteVisual(h, ang) {
@@ -1070,7 +1217,7 @@
     } else if (dist(e, e.casa) > 0.8) {
       alvoPos = e.casa; vel = e.vel * 1.2;
       e.rot = girarPara(e.rot, Math.atan2(e.casa.x - e.x, e.casa.z - e.z), dt * 6);
-    } else { e.vida = Math.min(e.vidaMax, e.vida + e.vidaMax * 0.2 * dt); e.grudada = false; }
+    } else { curar(e, e.vidaMax * 0.2 * dt); e.grudada = false; }
     if (['ataque', 'dano'].includes(e.anim.estado)) vel = 0;
     if (vel && alvoPos) {
       const v = vel * lentidao(e) * dt;
@@ -1422,7 +1569,7 @@
   function usarItem(item, mira) {
     const h = E.heroi; if (!h || h.morto || !P.inventario[item]) return false;
     P.inventario[item]--; salvar();
-    if (item === 'cura') { h.vida = h.vidaMax; anelEfeito(h.x, h.z, 1.4, 0x6dff9c, 0.6, true); }
+    if (item === 'cura') { curar(h, h.vidaMax); anelEfeito(h.x, h.z, 1.4, 0x6dff9c, 0.6, true); }
     if (item === 'vel') { h.velBonus = 0.5; h.velBonusAte = E.t + 4; }
     if (item === 'invis') { h.invisAte = E.t + 5; h.ilusao = false; }
     if (item === 'cacador') { h.cacadorAte = E.t + 60; }
@@ -1476,6 +1623,7 @@
       prontos.forEach(a => a.fn());
     }
     const h = E.heroi;
+    if (h && h.salto && E.t > h.salto.ate) { h.cds[3] = E.t + CLASSES.atirador.cd[3]; h.salto = null; }
     // herói
     if (h) {
       if (h.morto) {
@@ -1594,6 +1742,7 @@
     const cls = CLASSES[P.classe];
     $('bHab1').querySelector('span').textContent = cls.habs[0];
     $('bHab2').querySelector('span').textContent = cls.habs[1];
+    $('bHab3').querySelector('span').textContent = cls.habs[2];
     if (h) $('hudVida').style.width = (100 * h.vida / h.vidaMax) + '%';
   }
   function hudQuadro() {
@@ -1601,11 +1750,13 @@
     const h = E.heroi;
     $('hudVida').style.width = (100 * clamp(h.vida / h.vidaMax, 0, 1)) + '%';
     $('hudVidaTxt').textContent = Math.ceil(Math.max(0, h.vida)) + ' / ' + h.vidaMax;
-    ['bAtaque', 'bHab1', 'bHab2'].forEach((id, i) => {
+    ['bAtaque', 'bHab1', 'bHab2', 'bHab3'].forEach((id, i) => {
       const resta = Math.max(0, h.cds[i] - E.t), el = $(id);
-      const tot = i === 0 ? CLASSES[h.classe].cd[0] / bonus().velAtaque : CLASSES[h.classe].cd[i];
+      const tot = i === 0 ? CLASSES[h.classe].cd[0] / velAtaque(h) : CLASSES[h.classe].cd[i];
       el.style.setProperty('--cd', (resta / tot * 100) + '%');
-      el.querySelector('b').textContent = resta > 0.05 && i > 0 ? Math.ceil(resta) : '';
+      let txt = resta > 0.05 && i > 0 ? Math.ceil(resta) : '';
+      if (i === 3 && h.salto && E.t < h.salto.ate) txt = (CONFIG.atirador.saltos - h.salto.usados) + '×';   // pulos que sobram
+      el.querySelector('b').textContent = txt;
     });
     // estados
     const tags = [];
@@ -1615,6 +1766,9 @@
     if (dentroEvento(h)) tags.push('zona ranqueada');
     if (E.chuva && E.chuva.ativa) tags.push('chuva');
     if (h.arena) tags.push('arena · time azul');
+    if (h.antiCuraAte > E.t) tags.push('cura cortada');
+    if (h.aceleradoAte > E.t) tags.push('acelerado ' + Math.ceil(h.aceleradoAte - E.t) + ' s');
+    if (h.explosivoAte > E.t) tags.push('tiros explosivos ' + Math.ceil(h.explosivoAte - E.t) + ' s');
     if (E.buffDano > 0) tags.push('+' + (E.buffDano * 100).toFixed(1) + '% dano');
     if (h.morto) tags.push('volta em ' + Math.max(0, Math.ceil(h.renasceEm - E.t)) + ' s');
     const txt = tags.join(' · ');
@@ -1771,6 +1925,7 @@
       if (k === 'j') Entrada.atacando = true;
       if (k === 'k') usar(1, null);
       if (k === 'l') usar(2, null);
+      if (k === 'u') usar(3, null);
     });
     global.addEventListener('keyup', e => { const k = e.key.toLowerCase(); teclas[k] = false; doTeclado(); if (k === 'j') Entrada.atacando = false; });
 
@@ -1805,6 +1960,7 @@
     }
     botaoMira($('bHab1'), m => usar(1, m));
     botaoMira($('bHab2'), m => usar(2, m));
+    botaoMira($('bHab3'), m => usar(3, m));
     Object.keys(CONFIG.loja).forEach(k => {
       const b = $('item_' + k);
       if (k === 'relogio') botaoMira(b, m => { if (!usarItem(k, m)) aviso('Sem relógio no inventário'); });
@@ -1889,11 +2045,11 @@
     CONFIG, CLASSES, CORES, iniciar, rankingServidor: null, ajustes: null, ganchos: G, poderes: PODERES,
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
-      atirar, causarDano, bolha, anelEfeito, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
+      atirar, causarDano, bolha, anelEfeito, curar, controlar, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
       telaHeroi, telaRanking, perfilPadrao, dist
     },
     // usado nos testes sem tela
-    _t: { E, P, R, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
+    _t: { CONFIG, E, P, R, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
   };
   if (temDOM && !global.ESPERAR_LOGIN) global.addEventListener('load', () => Jogo.iniciar().catch(err => {
     const el = $('carregando'); if (el) el.innerHTML = '<div>NÃO FOI POSSÍVEL INICIAR<p>' + (err && err.message || err) + '</p></div>';
