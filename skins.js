@@ -1111,11 +1111,32 @@
       suporte.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
     }
     // comprimento para a frente (até a boca do cano), medido no próprio modelo
-    let ponta = 0.3;
-    if (THREE.Box3) { const cx = new THREE.Box3().setFromObject(modelo); if (isFinite(cx.max.z)) ponta = Math.max(0.1, cx.max.z); }
-    return { nome, obj: suporte, mao, modo: def.modo, ponta };
+    let ponta = 0.3, extremos = null;
+    if (THREE.Box3) {
+      const cx = new THREE.Box3().setFromObject(modelo); if (isFinite(cx.max.z)) ponta = Math.max(0.1, cx.max.z);
+      // as duas pontas do eixo mais comprido (para o rastro da espada)
+      const tam = new THREE.Vector3(), centro = new THREE.Vector3(); cx.getSize(tam); cx.getCenter(centro);
+      const eixo = tam.x >= tam.y && tam.x >= tam.z ? 'x' : (tam.y >= tam.z ? 'y' : 'z');
+      const a = centro.clone(), b = centro.clone(); a[eixo] = cx.min[eixo]; b[eixo] = cx.max[eixo];
+      extremos = [a, b];
+    }
+    return { nome, obj: suporte, mao, modo: def.modo, ponta, extremos };
   }
 
+  // base e ponta da arma na mão agora (no mundo): a ponta é a extremidade mais longe da mão
+  const _e1 = THREE.Vector3 ? new THREE.Vector3() : null, _e2 = THREE.Vector3 ? new THREE.Vector3() : null, _em = THREE.Vector3 ? new THREE.Vector3() : null;
+  function linhaArma(obj, base, ponta) {
+    const anim = obj && obj.userData && obj.userData.animador;
+    if (!anim || !anim.armas || !obj.parent) return false;
+    const quer = (anim.trocasArma && anim.trocasArma[anim.estado]) || anim.armaPadrao;
+    const a = anim.armas[quer];
+    if (!a || !a.extremos || !a.obj.visible || !a.obj.localToWorld) return false;
+    _e1.copy(a.extremos[0]); _e2.copy(a.extremos[1]);
+    a.obj.localToWorld(_e1); a.obj.localToWorld(_e2); a.mao.getWorldPosition(_em);
+    const p = _e1.distanceTo(_em) > _e2.distanceTo(_em) ? _e1 : _e2, q = p === _e1 ? _e2 : _e1;
+    ponta.copy(p); base.copy(q).lerp(p, 0.3);
+    return true;
+  }
   // posição de um osso no mundo (para efeitos nas mãos)
   function posicaoOsso(obj, nome, saida) {
     const anim = obj && obj.userData && obj.userData.animador;
@@ -1241,7 +1262,7 @@
 
   global.Skins = {
     CATALOGO, Perfil,
-    criarPersonagem, trocarSkin, trocarCor, pontaArma, posicaoOsso,
+    criarPersonagem, trocarSkin, trocarCor, pontaArma, posicaoOsso, linhaArma,
     criarMob, criarMinion, criarAranha, textura,
     animador, atualizar, remover,
     skinsDaClasse, registrarSkin,

@@ -159,6 +159,7 @@
     R.renderer = new THREE.WebGLRenderer({ antialias: true });
     R.renderer.setPixelRatio(Math.min(2, global.devicePixelRatio || 1));
     R.renderer.outputEncoding = THREE.sRGBEncoding;
+    R.Fx = global.Efeitos || null;          // shaders bonitos (efeitos.js); sem ele, visual simples
     if (container) container.appendChild(R.renderer.domElement);
     R.scene = new THREE.Scene();
     R.camera = new THREE.PerspectiveCamera(42, 1, 0.5, 260);
@@ -202,10 +203,16 @@
     });
     redimensionar();
     if (temDOM) global.addEventListener('resize', redimensionar);
+    // brilho na tela (qualidade alta)
+    if (temDOM && R.Fx && R.Fx.iniciarPos) {
+      R.composer = R.Fx.iniciarPos(R.renderer, R.scene, R.camera, global.innerWidth, global.innerHeight);
+      if (R.composer) redimensionar();
+    }
   }
   function redimensionar() {
     const w = temDOM ? global.innerWidth : 800, h = temDOM ? global.innerHeight : 600;
     R.renderer.setSize(w, h, false);
+    if (R.composer) R.composer.setSize(w, h);
     R.camera.aspect = w / h; R.camera.fov = w < h ? 52 : 42; R.camera.updateProjectionMatrix();
   }
   function canvasTex(w, h, desenhar) {
@@ -449,6 +456,23 @@
   }
   function dentroArena(a, x, z, folga) {
     return Math.abs(x - a.x) < a.w / 2 + (folga || 0) && Math.abs(z - a.z) < a.h / 2 + (folga || 0);
+  }
+
+  // rastro de luz da lâmina (soldado e quem mais tiver espada), em golpes e habilidades
+  const _rb = THREE.Vector3 ? new THREE.Vector3() : null, _rp = THREE.Vector3 ? new THREE.Vector3() : null;
+  function atualizarRastros(dt) {
+    if (!R.Fx || !R.Fx.Rastro || !Skins.linhaArma) return;
+    for (const e of E.entidades) {
+      if ((e.tipo !== 'heroi' && e.tipo !== 'remoto') || e.classe !== 'soldado' || !e.anim) continue;
+      const ativo = !e.morto && (!!e.investida || /^(ataque|habilidade1|habilidade3)$/.test(e.anim.estado || ''));
+      if (!e.rastro) {
+        if (!ativo) continue;
+        e.rastro = new R.Fx.Rastro(tema(e).principal, 14);
+      }
+      if (e.rastro.mesh.parent !== E.mundo) E.mundo.add(e.rastro.mesh);
+      const tem = Skins.linhaArma(e.obj, _rb, _rp);
+      e.rastro.passo(ativo && tem, tem ? _rb : null, tem ? _rp : null, dt);
+    }
   }
 
   function limparMapa() {
@@ -835,12 +859,20 @@
     }, o);
     p.obj = projetilVisual(p.visual || 'brilho', p.cor, p.tamanho || 0.7);
     p.obj.position.set(p.x, p.y, p.z);
-    p.obj.material.rotation = -ang + Math.PI / 2;
+    if (p.obj.isSprite || !p.obj.userData.deFrente) p.obj.material.rotation = -ang + Math.PI / 2;
     E.mundo.add(p.obj);
     E.projeteis.push(p);
     return p;
   }
+  // quadro sempre de frente para a câmera (a câmera nunca gira, mas sobe/desce junto)
+  function deFrente(m) { if (R.camera && m.quaternion && R.camera.quaternion) m.quaternion.copy(R.camera.quaternion); }
   function projetilVisual(nome, cor, tam) {
+    const shader = (nome === 'brilho' || nome === 'fogo') && R.Fx && R.Fx.orbe(nome === 'fogo' ? (cor || 0xff7a2a) : (cor || 0xffffff));
+    if (shader) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(tam * 1.9, tam * 1.9), shader);
+      m.renderOrder = 11; m.userData.deFrente = true; deFrente(m);
+      return m;
+    }
     const mat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false, color: cor || 0xffffff });
     if (nome === 'brilho') { mat.map = R.brilhoTex; mat.blending = THREE.AdditiveBlending; }
     else if (R.cacheSprite['ef_' + nome]) mat.map = R.cacheSprite['ef_' + nome];
@@ -859,6 +891,7 @@
       const passo = p.vel * dt;
       p.x += p.dx * passo; p.z += p.dz * passo; p.restante -= passo;
       p.obj.position.set(p.x, p.y, p.z);
+      if (p.obj.userData.deFrente) deFrente(p.obj);
       if (p.rastro !== undefined) emitir('faisca', p.x, p.y, p.z, { n: 2, cor: p.rastro, vel: 0.35, vida: 0.3, subida: 0.2 });
       let acertou = null;
       for (const e of (p.soVisual ? [] : E.entidades)) {
@@ -904,6 +937,17 @@
     return n;
   }
   function anelEfeito(x, z, raio, cor, dur, cresce) {
+    const sh = R.Fx && R.Fx.anel(cor);
+    if (sh) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(raio * 2.3, raio * 2.3), sh);
+      m.rotation.x = -Math.PI / 2; m.position.set(x, 0.13, z); m.renderOrder = 6; E.mundo.add(m);
+      E.efeitos.push({ t: 0, dur, atualizar(dt) {
+        this.t += dt; const k = Math.min(1, this.t / this.dur);
+        sh.uniforms.progresso.value = k;
+        if (k >= 1) { E.mundo.remove(m); return true; }
+      } });
+      return m;
+    }
     const m = new THREE.Mesh(new THREE.RingGeometry(raio * 0.8, raio, 48),
       new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
     m.rotation.x = -Math.PI / 2; m.position.set(x, 0.1, z); m.renderOrder = 6;
@@ -918,6 +962,20 @@
     return m;
   }
   function discoEfeito(x, z, raio, cor, dur, aCada) {
+    const sh = R.Fx && R.Fx.chao(cor, true);
+    if (sh) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(raio * 2, raio * 2), sh);
+      m.rotation.x = -Math.PI / 2; m.position.set(x, 0.12, z); m.renderOrder = 6; E.mundo.add(m);
+      let tick = 0;
+      E.efeitos.push({ t: 0, dur, atualizar(dt) {
+        this.t += dt; tick += dt;
+        const ent = Math.min(1, this.t / 0.15), sai = Math.min(1, (this.dur - this.t) / 0.3);
+        sh.uniforms.intensidade.value = Math.max(0, Math.min(ent, sai)) * (0.85 + 0.15 * Math.sin(this.t * 12));
+        if (aCada && tick >= aCada.intervalo) { tick = 0; aCada.fn(); }
+        if (this.t >= this.dur) { E.mundo.remove(m); return true; }
+      } });
+      return;
+    }
     const m = new THREE.Mesh(new THREE.CircleGeometry(raio, 40),
       new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
     m.rotation.x = -Math.PI / 2; m.position.set(x, 0.12, z); m.renderOrder = 6;
@@ -1162,6 +1220,7 @@
           particulas(x, z, { n: 5, cor: 0xd9b38a, tam: 0.9, cresce: 2, velH: 2, velV: 1.5, gravidade: 2, vida: 0.7, opacidade: 0.7 });
           if (i % 2 === 0) pedras(x, z, 3, 0x6b5a48, 4);
           if (i === 0) tremer(h.x, h.z, 0.35, 0.4);
+          if (i % 2 === 0) rachaduras(x, z, u.largura * 1.4, 2);
           area(x, z, u.largura, h, e => { if (atingidos.has(e)) return; atingidos.add(e); causarDano(e, CLASSES.soldado.dano * u.dano, h); });
         });
       }
@@ -1203,21 +1262,37 @@
       for (let k = 0; k < 14; k++) {
         const r1 = Math.random(), r2 = Math.random(), q = r1 + r2 > 1 ? [1 - r1, 1 - r2] : [r1, r2];
         const x = A[0] + (B[0] - A[0]) * q[0] + (C[0] - A[0]) * q[1], z = A[1] + (B[1] - A[1]) * q[0] + (C[1] - A[1]) * q[1];
-        const s = projetilVisual('fogo', 0xc58bff, 1.2 + Math.random() * 0.8); s.position.set(x, 0.5, z); E.mundo.add(s);
-        const t0 = Math.random() * 6;
-        E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; s.scale.y = (1 + 0.25 * Math.sin((this.t + t0) * 9)) * s.scale.x; if (this.t > u.dur) { E.mundo.remove(s); return true; } } });
+        labareda(x, z, tema(h).chama, 1.3 + Math.random() * 0.9, u.dur);
       }
       anelEfeito(h.x + fx * u.comprimento * 0.55, h.z + fz * u.comprimento * 0.55, u.base * 0.55, 0xc58bff, 0.5, true);
       return fogo;
     } });
   }
+  // labareda em pé (shader de fogo); sem shader, usa a imagem do fogo
+  function labareda(x, z, cor, alt, dur) {
+    const sh = R.Fx && R.Fx.fogo(cor, 1);
+    let m;
+    if (sh) {
+      const geo = new THREE.PlaneGeometry(alt * 0.7, alt); geo.translate && geo.translate(0, alt / 2, 0);
+      m = new THREE.Mesh(geo, sh); m.userData.deFrente = true; deFrente(m);
+    } else { m = projetilVisual('fogo', cor, alt); }
+    m.position.set(x, sh ? 0.05 : alt * 0.4, z); m.renderOrder = 10; E.mundo.add(m);
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt;
+      if (sh) { deFrente(m); sh.uniforms.forca.value = Math.min(1, this.t / 0.2) * Math.min(1, (dur - this.t) / 0.35); m.scale.y = 0.6 + 0.4 * Math.min(1, this.t / 0.25); }
+      if (this.t > dur) { E.mundo.remove(m); return true; }
+    } });
+  }
   function chaoTriangulo(A, B, C, cor, dur) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute([A[0], 0, A[1], B[0], 0, B[1], C[0], 0, C[1]], 3));
-    const mat = new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
+    const sh = R.Fx && R.Fx.chao(cor, false);
+    const mat = sh || new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
     const m = new THREE.Mesh(geo, mat); m.position.y = 0.08; m.renderOrder = 6; E.mundo.add(m);
     E.efeitos.push({ t: 0, atualizar(dt) {
-      this.t += dt; mat.opacity = 0.35 + 0.15 * Math.sin(this.t * 14) * (1 - this.t / dur);
+      this.t += dt;
+      if (sh) { sh.uniforms.intensidade.value = Math.min(1, this.t / 0.15) * Math.min(1, (dur - this.t) / 0.4) * 1.1; if (this.t > dur) { E.mundo.remove(m); return true; } return; }
+      mat.opacity = 0.35 + 0.15 * Math.sin(this.t * 14) * (1 - this.t / dur);
       if (this.t > dur) { E.mundo.remove(m); return true; }
     } });
     return m;
@@ -1320,6 +1395,7 @@
         const tm = tema(h);
         h.anim.tocar('habilidade1', { momento: 0.55, aoAcertar: () => {
           emitir('grande', x, 0.6, z, { n: 10, cor: tm.chama, vel: 2.5, subida: 1, vida: 0.5, raio: 1 });
+          for (let q = 0; q < 7; q++) { const a = Math.random() * 6.28, rr = Math.sqrt(Math.random()) * 2.6; labareda(x + Math.cos(a) * rr, z + Math.sin(a) * rr, tm.chama, 1.1 + Math.random() * 0.8, 2.5); }
           discoEfeito(x, z, 3.2, tm.chama, 2.5, { intervalo: 0.5, fn: () => {
             area(x, z, 3.2, h, e => causarDano(e, CLASSES.mago.dano * 0.5, h, { semReacao: true }));
             emitir('media', x, 0.2, z, { n: 14, cor: tm.chama, vel: 0.3, subida: 2.4, vida: 0.7, raio: 3 });
@@ -1384,8 +1460,10 @@
     E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; m.material.opacity = 0.85 * (1 - this.t / 0.22); if (this.t > 0.22) { E.mundo.remove(m); return true; } } });
   }
   function bolha(e, dur) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(1.2, 20, 14),
-      new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.25, depthWrite: false }));
+    const sh = R.Fx && R.Fx.escudo(0x9fd8ff);
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1.2, 28, 18),
+      sh || new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.25, depthWrite: false }));
+    if (sh) { m.renderOrder = 9; E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; sh.uniforms.vida.value = Math.min(1, this.t / 0.15) * Math.min(1, Math.max(0, (dur - this.t) / 0.4)); if (this.t > dur || e.morto || e.escudo <= 0) return true; } }); }
     E.mundo.add(m);
     E.efeitos.push({ t: 0, atualizar(dt) {
       this.t += dt; m.position.set(e.x, 1, e.z);
@@ -1505,7 +1583,14 @@
       if (this.t >= dur) { E.mundo.remove(m); E.mundo.remove(dentro); return true; }
     } });
   }
+  function rachaduras(x, z, r, dur) {
+    const tex = R.Fx && R.Fx.rachaduras && R.Fx.rachaduras(); if (!tex) return;
+    const m = camada(new THREE.PlaneGeometry(r * 2, r * 2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.9, depthWrite: false }), x, z, 0.075);
+    m.rotation.z = Math.random() * 6.28;
+    E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; m.material.opacity = 0.9 * Math.min(1, (dur - this.t) / 0.8); if (this.t > dur) { E.mundo.remove(m); return true; } } });
+  }
   function efeitoPisao(x, z, r) {
+    rachaduras(x, z, r * 0.9, 2.5);
     anelEfeito(x, z, r, 0xb9a27a, 0.55, true);
     anelEfeito(x, z, r * 0.6, 0x7a6448, 0.4, true);
     discoEfeito(x, z, r * 0.45, 0x5b4a36, 0.6);
@@ -1982,6 +2067,8 @@
     }
     gancho('passo', dt);
     atualizarFx(dt);
+    if (R.Fx) R.Fx.atualizar(dt);
+    atualizarRastros(dt);
     // estrelinhas girando em cima de quem está atordoado
     if (Math.floor(E.t * 8) !== Math.floor((E.t - dt) * 8)) E.entidades.forEach(e => {
       if (e.morto || !(e.stunAte > E.t) || (e.obj && e.obj.visible === false)) return;
@@ -2129,6 +2216,18 @@
         const erro = comprar(b.dataset.comprar); aviso(erro || 'Comprado: ' + CONFIG.loja[b.dataset.comprar].nome); telaLoja();
       }));
     });
+  }
+  function telaGraficos() {
+    const Fx = global.Efeitos; if (!Fx) return;
+    const q = Fx.qualidade;
+    abrirModal('Gráficos', `
+      <p class="nota">Alta liga o brilho nos efeitos (mais bonito, pesa um pouco). Baixa deixa o jogo mais leve em celulares mais simples.</p>
+      <div class="botoes"><button class="acao ${q === 'alta' ? 'forte' : ''}" data-q="alta" type="button">Alta</button>
+      <button class="acao ${q === 'baixa' ? 'forte' : ''}" data-q="baixa" type="button">Baixa</button></div>
+      <p class="nota">A página recarrega para aplicar.</p>`, el => {
+      el.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { if (b.dataset.q === q) return fecharModal(); Fx.definirQualidade(b.dataset.q); global.location.reload(); }));
+    });
+    $('modalFechar').hidden = false;
   }
   function telaInstrucoes() {
     abrirModal('Como jogar', `
@@ -2325,6 +2424,7 @@
       if (q === 'passaportes') telaPassaportes();
       else if (q === 'heroi') telaHeroi(false);
       else if (q === 'instrucoes') telaInstrucoes();
+      else if (q === 'graficos') telaGraficos();
       else if (gancho('menu', q) === true) { /* tratado pelo painel online */ }
       else telaRanking(q);
     }));
@@ -2362,7 +2462,7 @@
       }
     }
     desenharMira(); hudQuadro();
-    R.renderer.render(R.scene, R.camera);
+    if (R.composer) R.composer.render(); else R.renderer.render(R.scene, R.camera);
     global.requestAnimationFrame(quadro);
   }
   async function iniciar() {
