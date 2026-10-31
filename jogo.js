@@ -2924,6 +2924,151 @@
     if (s < 0.06) return 0.42 + s / 0.06 * 0.2;
     return 0.62 * Math.pow(1 - (s - 0.06) / 0.94, 0.8) + 0.05;
   }
+  // escamas pequenas e iguais para a cabeça
+  function texEscamasCabeca() {
+    if (R.texEscCab) return R.texEscCab;
+    R.texEscCab = canvasTex(128, 128, g => {
+      g.fillStyle = '#1a6b5e'; g.fillRect(0, 0, 128, 128);
+      for (let y = -8; y < 136; y += 10) for (let x = -8; x < 136; x += 12) {
+        const xx = x + ((y / 10) % 2 ? 6 : 0);
+        g.beginPath(); g.ellipse(xx, y, 6, 6.5, 0, 0, Math.PI);
+        g.fillStyle = 'rgba(110,240,210,0.10)'; g.fill();
+        g.strokeStyle = 'rgba(2,24,22,0.6)'; g.lineWidth = 1.4; g.stroke();
+      }
+    });
+    if (R.texEscCab.wrapS !== undefined) R.texEscCab.wrapS = R.texEscCab.wrapT = THREE.RepeatWrapping;
+    return R.texEscCab;
+  }
+  // deforma uma esfera: f(x, y, z) devolve a nova posição (z = frente)
+  function esferaMoldada(r, ws, hs, f) {
+    const geo = new THREE.SphereGeometry(r, ws, hs), p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const v = f(p.array[i * 3], p.array[i * 3 + 1], p.array[i * 3 + 2]);
+      p.array[i * 3] = v[0]; p.array[i * 3 + 1] = v[1]; p.array[i * 3 + 2] = v[2];
+    }
+    p.needsUpdate = true; if (geo.computeVertexNormals) geo.computeVertexNormals();
+    return geo;
+  }
+  // chifre curvo: cones encadeados, cada um mais fino e mais dobrado para trás
+  function chifreCurvo(mat, tam, curva) {
+    const raiz = new THREE.Group(); let pai = raiz, rr = 0.09 * tam;
+    for (let k = 0; k < 4; k++) {
+      const L = 0.24 * tam, seg = new THREE.Mesh(new THREE.CylinderGeometry(rr * 0.72, rr, L, 7), mat);
+      seg.position.y = L / 2; const j = new THREE.Group(); j.add(seg); j.rotation.x = k ? curva : 0;
+      pai.add(j); const ponta = new THREE.Group(); ponta.position.y = L; j.add(ponta); pai = ponta; rr *= 0.72;
+    }
+    const bico = new THREE.Mesh(new THREE.ConeGeometry(rr, 0.16 * tam, 7), mat); bico.position.y = 0.08 * tam; pai.add(bico);
+    return raiz;
+  }
+  // leque de espinhos ligados por membrana (a "gola" atrás da cabeça)
+  function leque(n, raio, abre, mat, matEsp) {
+    const g = new THREE.Group(), pos = [], idx = [];
+    pos.push(0, 0, 0);
+    for (let k = 0; k <= n; k++) {
+      const a = -abre / 2 + abre * k / n, rr = raio * (0.75 + 0.25 * Math.sin(k / n * Math.PI));
+      pos.push(Math.sin(a) * rr, Math.cos(a) * rr, 0);
+      // recorte entre espinhos
+      if (k < n) { const am = a + abre / n / 2; pos.push(Math.sin(am) * rr * 0.72, Math.cos(am) * rr * 0.72, 0); }
+    }
+    const pts = pos.length / 3;
+    for (let i = 1; i < pts - 1; i++) idx.push(0, i, i + 1);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    if (geo.setIndex) geo.setIndex(idx); if (geo.computeVertexNormals) geo.computeVertexNormals();
+    g.add(new THREE.Mesh(geo, mat));
+    for (let k = 0; k <= n; k++) {
+      const a = -abre / 2 + abre * k / n, rr = raio * (0.75 + 0.25 * Math.sin(k / n * Math.PI));
+      const e = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.03, rr * 1.05, 5), matEsp);
+      e.position.set(Math.sin(a) * rr / 2, Math.cos(a) * rr / 2, 0); e.rotation.z = -a; g.add(e);
+    }
+    return g;
+  }
+  function cabecaSerpente(finM) {
+    const cab = new THREE.Group();
+    const pele = new THREE.MeshStandardMaterial({ map: texEscamasCabeca(), color: 0xbfe8dc, roughness: 0.42, metalness: 0.18 });
+    const papo = new THREE.MeshStandardMaterial({ color: 0xc9c79a, roughness: 0.6 });
+    const escuro = new THREE.MeshStandardMaterial({ color: 0x082a27, roughness: 0.55 });
+    const osso = new THREE.MeshStandardMaterial({ color: 0xcfc4a2, roughness: 0.45 });
+    const chifreM = new THREE.MeshStandardMaterial({ color: 0x6e5c42, roughness: 0.5, metalness: 0.1 });
+    const boca = new THREE.MeshStandardMaterial({ color: 0x5a1020, roughness: 0.7, side: THREE.DoubleSide });
+    // crânio: largo atrás, achatado em cima, afinando num focinho comprido
+    const cranio = new THREE.Mesh(esferaMoldada(0.5, 28, 20, (x, y, z) => {
+      const fr = Math.max(0, z) / 0.5;                       // 0 atrás ... 1 na ponta
+      const larg = 1.05 - 0.48 * fr, alt = (y > 0 ? 0.62 : 0.32) * (1 - 0.35 * fr);
+      return [x * larg, y * alt + (y > 0 ? 0 : 0.02), z > 0 ? z * 2.0 : z * 1.05];
+    }), pele);
+    cab.add(cranio);
+    // sobrancelhas ossudas em cima dos olhos (cara de bravo)
+    [-1, 1].forEach(l => {
+      const sob = new THREE.Mesh(esferaMoldada(0.1, 12, 8, (x, y, z) => [x * 0.9, y * 0.4, z * 1.5]), pele);
+      sob.position.set(l * 0.28, 0.2, 0.4); sob.rotation.set(0.3, l * 0.3, l * -0.55); cab.add(sob);
+      // olho fundo: órbita escura, olho brilhante, pupila em fenda
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.105, 12, 10), escuro); orb.position.set(l * 0.31, 0.16, 0.38); orb.scale.set(0.7, 0.8, 1.2); cab.add(orb);
+      const olho = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffe14a }));
+      olho.position.set(l * 0.345, 0.165, 0.4); olho.scale.set(0.6, 0.85, 1.25); cab.add(olho);
+      const fenda = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.13, 0.05), new THREE.MeshBasicMaterial({ color: 0x0a0a0a }));
+      fenda.position.set(l * 0.398, 0.165, 0.41); fenda.rotation.y = l * 0.5; cab.add(fenda);
+      const brilho = new THREE.Sprite(new THREE.SpriteMaterial({ map: R.brilhoTex, color: 0xffe866, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending }));
+      brilho.scale.set(0.42, 0.42, 1); brilho.position.set(l * 0.37, 0.17, 0.42); cab.add(brilho);
+      // narinas
+      const nar = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), escuro); nar.position.set(l * 0.08, 0.12, 1.12); nar.scale.set(1, 0.6, 1.4); cab.add(nar);
+      // fileira de espinhos na bochecha
+      for (let k = 0; k < 3; k++) {
+        const es = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.22 - k * 0.04, 6), osso);
+        es.position.set(l * (0.46 - k * 0.02), -0.02 - k * 0.04, 0.05 - k * 0.15); es.rotation.set(-1.9, 0, l * 0.9); cab.add(es);
+      }
+      // dentes de cima: duas presas grandes e uma fileira de pequenos
+      const presa = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.3, 7), osso); presa.position.set(l * 0.15, -0.16, 0.86); presa.rotation.x = Math.PI + 0.12; cab.add(presa);
+      for (let k = 0; k < 5; k++) {
+        const d = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.09, 5), osso);
+        d.position.set(l * (0.22 - k * 0.022), -0.11, 0.7 - k * 0.12); d.rotation.x = Math.PI; cab.add(d);
+      }
+      // chifres curvos para trás + um menor embaixo
+      const ch = chifreCurvo(chifreM, 1.15, -0.45); ch.position.set(l * 0.22, 0.24, 0.0); ch.rotation.set(-1.25, 0, l * 0.32); cab.add(ch);
+      const ch2 = chifreCurvo(chifreM, 0.6, -0.4); ch2.position.set(l * 0.36, 0.1, -0.12); ch2.rotation.set(-1.4, 0, l * 0.9); cab.add(ch2);
+      // gola: leque de membrana brilhante dos dois lados
+      const gola = leque(5, 0.75, 1.5, finM, chifreM); gola.position.set(l * 0.4, 0.06, -0.3); gola.rotation.set(0, l * 1.15, l * -1.05); cab.add(gola);
+    });
+    // crista no meio da cabeça
+    const crista = leque(4, 0.55, 0.9, finM, chifreM); crista.position.set(0, 0.3, -0.15); crista.rotation.set(-0.9, Math.PI / 2, 0); crista.scale.set(1, 1, 1); cab.add(crista);
+    // céu da boca (aparece quando abre)
+    const ceu = new THREE.Mesh(esferaMoldada(0.42, 16, 10, (x, y, z) => [x * (0.85 - 0.35 * Math.max(0, z) / 0.42), -Math.abs(y) * 0.12 - 0.08, z > 0 ? z * 1.85 : z * 0.6]), boca);
+    ceu.position.set(0, -0.04, 0.12); cab.add(ceu);
+    // mandíbula: abre na mordida, com dentes, papo claro e língua bifurcada
+    const mand = new THREE.Group(); mand.position.set(0, -0.12, -0.05); cab.add(mand);
+    const queixo = new THREE.Mesh(esferaMoldada(0.42, 20, 12, (x, y, z) => {
+      const fr = Math.max(0, z) / 0.42;
+      return [x * (0.92 - 0.4 * fr), (y > 0 ? y * 0.12 : y * 0.42) * (1 - 0.3 * fr), z > 0 ? z * 2.05 : z * 0.75];
+    }), papo);
+    queixo.position.set(0, -0.06, 0.15); mand.add(queixo);
+    const lingBase = new THREE.Mesh(esferaMoldada(0.3, 12, 8, (x, y, z) => [x * 0.6, y * 0.1 + 0.03, z * 1.6]), boca); lingBase.position.set(0, -0.05, 0.25); mand.add(lingBase);
+    [-1, 1].forEach(l => {
+      for (let k = 0; k < 4; k++) {
+        const d = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.08, 5), osso); d.position.set(l * (0.2 - k * 0.025), 0.0, 0.72 - k * 0.12); mand.add(d);
+      }
+      const presa = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.18, 6), osso); presa.position.set(l * 0.12, 0.04, 0.9); mand.add(presa);
+    });
+    const lingua = new THREE.Group(); lingua.position.set(0, -0.02, 0.6); mand.add(lingua);
+    const lm = new THREE.MeshStandardMaterial({ color: 0xc0283c, roughness: 0.5 });
+    const haste = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.015, 0.5), lm); haste.position.z = 0.25; lingua.add(haste);
+    [-1, 1].forEach(l => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.012, 0.2), lm); p.position.set(l * 0.035, 0, 0.56); p.rotation.y = l * 0.4; lingua.add(p); });
+    lingua.scale.z = 0.01;
+    // bigodes que balançam (barbilhões de dragão do mar)
+    const bigodes = [];
+    [-1, 1].forEach(l => {
+      let pai = new THREE.Group(); pai.position.set(l * 0.17, 0.0, 1.0); pai.rotation.set(0.2, l * 0.9, 0); cab.add(pai);
+      const cadeia = [];
+      for (let k = 0; k < 5; k++) {
+        const L = 0.2, seg = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.016, L, 5), finM); seg.rotation.x = Math.PI / 2; seg.position.z = L / 2;
+        const j = new THREE.Group(); j.add(seg); pai.add(j); cadeia.push(j);
+        const prox = new THREE.Group(); prox.position.z = L; j.add(prox); pai = prox;
+      }
+      bigodes.push({ cadeia, lado: l });
+    });
+    // um pouco maior que antes: a cabeça é o destaque
+    cab.scale.setScalar(1.25);
+    return { cab, mand, lingua, bigodes };
+  }
   function corpoSerpente() {
     const g = new THREE.Group();
     const N = SERP.anel, M = SERP.lados, pos = new Float32Array(N * (M + 1) * 3), uv = [], idx = [];
@@ -2937,37 +3082,8 @@
     if (geo.setIndex) geo.setIndex(idx);
     const corpo = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: texEscamas(), roughness: 0.38, metalness: 0.15, side: THREE.DoubleSide }));
     corpo.frustumCulled = false; g.add(corpo);
-    // cabeça: crânio alongado, focinho, mandíbula com presas, olhos que brilham, chifres e crista
-    const cab = new THREE.Group();
-    const pele = new THREE.MeshStandardMaterial({ color: 0x125249, roughness: 0.4, metalness: 0.15 });
-    const escuro = new THREE.MeshStandardMaterial({ color: 0x0b3330, roughness: 0.5 });
-    const osso = new THREE.MeshStandardMaterial({ color: 0xf2ecd6, roughness: 0.35 });
-    const cranio = new THREE.Mesh(new THREE.SphereGeometry(0.5, 18, 14), pele); cranio.scale.set(1, 0.72, 1.25); cab.add(cranio);
-    const focinho = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 12), pele); focinho.scale.set(0.95, 0.55, 1.5); focinho.position.set(0, 0.02, 0.62); cab.add(focinho);
-    const mand = new THREE.Group(); mand.position.set(0, -0.14, 0.15); cab.add(mand);
-    const queixo = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), escuro); queixo.scale.set(0.9, 0.35, 1.7); queixo.position.set(0, -0.05, 0.42); mand.add(queixo);
-    [-1, 1].forEach(l => {
-      [0.62, 0.86].forEach((z, k) => {
-        const pr = new THREE.Mesh(new THREE.ConeGeometry(0.045, k ? 0.2 : 0.28, 6), osso);
-        pr.position.set(l * (k ? 0.13 : 0.2), -0.18, z); pr.rotation.x = Math.PI; cab.add(pr);
-      });
-      const olho = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff26a }));
-      olho.position.set(l * 0.3, 0.17, 0.42); olho.scale.set(0.8, 1, 1.3); cab.add(olho);
-      const pupila = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.13, 0.04), new THREE.MeshBasicMaterial({ color: 0x111111 }));
-      pupila.position.set(l * 0.37, 0.17, 0.46); cab.add(pupila);
-      const brilho = new THREE.Sprite(new THREE.SpriteMaterial({ map: R.brilhoTex, color: 0xfff27a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
-      brilho.scale.set(0.45, 0.45, 1); brilho.position.copy(olho.position); cab.add(brilho);
-      const chifre = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.75, 7), osso);
-      chifre.position.set(l * 0.26, 0.3, -0.35); chifre.rotation.set(-1.95, 0, l * 0.25); cab.add(chifre);
-      // barbatana lateral (orelha)
-      const orelha = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.6, 3), new THREE.MeshStandardMaterial({ color: 0x46e0c8, emissive: 0x0f7f73, emissiveIntensity: 0.6, transparent: true, opacity: 0.9 }));
-      orelha.scale.set(1, 1, 0.25); orelha.position.set(l * 0.45, 0.05, -0.15); orelha.rotation.set(-1.6, 0, l * 1.1); cab.add(orelha);
-    });
-    const finM = new THREE.MeshStandardMaterial({ color: 0x5ff0e8, emissive: 0x139a92, emissiveIntensity: 0.7, transparent: true, opacity: 0.88, side: THREE.DoubleSide });
-    for (let k = 0; k < 4; k++) {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.55 - k * 0.08, 3), finM); f.scale.set(1, 1, 0.3);
-      f.position.set(0, 0.38, 0.1 - k * 0.22); f.rotation.x = -0.6; cab.add(f);
-    }
+    const finM = new THREE.MeshStandardMaterial({ color: 0x2fa89c, emissive: 0x0d6e66, emissiveIntensity: 0.45, roughness: 0.6, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+    const { cab, mand, lingua, bigodes } = cabecaSerpente(finM);
     g.add(cab);
     // barbatanas do dorso (acompanham o corpo)
     const fins = [];
@@ -2981,7 +3097,7 @@
       const o = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 24), new THREE.MeshBasicMaterial({ color: 0xe8fbff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
       o.rotation.x = -Math.PI / 2; g.add(o); ondas.push(o);
     }
-    g.userData = { corpo, cab, mand, fins, ondas, espinha: [] };
+    g.userData = { corpo, cab, mand, lingua, bigodes, fins, ondas, espinha: [] };
     return g;
   }
   // monta o corpo a partir da espinha (pontos do rastro), saindo da água
@@ -3027,6 +3143,9 @@
     u.cab.rotation.order = 'YXZ';
     const mord = clamp(1 - (t - (e.mordeuEm || -9)) / 0.45, 0, 1);
     u.mand.rotation.x = 0.12 + Math.sin(t * 3) * 0.04 + (e.subida > 0.6 ? 0.18 : 0) + Math.sin(mord * Math.PI) * 0.7;
+    // língua: sai e volta de vez em quando (e sempre antes da mordida)
+    if (u.lingua) { const f = (t * 0.9 + e.id * 0.37) % 2.4, sai = f < 0.5 ? Math.sin(f / 0.5 * Math.PI) : 0; u.lingua.scale.z = Math.max(0.01, Math.max(sai, mord) * e.subida); u.lingua.rotation.y = Math.sin(t * 22) * 0.12 * sai; }
+    if (u.bigodes) u.bigodes.forEach(b => b.cadeia.forEach((j, k) => { j.rotation.x = 0.25 + Math.sin(t * 2.2 + k * 0.7) * 0.18; j.rotation.y = b.lado * (0.12 + Math.sin(t * 1.7 + k) * 0.1); }));
     // barbatanas no dorso
     u.fins.forEach((f, k) => {
       const i = 4 + k * 4; if (i >= N - 1) { f.visible = false; return; }
