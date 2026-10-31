@@ -60,10 +60,12 @@
       serpente: { nome: 'Serpente',       altura: 3.0, cor: '#148f77', anim: 'livre' }
     },
 
+    // Os três minions usam o mesmo goblin (minions/frente_neutro.glb); o que muda são os
+    // objetos montados por código: adaga, arco com aljava, ou um saco de ouro nas costas.
     minions: {
-      frente:     { altura: 0.8, cor: '#95a5a6' },
-      balistico:  { altura: 0.8, cor: '#7f8c8d' },
-      carregador: { altura: 0.8, cor: '#f1c40f' }
+      frente:     { altura: 0.8, cor: '#95a5a6', modelo: 'frente', aderecos: ['adaga'] },
+      balistico:  { altura: 0.8, cor: '#7f8c8d', modelo: 'frente', aderecos: ['arco', 'aljava'] },
+      carregador: { altura: 0.8, cor: '#f1c40f', modelo: 'frente', aderecos: ['saco'] }
     },
     times: { neutro: null, azul: '#2e5bff', vermelho: '#e0262b' },
 
@@ -933,16 +935,92 @@
     const t = CATALOGO.times[time] !== undefined ? time : 'neutro';
     let gltf = await carregarModelo(`${BASE}minions/${tipo}_${t}`);
     if (!gltf && t !== 'neutro') gltf = await carregarModelo(`${BASE}minions/${tipo}_neutro`);
+    if (!gltf && def.modelo && def.modelo !== tipo) gltf = await carregarModelo(`${BASE}minions/${def.modelo}_neutro`);
     let corpo;
     if (gltf) {
       corpo = clonar(gltf);
       normalizar(corpo, def.altura);
       if (CATALOGO.times[t]) aplicarCor(corpo, CATALOGO.times[t]);
+      (def.aderecos || []).forEach(n => montarAdereco(corpo, n));
     } else {
       corpo = boneco(def.altura, def.cor, CATALOGO.times[t] || def.cor);
     }
     return montar(corpo, { tipo: 'minion', minion: tipo, time: t }, 'humanoide', def.altura, gltf,
       ['minion_' + tipo, 'minion', 'humanoide']);
+  }
+
+  /* ================= ADEREÇOS DOS MINIONS (feitos por código) ================= */
+  // Medidas em metros, no espaço do personagem: +Z = frente, +Y = cima, +X = esquerda dele.
+  function matAdereco(cor, extra) {
+    const m = new THREE.MeshStandardMaterial(Object.assign({ color: cor, roughness: 0.75, metalness: 0 }, extra || {}));
+    m.userData.semTinta = true; return m;
+  }
+  const ADERECOS = {
+    adaga: { osso: 'righthand', pos: [0, -0.02, 0.05], fazer() {
+      const g = new THREE.Group();
+      const lamina = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.012, 0.24), matAdereco(0xc9d1d6, { metalness: 0.8, roughness: 0.3 }));
+      lamina.position.z = 0.14;
+      const guarda = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.02, 0.02), matAdereco(0x6b4a2b));
+      const cabo = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.08, 8), matAdereco(0x4a3020));
+      cabo.rotation.x = Math.PI / 2; cabo.position.z = -0.04;
+      g.add(lamina, guarda, cabo); return g;
+    } },
+    arco: { osso: 'lefthand', pos: [0, 0, 0.02], fazer() {
+      const g = new THREE.Group();
+      // arco de madeira curvado para a frente, em pé
+      const curva = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.014, 6, 20, Math.PI * 0.75), matAdereco(0x7a4b25));
+      curva.rotation.y = -Math.PI / 2; curva.rotation.x = 0;
+      curva.rotation.z = -Math.PI * 0.375;
+      curva.position.z = -0.30;               // o meio do arco fica na mão
+      const corda = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.555, 4), matAdereco(0xe8e2d0));
+      corda.position.z = -0.185;
+      g.add(curva, corda); return g;
+    } },
+    aljava: { osso: 'spine2', pos: [-0.06, 0.03, -0.15], fazer() {
+      const g = new THREE.Group();
+      const tubo = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.3, 10), matAdereco(0x6b4423));
+      g.add(tubo);
+      for (let i = 0; i < 4; i++) {
+        const haste = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.16, 4), matAdereco(0xd8c08a));
+        haste.position.set((i % 2 - 0.5) * 0.04, 0.2, (Math.floor(i / 2) - 0.5) * 0.04);
+        const pena = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.004), matAdereco(i % 2 ? 0xd94b3d : 0xf2f2f2));
+        pena.position.set(haste.position.x, 0.27, haste.position.z);
+        g.add(haste, pena);
+      }
+      g.rotation.z = -0.35; return g;
+    } },
+    saco: { osso: 'spine2', pos: [0, -0.02, -0.22], fazer() {
+      const g = new THREE.Group();
+      const saco = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), matAdereco(0x9a7a4a));
+      saco.scale.set(1.15, 1.25, 0.95);
+      const boca = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.06, 10), matAdereco(0x7d6038));
+      boca.position.y = 0.19;
+      g.add(saco, boca);
+      for (let i = 0; i < 5; i++) {
+        const moeda = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.008, 12), matAdereco(0xf1c40f, { metalness: 0.8, roughness: 0.3 }));
+        moeda.position.set((i - 2) * 0.025, 0.23 + (i % 2) * 0.012, (i % 3 - 1) * 0.02);
+        moeda.rotation.set(0.4 * (i - 2), 0, 0.3 * (i % 2));
+        g.add(moeda);
+      }
+      return g;
+    } }
+  };
+  function montarAdereco(corpo, nome) {
+    const def = ADERECOS[nome]; if (!def || !THREE.Box3) return null;
+    const osso = acharOsso(corpo, def.osso); if (!osso) return null;
+    const obj = def.fazer(); obj.name = 'adereco_' + nome;
+    corpo.updateMatrixWorld(true);
+    const qc = new THREE.Quaternion(), qo = new THREE.Quaternion(), so = new THREE.Vector3(), sc = new THREE.Vector3();
+    corpo.getWorldQuaternion(qc); osso.getWorldQuaternion(qo); osso.getWorldScale(so); corpo.getWorldScale(sc);
+    // fica de pé e para a frente do personagem na pose de repouso; depois acompanha o osso
+    obj.quaternion.copy(qo.clone().invert().multiply(qc));
+    const alvo = new THREE.Vector3(); osso.getWorldPosition(alvo);
+    alvo.add(new THREE.Vector3(def.pos[0], def.pos[1], def.pos[2]).applyQuaternion(qc));
+    osso.worldToLocal(alvo);
+    obj.position.copy(alvo);
+    obj.scale.set(1 / so.x, 1 / so.y, 1 / so.z);
+    osso.add(obj);
+    return obj;
   }
 
   /* ================= ARMAS NA MÃO ================= */
