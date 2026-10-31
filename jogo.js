@@ -279,7 +279,7 @@
       // se a textura própria do mapa ainda não existe, usa a reserva
       const img = new global.Image();
       img.onerror = () => { const r = Skins.textura(reserva, repX, repY); t.image = r.image; t.needsUpdate = true; setTimeout(() => { t.image = r.image; t.needsUpdate = true; }, 1500); };
-      img.src = 'assets/tex/' + nome + '.jpg?v=17';
+      img.src = 'assets/tex/' + nome + '.jpg?v=20';
     }
     return t;
   }
@@ -525,7 +525,7 @@
       E.mundo.add(malha);
       const usar = t => { mat.map = t; mat.needsUpdate = true; };
       if (R.cacheSprite[img]) usar(R.cacheSprite[img]);
-      else if (temDOM) R.texLoader.load('assets/sprites/' + img + '.png?v=17', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite[img] = t; usar(t); });
+      else if (temDOM) R.texLoader.load('assets/sprites/' + img + '.png?v=20', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite[img] = t; usar(t); });
     });
     // sombras de todas as árvores, também em lote
     const sg = new THREE.PlaneGeometry(1, 0.65); sg.rotateX(-Math.PI / 2);
@@ -595,7 +595,7 @@
     };
     if (R.cacheSprite[nome]) aplicar(R.cacheSprite[nome]);
     else if (temDOM) {
-      R.texLoader.load('assets/sprites/' + nome + '.png?v=17', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite[nome] = t; aplicar(t); });
+      R.texLoader.load('assets/sprites/' + nome + '.png?v=20', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite[nome] = t; aplicar(t); });
     }
     const temBase = (MAPAS.ANCORAS[nome] || 0) > 0.08;
     if (!temBase && opc.sombra !== false) sombra(x, z, Math.max(0.5, altura * 0.28), opc.pai);
@@ -699,11 +699,13 @@
     if (!R.Fx || !R.Fx.Rastro || !Skins.linhaArma) return;
     // a espada de fogo queima mesmo parada: o laço abaixo só passa por quem tem rastro, então acende aqui
     for (const e of E.entidades) {
-      if ((e.tipo === 'heroi' || e.tipo === 'remoto') && e.classe === 'soldado' && !e.rastro && tema(e).fogo && !e.morto && e.obj.visible !== false && Skins.linhaArma(e.obj, _rb, _rp)) espadaEmChamas(e, false, dt);
+      if ((e.tipo === 'heroi' || e.tipo === 'remoto') && e.classe === 'soldado' && !e.rastro && fxSkin(e).arma && !e.morto && e.obj.visible !== false && Skins.linhaArma(e.obj, _rb, _rp)) fxSkin(e).arma(e, false, dt);
     }
     for (const e of E.entidades) {
       if ((e.tipo !== 'heroi' && e.tipo !== 'remoto') || e.classe !== 'soldado' || !e.anim) continue;
       const ativo = !e.morto && (!!e.investida || /^(ataque|habilidade1|habilidade3)$/.test(e.anim.estado || ''));
+      const fs = fxSkin(e);
+      if (fs.semRastro) { if (!e.morto && e.obj.visible !== false && fs.arma && Skins.linhaArma(e.obj, _rb, _rp)) fs.arma(e, ativo, dt); continue; }
       if (!e.rastro) {
         if (!ativo) continue;
         e.rastro = new R.Fx.Rastro(tema(e).principal, 14);
@@ -711,7 +713,7 @@
       if (e.rastro.mesh.parent !== E.mundo) E.mundo.add(e.rastro.mesh);
       const tem = Skins.linhaArma(e.obj, _rb, _rp);
       e.rastro.passo(ativo && tem, tem ? _rb : null, tem ? _rp : null, dt);
-      if (tem && tema(e).fogo && e.obj.visible !== false && !e.morto) espadaEmChamas(e, ativo, dt);
+      if (tem && fs.arma && e.obj.visible !== false && !e.morto) fs.arma(e, ativo, dt);
     }
   }
 
@@ -774,9 +776,9 @@
     E.moitas.forEach(([x, z], i) => {
       // três arbustos juntos: parece um esconderijo de verdade
       const a = i * 2.4;
-      peca('moita_1', 1.7, x - Math.cos(a) * 0.9, z - 0.35, { tint: 0x6f8063 });
-      peca('moita_1', 1.6, x + Math.cos(a) * 0.95, z - 0.2, { tint: 0x66775c });
-      peca('moita_1', 2.2, x, z + 0.35, { tint: 0x7c8d6e });
+      peca('moita_1', 1.35, x - Math.cos(a) * 0.8, z - 0.4, { tint: 0xc9d3c0 });
+      peca('moita_1', 1.25, x + Math.cos(a) * 0.85, z - 0.3, { tint: 0xbac6b1 });
+      peca('moita_1', 1.6, x, z + 0.3, { tint: 0xffffff });
     });
 
     // floresta: miolo + uma mata fechada em toda a borda (é ela que segura o jogador)
@@ -1065,6 +1067,9 @@
     const l = wN + wE + 20; g.beginPath(); if (g.roundRect) g.roundRect(128 - l / 2, 6, l, 36, 12); else g.rect(128 - l / 2, 6, l, 36); g.fill();
     g.textAlign = 'left';
     g.fillStyle = CONFIG.coresElo[r.indice]; g.fillText(nome, x0, 25);
+    // onde ficam as estrelas no selo (para a chama sair exatamente de cima delas)
+    const wNum = est ? g.measureText(' ' + r.estrelas).width : 0, wEsp = g.measureText(' ').width;
+    e.seloEstrelasX = est ? ((x0 + wN + wEsp + (wNum - wEsp) / 2) - 128) / 256 * 1.9 : 0;
     if (est) {
       if (aura) { g.shadowColor = '#b04dff'; g.shadowBlur = 14; g.fillStyle = '#ffd34d'; g.fillText(est, x0 + wN, 25); g.fillText(est, x0 + wN, 25); }
       g.shadowBlur = 0; g.fillStyle = '#ffd34d'; g.fillText(est, x0 + wN, 25);
@@ -1075,9 +1080,17 @@
     const s = e.seloSprite;
     s.visible = !!(e.barra && e.barra.visible);
     s.position.set(e.x, e.barra.position.y + 0.3, e.z);
-    // fumaça roxa subindo do selo: mais forte a cada 150 estrelas acima de 50
-    if (e.seloFumaca > 0 && s.visible && Math.random() < dt * (2 + e.seloFumaca * 2)) {
-      emitir('media', e.x + (Math.random() - 0.5) * 0.5, s.position.y + 0.15, e.z, { n: 1, cor: Math.random() < 0.5 ? 0x7a2fc4 : 0xb04dff, vel: 0.2, subida: 0.9 + 0.2 * e.seloFumaca, vida: 0.9 });
+    // chaminha roxa bem pequena em cima do número de estrelas: um pouco mais viva a cada 150 estrelas acima de 50
+    if (e.seloFumaca > 0 && s.visible) {
+      e.seloChamaAcc = (e.seloChamaAcc || 0) + dt * (34 + 8 * Math.min(5, e.seloFumaca));
+      while (e.seloChamaAcc >= 1) {
+        e.seloChamaAcc -= 1;
+        const cor = Math.random() < 0.25 ? 0xe9c8ff : Math.random() < 0.6 ? 0xb04dff : 0x7a2fc4;
+        // base larga e ponta fina: as que nascem nas pontas sobem menos (formato de chama)
+        const lado = (Math.random() - 0.5) * 0.2;
+        emitir('faisca', e.x + (e.seloEstrelasX || 0) + lado, s.position.y + 0.1, e.z + 0.02,
+          { n: 1, cor, vel: 0.02, subida: (0.3 + 0.05 * Math.min(5, e.seloFumaca)) * (1 - Math.abs(lado) * 3.5), vida: 0.28 });
+      }
     }
   }
   function desenharBarra(e) {
@@ -1126,8 +1139,32 @@
   function aplicarSlow(e, pct, dur) { if (pct > 0 && dur > 0) e.slows.push({ pct, ate: E.t + dur }); }
   function preso(e) { return e.stunAte > E.t || e.congeladoAte > E.t; }
 
+  // ---------- balanço do administrador (dano e defesa de cada herói, mob, minion e torre) ----------
+  // Jogo.ajustes.balanco = { geral: { soldado: { dano: 100, defesa: 0 }, maestro: {...} }, mapas: { mapa1: { ... } } }
+  // dano em % (100 = normal); defesa em % de dano que deixa de levar (0 a 90). O ajuste do mapa vale por cima do geral.
+  function chaveBalanco(e) {
+    if (!e) return null;
+    if (e.tipo === 'heroi' || e.tipo === 'clone' || e.donoHeroi) return e.classe || P.classe;
+    if (e.tipo === 'mob' || e.tipo === 'minion') return e.especie;
+    if (e.tipo === 'serpente') return 'serpente';
+    if (e.tipo === 'torre') return 'torre';
+    return null;
+  }
+  function balanco(chave) {
+    const b = global.Jogo && Jogo.ajustes && Jogo.ajustes.balanco;
+    if (!b || !chave) return null;
+    const m = b.mapas && b.mapas[E.mapa] && b.mapas[E.mapa][chave];
+    const g = b.geral && b.geral[chave];
+    if (!m && !g) return null;
+    const v = k => (m && m[k] !== undefined && m[k] !== '' && m[k] !== null) ? Number(m[k]) : (g && g[k] !== undefined && g[k] !== '' && g[k] !== null) ? Number(g[k]) : null;
+    return { dano: v('dano'), defesa: v('defesa') };
+  }
   function causarDano(alvo, valor, origem, opc) {
     opc = opc || {};
+    // quem bate: o dano dele sobe ou desce (jogador de outro celular já mandou o dano ajustado)
+    if (origem && !remoto(origem)) { const b = balanco(chaveBalanco(origem)); if (b && b.dano !== null && isFinite(b.dano)) valor *= Math.max(0, b.dano) / 100; }
+    // quem apanha: a defesa tira uma parte (dano real e disparos especiais da torre passam direto)
+    if (!opc.verdadeiro && !remoto(alvo)) { const b = balanco(chaveBalanco(alvo)); if (b && b.defesa !== null && isFinite(b.defesa)) valor *= 1 - clamp(b.defesa, 0, 90) / 100; }
     if (!alvo || alvo.morto || alvo.invulAte > E.t) return 0;
     if (alvo.tipo === 'heroi' && (zonaSegura(alvo.x, alvo.z) || PODERES.imortal)) return 0;
     if (remoto(alvo) && (!deMim(origem) || PODERES.semVantagem || zonaSegura(alvo.x, alvo.z))) return 0;
@@ -1253,6 +1290,13 @@
   // quadro sempre de frente para a câmera (a câmera nunca gira, mas sobe/desce junto)
   function deFrente(m) { if (R.camera && m.quaternion && R.camera.quaternion) m.quaternion.copy(R.camera.quaternion); }
   function projetilVisual(nome, cor, tam) {
+    // esferas desenhadas (não somam luz: o preto aparece preto)
+    const desenhadas = { orbeNegra: () => [TX.orbeNegra(), 0xffffff], orbeNoite: () => [TX.orbeNoite(), 0xffffff], tintaRosa: () => [TX.bola(), 0xff5ab4], tintaAmarela: () => [TX.bola(), 0xffe14d] };
+    if (desenhadas[nome]) {
+      const [tex, c] = desenhadas[nome]();
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: c, transparent: true, depthWrite: false }));
+      const k = nome.indexOf('tinta') === 0 ? 0.6 : 1.1; s.scale.set(tam * k, tam * k, 1); s.renderOrder = 11; return s;
+    }
     const shader = (nome === 'brilho' || nome === 'fogo') && R.Fx && R.Fx.orbe(nome === 'fogo' ? (cor || 0xff7a2a) : (cor || 0xffffff));
     if (shader) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(tam * 1.9, tam * 1.9), shader);
@@ -1383,10 +1427,20 @@
   const TEMAS = {
     soldado:  { padrao: { principal: 0xffd27a, faisca: 0xfff1c4, poeira: 0xcbb38f, brasa: 0xffa23a },
                 // Cavaleiro de Lava: tudo pega fogo (espada em chamas, espiral, rastro e fogo saindo do chão)
-                lava: { principal: 0xff6a1a, faisca: 0xffc04d, poeira: 0x4a2414, brasa: 0xff3d00, fogo: true } },
-    suporte:  { padrao: { principal: 0xfff3b0, cura: 0x6dff9c, brilho: 0xffe08a, selo: 0xfff3b0, controle: 0xff6b6b } },
-    mago:     { padrao: { principal: 0xb26bff, brasa: 0xd9a0ff, fumaca: 0x6b4a8f, chama: 0x9b5cff } },
-    atirador: { padrao: { principal: 0x7fe0ff, faisca: 0xd9f8ff, explosivo: 0xffa23a, brasa: 0xffd27a } }
+                lava: { principal: 0xff6a1a, faisca: 0xffc04d, poeira: 0x4a2414, brasa: 0xff3d00, fogo: true },
+                cacadora: { principal: 0x4dff7a, faisca: 0xb8ffc4, poeira: 0x3a3022, brasa: 0x1fbf4f },
+                vilkronomita: { principal: 0x4fb8ff, faisca: 0xcfeeff, poeira: 0x2a3440, brasa: 0x2a7bff },
+                viking: { principal: 0x39ff14, faisca: 0xb6ffb0, poeira: 0x2e3326, brasa: 0x1a9a20 },
+                samurai: { principal: 0xff5a1a, faisca: 0xffa040, poeira: 0x1a1a1a, brasa: 0xff3d00 } },
+    suporte:  { padrao: { principal: 0xfff3b0, cura: 0x6dff9c, brilho: 0xffe08a, selo: 0xfff3b0, controle: 0xff6b6b },
+                ciber: { principal: 0x39ff88, cura: 0x39ff88, brilho: 0xa6ffcf, selo: 0x39ff88, controle: 0x39ff88 },
+                medicina: { principal: 0xff2a2a, cura: 0xff3b3b, brilho: 0xff8080, selo: 0xff2a2a, controle: 0xff2a2a } },
+    mago:     { padrao: { principal: 0xb26bff, brasa: 0xd9a0ff, fumaca: 0x6b4a8f, chama: 0x9b5cff },
+                anubis: { principal: 0xffc23a, brasa: 0xffe08a, fumaca: 0x6b5420, chama: 0xffb020 },
+                noturna: { principal: 0x2a8bff, brasa: 0x7fc8ff, fumaca: 0x0a0a14, chama: 0x2a8bff } },
+    atirador: { padrao: { principal: 0x7fe0ff, faisca: 0xd9f8ff, explosivo: 0xffa23a, brasa: 0xffd27a },
+                cosmos: { principal: 0xff2a2a, faisca: 0xff6060, explosivo: 0xff4a10, brasa: 0x8a0a0a },
+                paintball: { principal: 0xff5ab4, faisca: 0xffe14d, explosivo: 0xff5ab4, brasa: 0xffe14d } }
   };
   function tema(h) {
     const t = TEMAS[h && h.classe] || TEMAS.soldado;
@@ -1586,10 +1640,13 @@
   }
   function explosaoEnergia(h, x, z) {
     const c = CONFIG.atirador, tm = tema(h);
-    anelEfeito(x, z, c.explosaoRaio, tm.explosivo, 0.45, true);
-    discoEfeito(x, z, c.explosaoRaio * 0.8, tm.brasa, 0.3);
-    emitir('grande', x, 0.8, z, { n: 6, cor: tm.explosivo, vel: 2, subida: 1, vida: 0.35 });
-    emitir('faisca', x, 0.8, z, { n: 22, cor: tm.brasa, vel: 6, subida: 3, grav: 10, vida: 0.5 });
+    if (fxSkin(h).explosao) fxSkin(h).explosao(h, x, z);
+    else {
+      anelEfeito(x, z, c.explosaoRaio, tm.explosivo, 0.45, true);
+      discoEfeito(x, z, c.explosaoRaio * 0.8, tm.brasa, 0.3);
+      emitir('grande', x, 0.8, z, { n: 6, cor: tm.explosivo, vel: 2, subida: 1, vida: 0.35 });
+      emitir('faisca', x, 0.8, z, { n: 22, cor: tm.brasa, vel: 6, subida: 3, grav: 10, vida: 0.5 });
+    }
     area(x, z, c.explosaoRaio, h, e => causarDano(e, CLASSES.atirador.dano, h, { critExtra: c.explosaoCritico, semReacao: true }));
   }
   // ---------- ÚLTIMATES ----------
@@ -1609,11 +1666,7 @@
           if (i % 2 === 0) pedras(x, z, 3, 0x6b5a48, 4);
           if (i === 0) tremer(h.x, h.z, 0.35, 0.4);
           if (i % 2 === 0) rachaduras(x, z, u.largura * 1.4, 2);
-          if (tm.fogo) {
-            labareda(x, z, 0xff4a10, 2.2 + Math.random() * 0.8, 1.1);
-            agendar(0.08, () => labareda(x + (Math.random() - 0.5) * u.largura, z + (Math.random() - 0.5) * u.largura, 0xff8a2a, 1.4, 0.9));
-            emitir('grande', x, 0.4, z, { n: 3, cor: 0xff3d00, vel: 0.8, subida: 4, vida: 0.6 });
-          }
+          if (fxSkin(h).ult) fxSkin(h).ult(h, x, z, i, u);
           area(x, z, u.largura, h, e => { if (atingidos.has(e)) return; atingidos.add(e); causarDano(e, CLASSES.soldado.dano * u.dano, h); });
         });
       }
@@ -1645,6 +1698,11 @@
         });
       };
       golpe(u.dano, 2);                                         // explosão: 150% do dano como dano real + lentidão
+      if (fxSkin(h).triangulo) {
+        fxSkin(h).triangulo(h, A, B, C, u.dur);
+        for (let k = 1; k <= u.dur / 0.5; k++) agendar(k * 0.5, () => golpe(0.25, 0.6));
+        return;
+      }
       const fogo = chaoTriangulo(A, B, C, tema(h).chama, u.dur);
       const tm = tema(h);
       const brasas = () => { for (let q = 0; q < 10; q++) { const r1 = Math.random(), r2 = Math.random(), w = r1 + r2 > 1 ? [1 - r1, 1 - r2] : [r1, r2];
@@ -1690,6 +1748,481 @@
     // as chamas acendem em volta seguindo o giro (cada uma mais longe, como uma espiral)
     for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2.4, r = raio * (0.45 + 0.5 * i / 9); agendar(i * 0.05, () => labareda(h.x + Math.cos(a) * r, h.z + Math.sin(a) * r, 0xff6a1a, 1.6 + i * 0.06, 0.7)); }
   }
+  /* ======================= EFEITOS DAS SKINS ======================= */
+  // Cada skin pode trocar pedaços dos efeitos da classe. Os ganchos ficam em FX_SKIN[id]:
+  //   soldado: arma(e, golpe, dt) · giro(h, raio) · rastro(h, iv) · ult(h, x, z, i, u)
+  //   suporte: cura(h) · escudo {cor, tex} · selo(h, raio, dur)
+  //   mago:    chamas(h, x, z, dur) · ilusao(h, clone, dur) · clone(c, consumido, dt) · triangulo(h, A, B, C, dur)
+  //   atirador: projetil(h, explode) · acerto(h, alvo, explode) · aceleracao(h, dur) · explosao(h, x, z) · saltoSai/saltoChega(h, x, z)
+  //   todos:   projetil(h) → muda o visual do ataque básico
+  const fxSkin = e => (e && FX_SKIN[e.skin]) || {};
+  R.texSkin = R.texSkin || {};
+  function texSkin(nome, w, hh, desenhar) {
+    if (!R.texSkin[nome]) { R.texSkin[nome] = canvasTex(w, hh, desenhar); if (R.texSkin[nome].encoding !== undefined && THREE.LinearEncoding) R.texSkin[nome].encoding = THREE.sRGBEncoding; }
+    return R.texSkin[nome];
+  }
+  const corCss = (c, a) => { const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255; return a === undefined ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${a})`; };
+  // ---- desenhos feitos à mão no canvas (nada de imagem externa) ----
+  function glifo(g, k, s) {
+    // hieróglifos simplificados: ankh, olho, pássaro, água, junco, cobra, sol, pena, braço, pilar
+    g.beginPath();
+    switch (k % 10) {
+      case 0: g.ellipse(0, -s * 0.28, s * 0.16, s * 0.2, 0, 0, 7); g.moveTo(-s * 0.3, -s * 0.05); g.lineTo(s * 0.3, -s * 0.05); g.moveTo(0, -s * 0.08); g.lineTo(0, s * 0.45); break;
+      case 1: g.moveTo(-s * 0.4, 0); g.quadraticCurveTo(0, -s * 0.3, s * 0.4, 0); g.quadraticCurveTo(0, s * 0.2, -s * 0.4, 0); g.moveTo(s * 0.06, -s * 0.02); g.arc(0, -s * 0.02, s * 0.06, 0, 7); g.moveTo(-s * 0.1, s * 0.12); g.quadraticCurveTo(-s * 0.15, s * 0.4, s * 0.05, s * 0.38); break;
+      case 2: g.moveTo(-s * 0.3, s * 0.1); g.quadraticCurveTo(-s * 0.1, -s * 0.2, s * 0.15, -s * 0.15); g.lineTo(s * 0.32, -s * 0.22); g.moveTo(s * 0.15, -s * 0.15); g.quadraticCurveTo(s * 0.25, s * 0.1, -s * 0.3, s * 0.1); g.moveTo(-s * 0.05, s * 0.1); g.lineTo(-s * 0.1, s * 0.42); g.moveTo(s * 0.08, s * 0.1); g.lineTo(s * 0.08, s * 0.42); break;
+      case 3: for (let i = 0; i < 2; i++) { const y = -s * 0.1 + i * s * 0.2; g.moveTo(-s * 0.4, y); for (let q = 0; q < 6; q++) g.lineTo(-s * 0.4 + (q + 1) * s * 0.133, y + (q % 2 ? -1 : 1) * s * 0.07); } break;
+      case 4: g.moveTo(0, s * 0.45); g.quadraticCurveTo(-s * 0.2, 0, 0, -s * 0.45); g.quadraticCurveTo(s * 0.2, 0, 0, s * 0.45); g.moveTo(0, s * 0.45); g.lineTo(0, -s * 0.3); break;
+      case 5: g.moveTo(-s * 0.35, s * 0.3); g.bezierCurveTo(-s * 0.35, -s * 0.1, s * 0.35, s * 0.2, s * 0.3, -s * 0.25); g.lineTo(s * 0.4, -s * 0.3); break;
+      case 6: g.arc(0, 0, s * 0.3, 0, 7); g.moveTo(s * 0.07, 0); g.arc(0, 0, s * 0.07, 0, 7); break;
+      case 7: g.moveTo(0, s * 0.45); g.quadraticCurveTo(-s * 0.22, -s * 0.1, s * 0.05, -s * 0.45); g.quadraticCurveTo(s * 0.2, -s * 0.05, 0, s * 0.45); g.moveTo(0, s * 0.4); g.lineTo(s * 0.03, -s * 0.35); break;
+      case 8: g.moveTo(-s * 0.35, -s * 0.05); g.lineTo(s * 0.2, -s * 0.05); g.lineTo(s * 0.2, -s * 0.35); g.moveTo(-s * 0.35, s * 0.08); g.lineTo(s * 0.32, s * 0.08); g.lineTo(s * 0.32, -s * 0.35); break;
+      default: g.moveTo(0, s * 0.45); g.lineTo(0, -s * 0.45); for (let i = 0; i < 4; i++) { const y = -s * 0.4 + i * s * 0.1; g.moveTo(-s * 0.2, y); g.lineTo(s * 0.2, y); }
+    }
+    g.stroke();
+  }
+  function caveira(g, s) {
+    g.beginPath(); g.arc(0, -s * 0.1, s * 0.32, Math.PI * 0.85, Math.PI * 2.15); g.lineTo(s * 0.2, s * 0.32); g.lineTo(-s * 0.2, s * 0.32); g.closePath(); g.fill();
+    g.save(); g.globalCompositeOperation = 'destination-out';
+    g.beginPath(); g.ellipse(-s * 0.12, -s * 0.05, s * 0.08, s * 0.1, 0, 0, 7); g.ellipse(s * 0.12, -s * 0.05, s * 0.08, s * 0.1, 0, 0, 7); g.fill();
+    g.beginPath(); g.moveTo(0, s * 0.06); g.lineTo(-s * 0.04, s * 0.15); g.lineTo(s * 0.04, s * 0.15); g.fill();
+    for (let i = -2; i <= 2; i++) g.fillRect(i * s * 0.07 - s * 0.012, s * 0.22, s * 0.024, s * 0.1);
+    g.restore();
+  }
+  function osso(g, s) {
+    g.beginPath(); g.rect(-s * 0.32, -s * 0.05, s * 0.64, s * 0.1);
+    [[-1, -1], [-1, 1], [1, -1], [1, 1]].forEach(([a, b]) => { g.moveTo(a * s * 0.36 + s * 0.07, b * s * 0.06); g.arc(a * s * 0.36, b * s * 0.06, s * 0.07, 0, 7); });
+    g.fill();
+  }
+  const LINHAS_PY = ['def curar(aliados):', '    for a in aliados:', '        a.hp += 35', 'import vilkron as vk', 'escudo = vk.Escudo(4)', 'while vivo: pulsar()', 'if hp < 50: curar()', 'return True', 'print("online")', '0x1F 0xA3 0x7C 0xE0', 'class Nano(Robo):', 'self.energia = 100'];
+  function trilhasCircuito(g, cx, cy, r0, r1, n, rnd) {
+    for (let i = 0; i < n; i++) {
+      let a = i / n * Math.PI * 2 + rnd() * 0.2, r = r0;
+      let x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      g.beginPath(); g.moveTo(x, y);
+      while (r < r1) {
+        const passo = 14 + rnd() * 26; r = Math.min(r1, r + passo);
+        if (rnd() < 0.35) a += (rnd() < 0.5 ? -1 : 1) * 0.12;
+        x = cx + Math.cos(a) * r; y = cy + Math.sin(a) * r; g.lineTo(x, y);
+      }
+      g.stroke(); g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill();
+      g.beginPath(); g.arc(cx + Math.cos(a) * (r0 + (r1 - r0) * 0.5), cy + Math.sin(a) * (r0 + (r1 - r0) * 0.5), 2.5, 0, 7); g.fill();
+    }
+  }
+  const TX = {
+    codigo: () => texSkin('codigo', 256, 256, g => {
+      const grad = g.createRadialGradient(128, 128, 10, 128, 128, 124); grad.addColorStop(0, 'rgba(120,255,170,0.9)'); grad.addColorStop(0.55, 'rgba(40,220,110,0.45)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+      g.font = 'bold 15px monospace'; g.fillStyle = 'rgba(230,255,240,0.95)';
+      LINHAS_PY.forEach((l, i) => g.fillText(l, 30 + (i % 3) * 4, 46 + i * 15));
+    }),
+    caveiras: () => texSkin('caveiras', 256, 256, g => {
+      const grad = g.createRadialGradient(128, 128, 10, 128, 128, 124); grad.addColorStop(0, 'rgba(255,150,150,0.9)'); grad.addColorStop(0.55, 'rgba(220,30,30,0.45)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+      g.fillStyle = 'rgba(255,235,235,0.95)';
+      [[128, 120, 70], [72, 150, 34], [184, 150, 34], [128, 196, 28]].forEach(([x, y, s]) => { g.save(); g.translate(x, y); caveira(g, s); g.restore(); });
+    }),
+    anelCircuito: () => texSkin('anelCircuito', 512, 512, g => {
+      const rnd = semeado(31); g.strokeStyle = '#ffffff'; g.fillStyle = '#ffffff'; g.lineWidth = 3;
+      g.beginPath(); g.arc(256, 256, 246, 0, 7); g.stroke(); g.lineWidth = 2; g.beginPath(); g.arc(256, 256, 214, 0, 7); g.stroke();
+      trilhasCircuito(g, 256, 256, 150, 240, 26, rnd);
+    }),
+    anelOssos: () => texSkin('anelOssos', 512, 512, g => {
+      g.fillStyle = '#ffffff'; g.strokeStyle = '#ffffff'; g.lineWidth = 3;
+      g.beginPath(); g.arc(256, 256, 246, 0, 7); g.stroke();
+      for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; g.save(); g.translate(256 + Math.cos(a) * 214, 256 + Math.sin(a) * 214); g.rotate(a + Math.PI / 2); if (i % 2) osso(g, 46); else caveira(g, 34); g.restore(); }
+    }),
+    escudoCircuito: () => texSkin('escudoCircuito', 256, 256, g => {
+      const rnd = semeado(7); g.strokeStyle = '#ffffff'; g.fillStyle = '#ffffff'; g.lineWidth = 2;
+      for (let i = 0; i < 40; i++) { let x = rnd() * 256, y = rnd() * 256; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 4; k++) { if (k % 2) x += (rnd() - 0.5) * 70; else y += (rnd() - 0.5) * 70; g.lineTo(x, y); } g.stroke(); g.beginPath(); g.arc(x, y, 3, 0, 7); g.fill(); }
+    }),
+    escudoCaveiras: () => texSkin('escudoCaveiras', 256, 256, g => {
+      g.fillStyle = '#ffffff';
+      for (let i = 0; i < 12; i++) { g.save(); g.translate((i % 4) * 64 + 32 + (Math.floor(i / 4) % 2) * 20, Math.floor(i / 4) * 85 + 42); caveira(g, 40); g.restore(); }
+    }),
+    seloCircuito: () => texSkin('seloCircuito', 512, 512, g => {
+      const rnd = semeado(53); g.strokeStyle = '#ffffff'; g.fillStyle = '#ffffff'; g.lineWidth = 3;
+      trilhasCircuito(g, 256, 256, 30, 225, 22, rnd);
+      g.lineWidth = 3; g.beginPath(); g.arc(256, 256, 250, 0, 7); g.stroke();
+      g.font = 'bold 13px monospace'; const txt = LINHAS_PY.join('  ·  ') + '  ·  ';
+      for (let i = 0; i < txt.length && i < 150; i++) { const a = i / 150 * Math.PI * 2; g.save(); g.translate(256 + Math.cos(a) * 238, 256 + Math.sin(a) * 238); g.rotate(a + Math.PI / 2); g.fillText(txt[i], -3, 4); g.restore(); }
+    }),
+    seloCaveiras: () => texSkin('seloCaveiras', 512, 512, g => {
+      g.fillStyle = '#ffffff'; g.strokeStyle = '#ffffff'; g.lineWidth = 3;
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; [70, 130, 185].forEach((r, k) => { g.save(); g.translate(256 + Math.cos(a) * r, 256 + Math.sin(a) * r); g.rotate(a + Math.PI / 2); caveira(g, 26 + k * 8); g.restore(); }); }
+      g.beginPath(); g.arc(256, 256, 250, 0, 7); g.stroke();
+      for (let i = 0; i < 22; i++) { const a = i / 22 * Math.PI * 2; g.save(); g.translate(256 + Math.cos(a) * 232, 256 + Math.sin(a) * 232); g.rotate(a); osso(g, 34); g.restore(); }
+    }),
+    hieroAnel: () => texSkin('hieroAnel', 512, 512, g => {
+      g.strokeStyle = '#ffffff'; g.lineWidth = 4; g.lineCap = 'round';
+      g.beginPath(); g.arc(256, 256, 248, 0, 7); g.stroke(); g.beginPath(); g.arc(256, 256, 186, 0, 7); g.stroke();
+      for (let i = 0; i < 20; i++) { const a = i / 20 * Math.PI * 2; g.save(); g.translate(256 + Math.cos(a) * 217, 256 + Math.sin(a) * 217); g.rotate(a + Math.PI / 2); glifo(g, i * 3, 44); g.restore(); }
+      for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + 0.2; g.save(); g.translate(256 + Math.cos(a) * 140, 256 + Math.sin(a) * 140); g.rotate(a + Math.PI / 2); glifo(g, i * 7 + 1, 38); g.restore(); }
+      for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; g.save(); g.translate(256 + Math.cos(a) * 70, 256 + Math.sin(a) * 70); g.rotate(a + Math.PI / 2); glifo(g, i * 2, 40); g.restore(); }
+    }),
+    hieroTri: () => texSkin('hieroTri', 512, 512, g => {
+      g.strokeStyle = '#ffffff'; g.lineWidth = 4; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(256, 8); g.lineTo(506, 504); g.lineTo(6, 504); g.closePath(); g.stroke();
+      g.save(); g.beginPath(); g.moveTo(256, 30); g.lineTo(486, 494); g.lineTo(26, 494); g.closePath(); g.clip();
+      let k = 0; for (let y = 60; y < 500; y += 48) for (let x = 24; x < 500; x += 44) { g.save(); g.translate(x + ((y / 48) % 2) * 20, y); glifo(g, k++ * 7, 34); g.restore(); }
+      g.restore();
+    }),
+    glifo: k => texSkin('glifo' + (k % 10), 64, 64, g => { g.strokeStyle = '#ffffff'; g.lineWidth = 6; g.lineCap = 'round'; g.translate(32, 32); glifo(g, k, 52); }),
+    raiz: () => texSkin('raiz', 128, 256, g => {
+      const tronco = (x, y, ang, len, larg, prof) => {
+        const x2 = x + Math.sin(ang) * len, y2 = y - Math.cos(ang) * len;
+        g.lineWidth = larg; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.sin(ang + 0.6) * len * 0.5, y - Math.cos(ang + 0.6) * len * 0.5, x2, y2); g.stroke();
+        if (prof < 3) { tronco(x2, y2, ang + 0.5, len * 0.62, larg * 0.6, prof + 1); tronco(x2, y2, ang - 0.4, len * 0.7, larg * 0.65, prof + 1); }
+      };
+      g.lineCap = 'round';
+      g.strokeStyle = 'rgba(90,255,140,0.55)'; g.shadowColor = '#5aff8c'; g.shadowBlur = 12; tronco(64, 254, 0.05, 110, 22, 0);
+      g.shadowBlur = 0; g.strokeStyle = '#3b2a1c'; tronco(64, 254, 0.05, 110, 16, 0);
+      g.strokeStyle = 'rgba(140,110,80,0.6)'; tronco(62, 254, 0.05, 110, 5, 0);
+    }),
+    raio: () => texSkin('raio', 128, 512, g => {
+      const rnd = semeado(99), pts = [[64, 0]];
+      for (let y = 30; y <= 512; y += 30) pts.push([64 + (rnd() - 0.5) * 60, y]);
+      const traco = (w, cor, blur) => { g.lineWidth = w; g.strokeStyle = cor; g.shadowColor = '#5ab8ff'; g.shadowBlur = blur; g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); };
+      traco(14, 'rgba(60,150,255,0.6)', 20); traco(6, '#bfe6ff', 10); traco(2.5, '#ffffff', 0);
+      g.lineWidth = 3; g.strokeStyle = '#9fd6ff'; [4, 9, 13].forEach(i => { const [x, y] = pts[i]; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - 0.5) * 70, y + 40); g.lineTo(x + (rnd() - 0.5) * 90, y + 70); g.stroke(); });
+    }),
+    arco: () => texSkin('arco', 128, 64, g => {
+      const rnd = semeado(5); g.lineCap = 'round';
+      [[10, 'rgba(60,150,255,0.5)'], [4, '#bfe6ff'], [1.5, '#ffffff']].forEach(([w, c]) => { const r2 = semeado(5); g.lineWidth = w; g.strokeStyle = c; g.beginPath(); g.moveTo(4, 32); for (let x = 16; x <= 124; x += 12) g.lineTo(x, 32 + (r2() - 0.5) * 40); g.stroke(); });
+    }),
+    racha: cor => texSkin('racha' + cor, 512, 512, g => {
+      const rnd = semeado(cor & 255), ramo = (x, y, a, len, larg, p) => {
+        const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+        g.lineWidth = larg; g.beginPath(); g.moveTo(x, y); g.lineTo((x + x2) / 2 + (rnd() - 0.5) * 18, (y + y2) / 2 + (rnd() - 0.5) * 18); g.lineTo(x2, y2); g.stroke();
+        if (p < 3 && rnd() < 0.85) { ramo(x2, y2, a + (rnd() - 0.5) * 1.1, len * 0.7, larg * 0.7, p + 1); if (rnd() < 0.5) ramo(x2, y2, a + (rnd() - 0.5) * 1.6, len * 0.55, larg * 0.6, p + 1); }
+      };
+      g.lineCap = 'round';
+      const desenhar = (w, est, blur) => { g.strokeStyle = est; g.shadowColor = corCss(cor); g.shadowBlur = blur; const r0 = rnd; for (let i = 0; i < 9; i++) ramo(256, 256, i / 9 * Math.PI * 2 + rnd() * 0.4, 60 + rnd() * 50, w, 0); };
+      desenhar(16, 'rgba(10,8,6,0.95)', 0);
+      const r2 = semeado(cor & 255); const salvo = rnd;
+      g.globalCompositeOperation = 'lighter';
+      // segunda passada com a mesma semente: o brilho fica dentro das rachaduras
+      const rnd2 = semeado(cor & 255), ramo2 = (x, y, a, len, larg, p) => {
+        const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+        g.lineWidth = larg; g.beginPath(); g.moveTo(x, y); g.lineTo((x + x2) / 2 + (rnd2() - 0.5) * 18, (y + y2) / 2 + (rnd2() - 0.5) * 18); g.lineTo(x2, y2); g.stroke();
+        if (p < 3 && rnd2() < 0.85) { ramo2(x2, y2, a + (rnd2() - 0.5) * 1.1, len * 0.7, larg * 0.7, p + 1); if (rnd2() < 0.5) ramo2(x2, y2, a + (rnd2() - 0.5) * 1.6, len * 0.55, larg * 0.6, p + 1); }
+      };
+      g.strokeStyle = corCss(cor); g.shadowColor = corCss(cor); g.shadowBlur = 16;
+      for (let i = 0; i < 9; i++) ramo2(256, 256, i / 9 * Math.PI * 2 + rnd2() * 0.4, 60 + rnd2() * 50, 6, 0);
+    }),
+    espiral: cor => texSkin('espiral' + cor, 512, 512, g => {
+      g.lineCap = 'round';
+      const volta = (w, est, blur) => { g.lineWidth = w; g.strokeStyle = est; g.shadowColor = corCss(cor); g.shadowBlur = blur;
+        for (let b = 0; b < 3; b++) { g.beginPath(); for (let t = 0; t <= 1; t += 0.01) { const a = b / 3 * Math.PI * 2 + t * Math.PI * 3, r = 20 + t * 225, j = Math.sin(t * 60 + b) * 4; const x = 256 + Math.cos(a) * (r + j), y = 256 + Math.sin(a) * (r + j); t ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); } };
+      volta(22, 'rgba(12,8,6,0.95)', 0); g.globalCompositeOperation = 'lighter'; volta(8, corCss(cor), 18);
+    }),
+    cratera: () => texSkin('cratera', 256, 256, g => {
+      const grad = g.createRadialGradient(128, 128, 8, 128, 128, 124);
+      grad.addColorStop(0, 'rgba(255,220,120,1)'); grad.addColorStop(0.3, 'rgba(255,90,10,0.95)'); grad.addColorStop(0.55, 'rgba(120,20,0,0.95)'); grad.addColorStop(0.75, 'rgba(25,18,14,0.95)'); grad.addColorStop(1, 'rgba(25,18,14,0)');
+      g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+    }),
+    tinta: () => texSkin('tinta', 128, 128, g => {
+      const rnd = semeado(11); g.fillStyle = '#ffffff';
+      g.beginPath(); g.arc(64, 64, 30, 0, 7); g.fill();
+      for (let i = 0; i < 11; i++) { const a = rnd() * 6.28, d = 30 + rnd() * 26, r = 4 + rnd() * 10; g.beginPath(); g.arc(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, r, 0, 7); g.fill(); g.lineWidth = r * 0.9; g.strokeStyle = '#fff'; g.beginPath(); g.moveTo(64, 64); g.lineTo(64 + Math.cos(a) * d, 64 + Math.sin(a) * d); g.stroke(); }
+    }),
+    pegada: () => texSkin('pegada', 128, 128, g => {
+      g.fillStyle = '#ffffff';
+      g.beginPath(); g.ellipse(64, 80, 26, 22, 0, 0, 7); g.fill();
+      [[-26, -18], [-9, -34], [9, -34], [26, -18]].forEach(([x, y]) => { g.beginPath(); g.ellipse(64 + x, 80 + y, 9, 12, x * 0.02, 0, 7); g.fill(); });
+    }),
+    lampada: () => texSkin('lampada', 128, 128, g => {
+      g.strokeStyle = '#ffe14d'; g.lineWidth = 5; g.lineCap = 'round';
+      for (let i = 0; i < 8; i++) { const a = -Math.PI / 2 + (i - 3.5) * 0.4; g.beginPath(); g.moveTo(64 + Math.cos(a) * 44, 52 + Math.sin(a) * 44); g.lineTo(64 + Math.cos(a) * 58, 52 + Math.sin(a) * 58); g.stroke(); }
+      g.fillStyle = '#fff3a0'; g.beginPath(); g.arc(64, 52, 30, 0, 7); g.fill();
+      g.fillStyle = '#ffd21a'; g.beginPath(); g.arc(64, 52, 22, 0, 7); g.fill();
+      g.fillStyle = '#9a9aa0'; g.fillRect(50, 80, 28, 8); g.fillRect(52, 90, 24, 6); g.fillRect(56, 98, 16, 6);
+    }),
+    orbeNegra: () => texSkin('orbeNegra', 128, 128, g => {
+      const grad = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+      grad.addColorStop(0, 'rgba(0,0,0,1)'); grad.addColorStop(0.55, 'rgba(8,0,4,1)'); grad.addColorStop(0.68, 'rgba(255,40,40,1)'); grad.addColorStop(0.8, 'rgba(200,0,0,0.6)'); grad.addColorStop(1, 'rgba(120,0,0,0)');
+      g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+    }),
+    orbeNoite: () => texSkin('orbeNoite', 128, 128, g => {
+      const grad = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+      grad.addColorStop(0, 'rgba(0,0,6,1)'); grad.addColorStop(0.55, 'rgba(4,4,14,1)'); grad.addColorStop(0.68, 'rgba(60,170,255,1)'); grad.addColorStop(0.82, 'rgba(30,110,255,0.55)'); grad.addColorStop(1, 'rgba(0,60,255,0)');
+      g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+    }),
+    bola: () => texSkin('bola', 64, 64, g => {
+      const grad = g.createRadialGradient(24, 22, 2, 32, 32, 30); grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.35, 'rgba(255,255,255,0.95)'); grad.addColorStop(0.9, 'rgba(200,200,200,1)'); grad.addColorStop(1, 'rgba(200,200,200,0)');
+      g.fillStyle = grad; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
+    })
+  };
+  // ---- peças reaproveitáveis ----
+  // decalque no chão: textura transparente que aparece, (gira) e some
+  function decalque(tex, x, z, r, cor, dur, o) {
+    o = o || {};
+    const mat = new THREE.MeshBasicMaterial({ map: tex, color: cor, transparent: true, opacity: 0, depthWrite: false, blending: o.normal ? THREE.NormalBlending : THREE.AdditiveBlending, side: THREE.DoubleSide });
+    const m = camada(new THREE.PlaneGeometry(r * 2, r * 2), mat, x, z, o.y || 0.1);
+    m.renderOrder = o.ordem || 7; m.rotation.z = o.rot !== undefined ? o.rot : Math.random() * 6.28;
+    const op = o.opacidade || 1;
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt; const k = this.t / dur;
+      const entra = Math.min(1, this.t / (o.entra || 0.15)), sai = o.devagar ? 1 - k : Math.min(1, (dur - this.t) / (o.sai || 0.4));
+      const pisca = o.pisca ? 0.75 + 0.25 * Math.sin(this.t * 17 + Math.sin(this.t * 7) * 2) : 1;
+      mat.opacity = op * Math.max(0, Math.min(entra, sai)) * pisca;
+      if (o.gira) m.rotation.z += dt * o.gira;
+      if (o.cresce) m.scale.setScalar(o.cresce[0] + (o.cresce[1] - o.cresce[0]) * Math.min(1, this.t / (o.cresceEm || dur)));
+      if (o.seguir) m.position.set(o.seguir.x, m.position.y, o.seguir.z);
+      if (k >= 1 || (o.seguir && o.seguir.morto)) { E.mundo.remove(m); return true; }
+    } });
+    return m;
+  }
+  // figura em pé virada para a câmera (clarão, raio, lâmpada, marca de tinta)
+  function figura(tex, x, y, z, tam, cor, dur, o) {
+    o = o || {};
+    const mat = new THREE.SpriteMaterial({ map: tex, color: cor, transparent: true, depthWrite: false, opacity: 0, blending: o.normal ? THREE.NormalBlending : THREE.AdditiveBlending });
+    const s = new THREE.Sprite(mat); s.scale.set(tam * (o.largura || 1), tam, 1); s.position.set(x, y, z); s.renderOrder = o.ordem || 12;
+    if (o.base && s.center) s.center.set(0.5, 0);
+    E.mundo.add(s);
+    const op = o.opacidade || 1;
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt; const k = this.t / dur;
+      const entra = Math.min(1, this.t / (o.entra || 0.08)), sai = o.devagar ? 1 - k : Math.min(1, (dur - this.t) / (o.sai || 0.25));
+      mat.opacity = op * Math.max(0, Math.min(entra, sai));
+      if (o.seguir) s.position.set(o.seguir.x + (o.dx || 0), (o.seguirY !== undefined ? o.seguirY : y) - (o.seguir.afundado || 0), o.seguir.z + (o.dz || 0));
+      if (o.sobe) s.position.y += o.sobe * dt;
+      if (o.cresce) { const c = o.cresce[0] + (o.cresce[1] - o.cresce[0]) * Math.min(1, this.t / (o.cresceEm || dur)); s.scale.set(tam * (o.largura || 1) * c, tam * c, 1); }
+      if (o.altura) { const h = o.altura(this.t, dur); s.scale.set(tam * (o.largura || 1), tam * Math.max(0.001, h), 1); }
+      if (k >= 1 || (o.seguir && o.seguir.morto)) { E.mundo.remove(s); return true; }
+    } });
+    return s;
+  }
+  // raiz saindo do chão: sobe rápido, fica, e afunda (devagar = afunda durante toda a duração)
+  function raizSobe(x, z, alt, dur, devagar) {
+    const sobe = 0.18;
+    figura(TX.raiz(), x, 0, z, alt, 0xffffff, dur, { normal: true, base: true, largura: 0.5, opacidade: 1, entra: 0.05, sai: 0.3, ordem: 11,
+      altura: (t, d) => t < sobe ? t / sobe : devagar ? 1 - (t - sobe) / (d - sobe) * 0.95 : (t > d - 0.4 ? (d - t) / 0.4 : 1) });
+  }
+  // raio caindo do céu
+  function raioCeu(x, z, cor) {
+    figura(TX.raio(), x, 0, z, 13, cor || 0xffffff, 0.32, { base: true, largura: 0.28, entra: 0.02, sai: 0.18, ordem: 13 });
+    figura(R.brilhoTex || TX.bola(), x, 0.6, z, 3.2, 0x7fc8ff, 0.3, { sai: 0.25 });
+    emitir('faisca', x, 0.3, z, { n: 16, cor: 0x9fd6ff, vel: 5, subida: 3, grav: 10, vida: 0.4 });
+    anelEfeito(x, z, 1.6, 0x4fb8ff, 0.35, true);
+    decalque(TX.racha(0x2a7bff), x, z, 1.1, 0xffffff, 1.6, { normal: true, opacidade: 0.85 });
+  }
+  // chama negra com borda azul neon (núcleo escuro de fumaça + chama azul por fora)
+  function chamaNegra(x, z, alt, dur, devagar) {
+    labareda(x, z, 0x1650d8, alt * 1.12, dur, devagar);
+    const fim = E.t + dur;
+    E.efeitos.push({ acc: 0, atualizar(dt) {
+      if (E.t > fim) return true;
+      const resta = devagar ? Math.max(0.15, (fim - E.t) / dur) : 1;
+      this.acc += dt * 16;
+      while (this.acc >= 1) { this.acc -= 1; particulas(x + (Math.random() - 0.5) * 0.3, z + 0.05, { n: 1, cor: 0x020205, tam: 0.62 * (0.6 + resta * 0.4), cresce: 1.3, velH: 0.12, velV: 2.4 * resta * alt / 1.6, gravidade: -0.3, vida: 0.5, opacidade: 0.95, y: 0.1 }); }
+    } });
+  }
+  // vulto negro do próprio herói (pose congelada no instante)
+  function vulto(h, dur) {
+    if (!THREE.SkeletonUtils || !THREE.SkeletonUtils.clone || !h.obj) return;
+    let c; try { c = THREE.SkeletonUtils.clone(h.obj); } catch (e) { return; }
+    const mat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false });
+    c.traverse(n => { if (n.isMesh) { n.material = mat; n.renderOrder = 9; } if (n.name && /^arma_/.test(n.name)) n.visible = true; });
+    c.position.set(h.x, -(h.afundado || 0), h.z); c.rotation.y = h.rot; E.mundo.add(c);
+    E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; mat.opacity = 0.6 * (1 - this.t / dur); if (this.t >= dur) { E.mundo.remove(c); return true; } } });
+  }
+  // pontos ao longo da lâmina (_rb → _rp), para quem tem arma
+  function pontoLamina(k) { return [_rb.x + (_rp.x - _rb.x) * k, _rb.y + (_rp.y - _rb.y) * k, _rb.z + (_rp.z - _rb.z) * k]; }
+  // espaçamento do rastro da investida
+  function passoRastro(h, iv, d) { if (iv.fxX !== undefined && Math.hypot(h.x - iv.fxX, h.z - iv.fxZ) < d) return false; iv.fxX = h.x; iv.fxZ = h.z; return true; }
+  const atras = (h, iv, m) => [h.x - Math.sin(iv.ang) * m, h.z - Math.cos(iv.ang) * m];
+
+  const FX_SKIN = {
+    // ---------------- SOLDADO ----------------
+    lava: {
+      arma: (e, golpe, dt) => espadaEmChamas(e, golpe, dt),
+      giro: (h, r) => espiralFogo(h, r),
+      rastro: (h, iv) => { if (!passoRastro(h, iv, 0.8)) return; const [x, z] = atras(h, iv, 0.5); labareda(x, z, 0xff5a14, 1.1 + Math.random() * 0.4, 3.2, true); },
+      ult: (h, x, z, i, u) => {
+        labareda(x, z, 0xff4a10, 2.2 + Math.random() * 0.8, 1.1);
+        agendar(0.08, () => labareda(x + (Math.random() - 0.5) * u.largura, z + (Math.random() - 0.5) * u.largura, 0xff8a2a, 1.4, 0.9));
+        emitir('grande', x, 0.4, z, { n: 3, cor: 0xff3d00, vel: 0.8, subida: 4, vida: 0.6 });
+      }
+    },
+    cacadora: {
+      arma: (e, golpe, dt) => {
+        e.fxAcc = (e.fxAcc || 0) + dt * (golpe ? 70 : 18);
+        while (e.fxAcc >= 1) { e.fxAcc -= 1; const [x, y, z] = pontoLamina(0.15 + Math.random() * 0.85);
+          emitir(Math.random() < 0.5 ? 'media' : 'faisca', x, y, z, { n: 1, cor: Math.random() < 0.5 ? 0x4dff7a : 0x1fbf4f, vel: golpe ? 0.5 : 0.2, subida: 0.7, vida: golpe ? 0.4 : 0.6 }); }
+      },
+      giro: (h, r) => {
+        for (let i = 0; i < 14; i++) { const t = i / 13, a = t * Math.PI * 3.4, rr = 0.7 + (r - 0.7) * t;
+          agendar(i * 0.035, () => { raizSobe(h.x + Math.cos(a) * rr, h.z + Math.sin(a) * rr, 0.8 + t * 0.7, 1.1); emitir('faisca', h.x + Math.cos(a) * rr, 0.3, h.z + Math.sin(a) * rr, { n: 4, cor: 0x5aff8c, vel: 1, subida: 2, vida: 0.5 }); }); }
+      },
+      rastro: (h, iv) => { if (!passoRastro(h, iv, 0.75)) return; const [x, z] = atras(h, iv, 0.5); raizSobe(x + (Math.random() - 0.5) * 0.6, z + (Math.random() - 0.5) * 0.6, 0.9 + Math.random() * 0.4, 3, true); },
+      ult: (h, x, z) => {
+        for (let k = 0; k < 3; k++) raizSobe(x + (Math.random() - 0.5) * 1.4, z + (Math.random() - 0.5) * 1.4, 2 + Math.random() * 1.2, 1.5);
+        emitir('media', x, 0.4, z, { n: 8, cor: 0x4dff7a, vel: 1.5, subida: 3, vida: 0.6 });
+        particulas(x, z, { n: 3, cor: 0x4a3a22, tam: 0.8, cresce: 2, velH: 2, velV: 1.4, gravidade: 3, vida: 0.7, opacidade: 0.7 });
+      }
+    },
+    vilkronomita: {
+      arma: (e, golpe, dt) => {
+        e.fxAcc = (e.fxAcc || 0) + dt * (golpe ? 55 : 12);
+        while (e.fxAcc >= 1) { e.fxAcc -= 1; const [x, y, z] = pontoLamina(0.55 + Math.random() * 0.45);
+          emitir('faisca', x, y, z, { n: 1, cor: Math.random() < 0.4 ? 0xffffff : 0x5ab8ff, vel: golpe ? 2.2 : 1.2, subida: 0.4, grav: 4, vida: 0.22 }); }
+        if (Math.random() < dt * (golpe ? 9 : 2.5)) { const [x, y, z] = pontoLamina(0.6 + Math.random() * 0.4); figura(TX.arco(), x, y, z, 0.35, 0xffffff, 0.09, { largura: 2, entra: 0.01, sai: 0.06 }); }
+      },
+      giro: (h, r) => {
+        for (let i = 0; i < 16; i++) { const t = i / 15, a = t * Math.PI * 3.6, rr = 0.6 + (r - 0.6) * t;
+          agendar(i * 0.03, () => { const x = h.x + Math.cos(a) * rr, z = h.z + Math.sin(a) * rr; figura(TX.arco(), x, 0.9, z, 1.3, 0xffffff, 0.2, { largura: 2, entra: 0.01, sai: 0.12 }); emitir('faisca', x, 0.9, z, { n: 6, cor: 0x9fd6ff, vel: 2.5, vida: 0.3 }); }); }
+        anelEfeito(h.x, h.z, r, 0x4fb8ff, 0.4, true);
+      },
+      rastro: (h, iv) => {
+        if (!passoRastro(h, iv, 0.7)) return; const [x, z] = atras(h, iv, 0.4);
+        decalque(TX.racha(0x2a7bff), x, z, 0.9, 0xffffff, 3, { normal: true, devagar: true, opacidade: 0.9 });
+        const fim = E.t + 2.4; E.efeitos.push({ atualizar(dt) { if (Math.random() < dt * 5) { emitir('faisca', x + (Math.random() - 0.5), 0.15, z + (Math.random() - 0.5), { n: 2, cor: 0x9fd6ff, vel: 1.5, subida: 1, grav: 6, vida: 0.25 }); if (Math.random() < 0.4) figura(TX.arco(), x + (Math.random() - 0.5) * 0.6, 0.2, z, 0.3, 0xffffff, 0.08, { largura: 2 }); } return E.t > fim; } });
+      },
+      ult: (h, x, z) => raioCeu(x, z)
+    },
+    viking: {
+      arma: (e, golpe, dt) => {
+        e.fxAcc = (e.fxAcc || 0) + dt * (golpe ? 60 : 14);
+        while (e.fxAcc >= 1) { e.fxAcc -= 1; const [x, y, z] = pontoLamina(0.15 + Math.random() * 0.85);
+          emitir(Math.random() < 0.65 ? 'media' : 'grande', x, y, z, { n: 1, cor: Math.random() < 0.5 ? 0x39ff14 : 0x1a9a20, vel: 0.25, subida: 0.5, vida: golpe ? 0.5 : 0.8 }); }
+      },
+      giro: (h, r) => { decalque(TX.espiral(0x39ff14), h.x, h.z, r, 0xffffff, 1.8, { normal: true, entra: 0.25, cresce: [0.3, 1], cresceEm: 0.35 }); emitir('media', h.x, 0.3, h.z, { n: 18, cor: 0x39ff14, vel: 0.4, subida: 1.5, vida: 0.8, raio: r }); },
+      rastro: (h, iv) => { if (!passoRastro(h, iv, 0.8)) return; const [x, z] = atras(h, iv, 0.4); decalque(TX.racha(0x39ff14), x, z, 1.1, 0xffffff, 3.2, { normal: true, devagar: true }); emitir('media', x, 0.2, z, { n: 3, cor: 0x39ff14, vel: 0.2, subida: 0.8, vida: 0.8 }); },
+      ult: (h, x, z, i, u) => { decalque(TX.racha(0x39ff14), x, z, u.largura * 1.1, 0xffffff, 2.6, { normal: true, entra: 0.08 }); emitir('media', x, 0.3, z, { n: 6, cor: 0x39ff14, vel: 0.6, subida: 2, vida: 0.7 }); }
+    },
+    samurai: {
+      semRastro: true,
+      arma: (e, golpe, dt) => {
+        if (!golpe) return;
+        e.fxAcc = (e.fxAcc || 0) + dt * 30;
+        while (e.fxAcc >= 1) { e.fxAcc -= 1; const [x, y, z] = pontoLamina(0.3 + Math.random() * 0.7);
+          particulas(x, z, { n: 1, cor: 0x0a0a0a, tam: 0.35, cresce: 2.2, velH: 0.1, velV: 0.3, gravidade: -0.4, vida: 0.6, opacidade: 0.7, y }); }
+      },
+      giro: (h, r) => {
+        decalque(TX.espiral(0xff5a10), h.x, h.z, r, 0xffffff, 2.2, { normal: true, entra: 0.2, cresce: [0.3, 1], cresceEm: 0.3 });
+        discoEfeito(h.x, h.z, r * 0.45, 0xff5a10, 1.6);
+        for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; agendar(i * 0.03, () => particulas(h.x + Math.cos(a) * 1.4, h.z + Math.sin(a) * 1.4, { n: 2, cor: 0x0a0a0a, tam: 0.6, cresce: 2.4, velH: 0.6, velV: 0.8, gravidade: -0.3, vida: 0.9, opacidade: 0.75, y: 1 })); }
+      },
+      rastro: (h, iv) => {
+        if (!passoRastro(h, iv, 0.9)) return; vulto(h, 0.6);
+        const [x, z] = atras(h, iv, 0.3); decalque(TX.racha(0xff5a10), x, z, 1, 0xffffff, 2.8, { normal: true, devagar: true });
+      },
+      ult: (h, x, z, i, u) => {
+        decalque(TX.cratera(), x, z, u.largura * 0.75, 0xffffff, 2.8, { normal: true, entra: 0.1 });
+        decalque(TX.racha(0xff5a10), x, z, u.largura * 1.1, 0xffffff, 2.8, { normal: true, entra: 0.1 });
+        for (let k = 0; k < 3; k++) agendar(0.1 + k * 0.25, () => particulas(x, z, { n: 3, cor: 0x0a0a0a, tam: 0.8, cresce: 2.6, velH: 0.5, velV: 1.6, gravidade: -0.3, vida: 1.2, opacidade: 0.75, y: 0.3, raio: 0.5 }));
+        emitir('faisca', x, 0.3, z, { n: 8, cor: 0xffa040, vel: 2, subida: 3, grav: 8, vida: 0.5 });
+      }
+    },
+    // ---------------- SUPORTE ----------------
+    ciber: {
+      cura: h => {
+        figura(TX.codigo(), h.x, 2.6, h.z, 2.6, 0xffffff, 1.0, { seguir: h, seguirY: 2.6, cresce: [0.6, 1.1], cresceEm: 0.3 });
+        decalque(TX.anelCircuito(), h.x, h.z, 7, 0x39ff88, 0.9, { cresce: [0.15, 1], cresceEm: 0.5, gira: 0.8 });
+      },
+      escudo: { cor: 0x9dffc4, tex: () => TX.escudoCircuito() },
+      selo: (h, r, dur) => decalque(TX.seloCircuito(), h.x, h.z, r, 0x39ff88, dur, { cresce: [0.12, 1], cresceEm: 0.45, gira: 1.4 })
+    },
+    medicina: {
+      cura: h => {
+        figura(TX.caveiras(), h.x, 2.6, h.z, 2.6, 0xffffff, 1.0, { seguir: h, seguirY: 2.6, cresce: [0.6, 1.1], cresceEm: 0.3 });
+        decalque(TX.anelOssos(), h.x, h.z, 7, 0xff3030, 0.9, { cresce: [0.15, 1], cresceEm: 0.5, gira: 0.8 });
+      },
+      escudo: { cor: 0xff4a4a, tex: () => TX.escudoCaveiras() },
+      selo: (h, r, dur) => decalque(TX.seloCaveiras(), h.x, h.z, r, 0xff2a2a, dur, { cresce: [0.12, 1], cresceEm: 0.45, gira: 1.4 })
+    },
+    // ---------------- MAGO ----------------
+    anubis: {
+      chamas: (h, x, z, dur) => {
+        decalque(TX.hieroAnel(), x, z, 3.2, 0xffb020, dur, { pisca: true, gira: 0.25, opacidade: 1 });
+        decalque(TX.hieroAnel(), x, z, 3.2, 0xff6a10, dur, { pisca: true, gira: 0.25, opacidade: 0.5, rot: 0 });
+        const fim = E.t + dur; E.efeitos.push({ atualizar(dt) { if (Math.random() < dt * 18) { const a = Math.random() * 6.28, rr = 2.4 + Math.random() * 0.8; emitir('faisca', x + Math.cos(a) * rr, 0.15, z + Math.sin(a) * rr, { n: 1, cor: 0xffc23a, vel: 0.1, subida: 1.2, vida: 0.6 }); } return E.t > fim; } });
+      },
+      ilusao: (h, clone, dur) => {
+        const fim = E.t + dur;
+        E.efeitos.push({ acc: 0, atualizar(dt) {
+          if (E.t > fim || h.morto) return true;
+          this.acc += dt * 14;
+          while (this.acc >= 1) { this.acc -= 1; const k = Math.floor(Math.random() * 10);
+            figura(TX.glifo(k), h.x + (Math.random() - 0.5) * 0.7, 0.3 + Math.random() * 1.5, h.z + 0.2 + (Math.random() - 0.5) * 0.3, 0.26, Math.random() < 0.5 ? 0xffc23a : 0xff8a1a, 0.6, { sobe: 0.25 }); }
+        } });
+      },
+      triangulo: (h, A, B, C, dur) => {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute([A[0], 0, A[1], B[0], 0, B[1], C[0], 0, C[1]], 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute([0.5, 1, 1, 0, 0, 0], 2));
+        [[0xffb020, 1], [0xff5a10, 0.45]].forEach(([cor, op]) => {
+          const mat = new THREE.MeshBasicMaterial({ map: TX.hieroTri(), color: cor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+          const m = new THREE.Mesh(geo, mat); m.position.y = 0.09; m.renderOrder = 7; E.mundo.add(m);
+          E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; mat.opacity = op * Math.min(1, this.t / 0.15) * Math.min(1, (dur - this.t) / 0.5) * (0.78 + 0.22 * Math.sin(this.t * 15 + Math.sin(this.t * 6) * 2)); if (this.t > dur) { E.mundo.remove(m); return true; } } });
+        });
+      }
+    },
+    noturna: {
+      projetil: () => ({ visual: 'orbeNoite', rastro: 0x2a8bff, impacto: 0x2a8bff }),
+      chamas: (h, x, z, dur) => {
+        for (let i = 0; i < 11; i++) { const a = i / 11 * Math.PI * 2; chamaNegra(x + Math.cos(a) * 2.7, z + Math.sin(a) * 2.7, 1.4 + Math.random() * 0.5, dur); }
+        for (let i = 0; i < 4; i++) { const a = Math.random() * 6.28, rr = Math.random() * 1.6; chamaNegra(x + Math.cos(a) * rr, z + Math.sin(a) * rr, 0.9, dur); }
+        anelEfeito(x, z, 3.2, 0x2a8bff, 0.5, true);
+      },
+      // o fogo negro vai consumindo o clone de baixo para cima até ele sumir
+      clone: (c, consumido, dt) => {
+        const alt = 1.8 * consumido;
+        if (Math.random() < dt * 16) particulas(c.x + (Math.random() - 0.5) * 0.5, c.z, { n: 1, cor: 0x040408, tam: 0.45, cresce: 1.6, velH: 0.15, velV: 1.6, gravidade: -0.3, vida: 0.5, opacidade: 0.85, y: Math.random() * Math.max(0.2, alt) });
+        if (Math.random() < dt * 22) emitir('faisca', c.x + (Math.random() - 0.5) * 0.6, Math.random() * Math.max(0.3, alt), c.z + 0.1, { n: 1, cor: 0x2a8bff, vel: 0.2, subida: 1.4, vida: 0.4 });
+        c.obj.traverse(n => { if (n.isMesh && n.material && n.material.color) { if (!n.material.userData.corOrig) n.material.userData.corOrig = n.material.color.clone(); n.material.color.copy(n.material.userData.corOrig).multiplyScalar(Math.max(0.05, 1 - consumido)); } });
+      },
+      triangulo: (h, A, B, C, dur) => {
+        chaoTriangulo(A, B, C, 0x1a4aff, dur);
+        for (let k = 0; k < 16; k++) {
+          const r1 = Math.random(), r2 = Math.random(), q = r1 + r2 > 1 ? [1 - r1, 1 - r2] : [r1, r2];
+          chamaNegra(A[0] + (B[0] - A[0]) * q[0] + (C[0] - A[0]) * q[1], A[1] + (B[1] - A[1]) * q[0] + (C[1] - A[1]) * q[1], 2.6 + Math.random() * 1.2, dur, true);
+        }
+      }
+    },
+    // ---------------- ATIRADOR ----------------
+    cosmos: {
+      projetil: explode => ({ visual: 'orbeNegra', rastro: 0x8a0a0a, impacto: 0xff2a2a, tamanho: explode ? 1.25 : 1.0 }),
+      aceleracao: (h, dur) => {
+        decalque(R.brilhoTex || TX.bola(), h.x, h.z, 1.5, 0xff1a1a, dur, { seguir: h, opacidade: 0.7, pisca: true });
+        aura(h, 0xff2a2a, dur, 30); aura(h, 0x8a0a0a, dur, 14);
+      },
+      explosao: (h, x, z) => {
+        const r = CONFIG.atirador.explosaoRaio;
+        figura(R.brilhoTex || TX.bola(), x, 1, z, r * 2.4, 0xffd27a, 0.22, { sai: 0.18 });
+        emitir('grande', x, 0.8, z, { n: 10, cor: 0xff6a10, vel: 3, subida: 1.5, vida: 0.45 });
+        emitir('grande', x, 0.8, z, { n: 6, cor: 0xffd27a, vel: 2, subida: 1, vida: 0.3 });
+        emitir('faisca', x, 0.8, z, { n: 30, cor: 0xffa040, vel: 7, subida: 4, grav: 12, vida: 0.6 });
+        particulas(x, z, { n: 10, cor: 0x1a1414, tam: 1.1, cresce: 2.6, velH: 2.6, velV: 2, gravidade: -0.4, vida: 1.2, raio: 0.5, opacidade: 0.75, y: 0.6 });
+        anelEfeito(x, z, r * 1.2, 0xffe0b0, 0.35, true); anelEfeito(x, z, r * 0.8, 0xff3d00, 0.5, true);
+        decalque(TX.cratera(), x, z, r * 0.6, 0x553322, 2.2, { normal: true, opacidade: 0.8 });
+        tremer(x, z, 0.25, 0.25);
+      },
+      saltoSai: (h, x, z) => { for (let k = 0; k < 6; k++) { const a = k / 6 * 6.28; labareda(x + Math.cos(a) * 0.5, z + Math.sin(a) * 0.5, 0xff4a10, 1.2 + Math.random() * 0.5, 2, true); } emitir('faisca', x, 0.3, z, { n: 14, cor: 0xffa040, vel: 1, subida: 2, vida: 0.7 }); },
+      saltoChega: (h, x, z) => { for (let k = 0; k < 5; k++) { const a = k / 5 * 6.28; labareda(x + Math.cos(a) * 0.6, z + Math.sin(a) * 0.6, 0xff6a1a, 1.6, 0.6); } emitir('grande', x, 0.5, z, { n: 4, cor: 0xff4a10, vel: 1.5, subida: 2, vida: 0.4 }); }
+    },
+    paintball: {
+      projetil: () => { const rosa = (paintballCor = !paintballCor); return { visual: rosa ? 'tintaRosa' : 'tintaAmarela', rastro: rosa ? 0xff5ab4 : 0xffe14d, impacto: rosa ? 0xff5ab4 : 0xffe14d, corTinta: rosa ? 0xff5ab4 : 0xffe14d }; },
+      acerto: (h, alvo, opc) => marcaTinta(alvo, (opc && opc.corTinta) || 0xff5ab4, 0.55),
+      aceleracao: (h, dur) => figura(TX.lampada(), h.x, 2.75, h.z, 0.8, 0xffffff, dur, { normal: true, seguir: h, seguirY: 2.75 }),
+      explosao: (h, x, z) => {
+        const r = CONFIG.atirador.explosaoRaio;
+        [0xff5ab4, 0xffe14d].forEach(c => { emitir('grande', x, 0.9, z, { n: 6, cor: c, vel: 4, subida: 2, grav: 6, vida: 0.5 }); emitir('faisca', x, 0.9, z, { n: 22, cor: c, vel: 7, subida: 4, grav: 14, vida: 0.6 }); });
+        for (let k = 0; k < 5; k++) { const a = Math.random() * 6.28, d = Math.random() * r; decalque(TX.tinta(), x + Math.cos(a) * d, z + Math.sin(a) * d, 0.5 + Math.random() * 0.6, k % 2 ? 0xff5ab4 : 0xffe14d, 5, { normal: true, entra: 0.05, sai: 1 }); }
+        E.entidades.forEach(e => { if (!e.morto && e !== h && inimigos(e, h) && Math.hypot(e.x - x, e.z - z) < r) marcaTinta(e, Math.random() < 0.5 ? 0xff5ab4 : 0xffe14d, 0.95); });
+        anelEfeito(x, z, r, 0xff8ad0, 0.35, true);
+      },
+      saltoSai: (h, x, z) => decalque(TX.pegada(), x, z, 0.55, 0xff5ab4, 6, { normal: true, rot: -h.rot, entra: 0.05, sai: 1.5 })
+    }
+  };
+  let paintballCor = false;
+  // mancha de tinta grudada no inimigo por 2 s (só o visual)
+  function marcaTinta(e, cor, tam) {
+    if (!e || e.morto) return;
+    const alt = (e.altura || 1.8) * (e.obj && e.obj.scale ? e.obj.scale.y : 1);
+    figura(TX.tinta(), e.x, alt * 0.55, e.z, tam, cor, 2, { normal: true, seguir: e, seguirY: alt * 0.55, dx: (Math.random() - 0.5) * 0.3, dz: 0.35, entra: 0.03, sai: 0.5, ordem: 12 });
+  }
+
   function labareda(x, z, cor, alt, dur, devagar) {
     const sh = R.Fx && R.Fx.fogo(cor, 1);
     let m;
@@ -1724,12 +2257,12 @@
   function ultSuporte(h) {
     const u = CONFIG.ultimate.suporte;
     h.travadoAte = E.t + 0.8;
-    const tm = tema(h);
-    circuloRunas(h.x, h.z, 2.2, tm.selo, 1.2);
+    const tm = tema(h), fs = fxSkin(h);
+    if (fs.selo) fs.selo(h, 2.2, 1.2); else circuloRunas(h.x, h.z, 2.2, tm.selo, 1.2);
     h.anim.tocar('habilidade3', { momento: 0.5, aoAcertar: () => {
       anelEfeito(h.x, h.z, u.raio, tm.selo, 0.8, true);
-      discoEfeito(h.x, h.z, u.raio, tm.selo, 0.5);
-      circuloRunas(h.x, h.z, u.raio, tm.selo, 1.6);
+      if (!fs.selo) discoEfeito(h.x, h.z, u.raio, tm.selo, 0.5);
+      if (fs.selo) fs.selo(h, u.raio, 1.8); else circuloRunas(h.x, h.z, u.raio, tm.selo, 1.6);
       emitir('faisca', h.x, 0.3, h.z, { n: 60, cor: tm.brilho, vel: 0.5, subida: 3, vida: 1.1, raio: u.raio });
       E.entidades.forEach(e => {
         if (e.morto || dist(e, h) > u.raio) return;
@@ -1751,6 +2284,7 @@
     anelEfeito(h.x, h.z, 1.2, tm.principal, 0.35, true);
     emitir('faisca', h.x, 1, h.z, { n: 26, cor: tm.principal, vel: 2.5, subida: 1.5, vida: 0.4, alturaVar: 1 });
     const x0 = h.x, z0 = h.z;
+    if (fxSkin(h).saltoSai) fxSkin(h).saltoSai(h, x0, z0);
     h.x = clamp(h.x + Math.sin(ang) * d, -W / 2 + 1, W / 2 - 1);
     h.z = clamp(h.z + Math.cos(ang) * d, -H / 2 + 1, H / 2 - 1);
     h.invulAte = Math.max(h.invulAte, E.t + 0.2);
@@ -1759,6 +2293,7 @@
     emitir('faisca', h.x, 0.2, h.z, { n: 30, cor: tm.faisca, vel: 4, subida: 2, vida: 0.45, grav: 6 });
     // rastro de luz entre os dois pontos
     for (let i = 1; i < 10; i++) emitir('faisca', x0 + (h.x - x0) * i / 10, 1, z0 + (h.z - z0) * i / 10, { n: 2, cor: tm.principal, vel: 0.3, vida: 0.35 });
+    if (fxSkin(h).saltoChega) fxSkin(h).saltoChega(h, h.x, h.z);
     h.anim.tocar('habilidade3');
   }
 
@@ -1776,7 +2311,7 @@
       (h) => h.anim.tocar('habilidade1', { momento: 0.5, aoAcertar: () => {
         const tm = tema(h);
         anelEfeito(h.x, h.z, 3.2, tm.principal, 0.45, true);
-        if (tm.fogo) espiralFogo(h, 3.2);
+        if (fxSkin(h).giro) fxSkin(h).giro(h, 3.2);
         // redemoinho: faíscas saindo girando + poeira
         for (let i = 0; i < 28; i++) {
           const a = i / 28 * Math.PI * 2;
@@ -1795,8 +2330,8 @@
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () =>
         atirar(h, h.rot, { alvo: h.ultimoAlvo, raio: 0.8, restante: CLASSES.suporte.alcance + 1.5, vel: 18, dano: CLASSES.suporte.dano, cor: tema(h).principal, tamanho: 0.8, rastro: tema(h).brilho, impacto: tema(h).brilho }) }),
       (h) => h.anim.tocar('habilidade1', { momento: 0.55, aoAcertar: () => {
-        const tm = tema(h);
-        anelEfeito(h.x, h.z, 7, tm.cura, 0.8, true);
+        const tm = tema(h), fs = fxSkin(h);
+        if (fs.cura) fs.cura(h); else anelEfeito(h.x, h.z, 7, tm.cura, 0.8, true);
         E.entidades.forEach(e => { if (!e.morto && aliado(e, h) && dist(e, h) < 7 && e.tipo !== 'torre') {
           if (remoto(e)) gancho('apoioRemoto', e, 'cura'); else curar(e, e.vidaMax * 0.35);
           colunaLuz(e.x, e.z, tm.cura, 0.8, 0.6);
@@ -1806,19 +2341,27 @@
       (h) => h.anim.tocar('habilidade2', { momento: 0.3, aoAcertar: () => {
         const tm = tema(h);
         emitir('faisca', h.x, 1, h.z, { n: 30, cor: tm.brilho, vel: 4, subida: 1, vida: 0.5, arrasto: 4 });
-        E.entidades.forEach(e => { if (!e.morto && aliado(e, h) && dist(e, h) < 6) { if (remoto(e)) { gancho('apoioRemoto', e, 'escudo'); e.escudo = 1; e.escudoAte = E.t + 4; bolha(e, 4); } else { e.escudo = e.vidaMax * 0.4; e.escudoAte = E.t + 4; bolha(e, 4); } } });
+        const vis = fxSkin(h).escudo;
+        E.entidades.forEach(e => { if (!e.morto && aliado(e, h) && dist(e, h) < 6) { if (remoto(e)) { gancho('apoioRemoto', e, 'escudo'); e.escudo = 1; e.escudoAte = E.t + 4; bolha(e, 4, vis); } else { e.escudo = e.vidaMax * 0.4; e.escudoAte = E.t + 4; bolha(e, 4, vis); } } });
       } }),
       (h) => ultSuporte(h)
     ],
     mago: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () =>
-        atirar(h, h.rot, { alvo: h.ultimoAlvo, raio: 0.8, vel: 15, restante: CLASSES.mago.alcance + 1.5, dano: CLASSES.mago.dano, cor: tema(h).principal, tamanho: 0.9,
-          rastro: tema(h).brasa, impacto: tema(h).brasa, efeito: e => aplicarSlow(e, 0.3, 0.2) }) }),
+        atirar(h, h.rot, Object.assign({ alvo: h.ultimoAlvo, raio: 0.8, vel: 15, restante: CLASSES.mago.alcance + 1.5, dano: CLASSES.mago.dano, cor: tema(h).principal, tamanho: 0.9,
+          rastro: tema(h).brasa, impacto: tema(h).brasa, efeito: e => aplicarSlow(e, 0.3, 0.2) }, fxSkin(h).projetil ? fxSkin(h).projetil(false) : {})) }),
       (h, ang, mira) => {
         const d = mira ? clamp(mira.dist, 2, 10) : 6;
         const x = h.x + Math.sin(ang) * d, z = h.z + Math.cos(ang) * d;
         const tm = tema(h);
         h.anim.tocar('habilidade1', { momento: 0.55, aoAcertar: () => {
+          const fs = fxSkin(h);
+          if (fs.chamas) {
+            // visual da skin; o dano continua igual (a cada 0,5 s durante 2,5 s)
+            fs.chamas(h, x, z, 2.5);
+            for (let k = 1; k <= 5; k++) agendar(k * 0.5, () => area(x, z, 3.2, h, e => causarDano(e, CLASSES.mago.dano * 0.5, h, { semReacao: true })));
+            return;
+          }
           emitir('grande', x, 0.6, z, { n: 10, cor: tm.chama, vel: 2.5, subida: 1, vida: 0.5, raio: 1 });
           for (let q = 0; q < 7; q++) { const a = Math.random() * 6.28, rr = Math.sqrt(Math.random()) * 2.6; labareda(x + Math.cos(a) * rr, z + Math.sin(a) * rr, tm.chama, 1.1 + Math.random() * 0.8, 2.5); }
           discoEfeito(x, z, 3.2, tm.chama, 2.5, { intervalo: 0.5, fn: () => {
@@ -1835,6 +2378,7 @@
         emitir('faisca', h.x, 1, h.z, { n: 20, cor: tema(h).brasa, vel: 3, vida: 0.4, arrasto: 4 });
         const clone = await criarClone(h, 4, true);
         h.invisAte = E.t + 4; h.invulAte = E.t + 4; h.ilusao = true;
+        if (fxSkin(h).ilusao) fxSkin(h).ilusao(h, clone, 4);
         const nx = h.x + Math.sin(ang) * 6, nz = h.z + Math.cos(ang) * 6;
         h.x = clamp(nx, -E.def.tam[0] / 2, E.def.tam[0] / 2); h.z = clamp(nz, -E.def.tam[1] / 2, E.def.tam[1] / 2);
         fumaca(h.x, h.z, tema(h).fumaca, 6);
@@ -1848,9 +2392,10 @@
         h.anim.tocar('ataque', { velocidade: velAtaque(h), momento: 0.45, aoAcertar: () => {
           const explode = h.explosivoAte > E.t;
           const tm = tema(h);
-          atirar(h, h.rot, { alvo: h.ultimoAlvo, raio: 0.8, vel: 24, restante: CLASSES.atirador.alcance + 1.5, dano: CLASSES.atirador.dano, cor: explode ? tm.explosivo : tm.principal, tamanho: explode ? 1.15 : 0.95,
-            rastro: explode ? tm.brasa : tm.faisca, impacto: explode ? tm.explosivo : tm.principal,
-            efeito: explode ? a => explosaoEnergia(h, a.x, a.z) : null });
+          const fs = fxSkin(h), vis = fs.projetil ? fs.projetil(explode) : {};
+          atirar(h, h.rot, Object.assign({ alvo: h.ultimoAlvo, raio: 0.8, vel: 24, restante: CLASSES.atirador.alcance + 1.5, dano: CLASSES.atirador.dano, cor: explode ? tm.explosivo : tm.principal, tamanho: explode ? 1.15 : 0.95,
+            rastro: explode ? tm.brasa : tm.faisca, impacto: explode ? tm.explosivo : tm.principal }, vis, {
+            efeito: (explode || fs.acerto) ? a => { if (fs.acerto) fs.acerto(h, a, vis); if (explode) explosaoEnergia(h, a.x, a.z); } : null }));
         } });
       },
       // Aceleração: ataques básicos mais rápidos por 5 s
@@ -1862,6 +2407,7 @@
         emitir('faisca', h.x, 0.5, h.z, { n: 30, cor: tm.principal, vel: 3, subida: 3, vida: 0.5 });
         aura(h, tm.principal, CONFIG.atirador.aceleracaoDur, 22);
         aura(h, tm.faisca, CONFIG.atirador.aceleracaoDur, 25, true);
+        if (fxSkin(h).aceleracao) fxSkin(h).aceleracao(h, CONFIG.atirador.aceleracaoDur);
       },
       // Explosão: as bolas que acertam explodem (dano dele + 5% de chance de crítico)
       (h) => {
@@ -1877,15 +2423,23 @@
     ]
   };
   function corteVisual(h, ang, cor) {
-    const m = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.9, 24, 1, -0.9, 1.8),
-      new THREE.MeshBasicMaterial({ color: cor || 0xfff1c4, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+    // marca do golpe: só aparece para quem ataca (não vai para a rede), fina, no chão e bem apagada
+    const m = new THREE.Mesh(new THREE.RingGeometry(2.55, 2.8, 24, 1, -0.9, 1.8),
+      new THREE.MeshBasicMaterial({ color: cor || 0xfff1c4, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
     m.rotation.x = -Math.PI / 2; m.rotation.z = ang - Math.PI / 2;
-    m.position.set(h.x + Math.sin(ang) * 0.6, 0.9, h.z + Math.cos(ang) * 0.6);
+    m.position.set(h.x, 0.12, h.z); m.renderOrder = 6;
     E.mundo.add(m);
-    E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; m.material.opacity = 0.85 * (1 - this.t / 0.22); if (this.t > 0.22) { E.mundo.remove(m); return true; } } });
+    E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; m.material.opacity = 0.28 * (1 - this.t / 0.18); if (this.t > 0.18) { E.mundo.remove(m); return true; } } });
   }
-  function bolha(e, dur) {
-    const sh = R.Fx && R.Fx.escudo(0x9fd8ff);
+  function bolha(e, dur, vis) {
+    if (vis && vis.tex) {
+      // desenho da skin (circuitos, caveiras) girando por cima da bolha
+      const mat = new THREE.MeshBasicMaterial({ map: vis.tex(), color: vis.cor, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+      if (mat.map && mat.map.wrapS !== undefined) { mat.map.wrapS = mat.map.wrapT = THREE.RepeatWrapping; if (mat.map.repeat) mat.map.repeat.set(3, 2); }
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(1.24, 24, 16), mat); cap.renderOrder = 10; E.mundo.add(cap);
+      E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; cap.position.set(e.x, 1, e.z); cap.rotation.y += dt * 0.8; mat.opacity = 0.8 * Math.min(1, this.t / 0.15) * Math.min(1, Math.max(0, (dur - this.t) / 0.4)); if (this.t > dur || e.morto || e.escudo <= 0) { E.mundo.remove(cap); return true; } } });
+    }
+    const sh = R.Fx && R.Fx.escudo(vis && vis.cor ? vis.cor : 0x9fd8ff);
     const m = new THREE.Mesh(new THREE.SphereGeometry(1.2, 28, 18),
       sh || new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.25, depthWrite: false }));
     if (sh) { m.renderOrder = 9; E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; sh.uniforms.vida.value = Math.min(1, this.t / 0.15) * Math.min(1, Math.max(0, (dur - this.t) / 0.4)); if (this.t > dur || e.morto || e.escudo <= 0) return true; } }); }
@@ -1896,9 +2450,10 @@
     } });
   }
   async function criarClone(h, dur, atacaSozinho) {
-    const obj = await Skins.criarPersonagem({ classe: h.classe, genero: P.genero, cor: P.cor });
+    const skinH = (P.skinEquipada || {})[h.classe] || 'default';
+    const obj = await Skins.criarPersonagem({ classe: h.classe, genero: P.genero, cor: P.cor, skin: skinH });
     const c = nova({
-      tipo: 'clone', time: h.time, donoHeroi: true, obj, anim: Skins.animador(obj),
+      tipo: 'clone', time: h.time, donoHeroi: true, obj, anim: Skins.animador(obj), skin: skinH, classe: h.classe, durClone: dur,
       x: h.x + (atacaSozinho ? 0 : 1.2), z: h.z, rot: h.rot, vida: 1, vidaMax: 1, raio: 0.5,
       removerEm: E.t + dur, atacaSozinho, cdClone: 0
     });
@@ -2485,10 +3040,7 @@
           h.x += Math.sin(iv.ang) * v; h.z += Math.cos(iv.ang) * v; iv.resta -= dt;
           const tmI = tema(h);
           emitir('media', h.x - Math.sin(iv.ang) * 0.6, 0.3, h.z - Math.cos(iv.ang) * 0.6, { n: 2, cor: tmI.poeira, vel: 0.8, subida: 0.6, vida: 0.4 });
-          if (tmI.fogo && (iv.fogoX === undefined || Math.hypot(h.x - iv.fogoX, h.z - iv.fogoZ) > 0.8)) {
-            iv.fogoX = h.x; iv.fogoZ = h.z;
-            labareda(h.x - Math.sin(iv.ang) * 0.5, h.z - Math.cos(iv.ang) * 0.5, 0xff5a14, 1.1 + Math.random() * 0.4, 3.2, true);
-          }
+          if (fxSkin(h).rastro) fxSkin(h).rastro(h, iv);
           emitir('faisca', h.x, 0.9, h.z, { n: 2, cor: tmI.principal, vel: 3, dir: [-Math.sin(iv.ang), -Math.cos(iv.ang)], espalha: 0.3, vida: 0.25 });
           area(h.x, h.z, 1.4, h, e => {
             if (iv.atingidos.has(e)) return; iv.atingidos.add(e);
@@ -2574,6 +3126,7 @@
     const h = E.heroi;
     const k = clamp((c.removerEm - E.t) / 1, 0, 1);
     c.obj.traverse(n => { if (n.isMesh && n.material) n.material.opacity = 0.7 * k; });
+    const fsC = fxSkin(c); if (fsC.clone) fsC.clone(c, clamp(1 - (c.removerEm - E.t) / (c.durClone || 4), 0, 1), dt);
     if (c.seguir && h) { c.x = h.x + Math.cos(h.rot) * 1.2; c.z = h.z - Math.sin(h.rot) * 1.2; c.rot = h.rot; c.anim.mover(h.anim.base === 'parado' ? 0 : 3); }
     if (c.atacaSozinho && E.t >= c.cdClone) {
       const alvo = alvoMaisPerto(c, 9);
@@ -2767,7 +3320,17 @@
     const l = Object.keys(P.passes).map(m => `<div class="linha"><span>${MAPAS.lista[m].nome}</span><b>${P.passes[m].tipo} · ${fmt(P.passes[m].usos)} uso(s)</b></div>`).join('');
     abrirModal('Passaportes', l || '<p class="nota">Você ainda não tem passes. Compre no aeroporto, no fim do mapa.</p>');
   }
+  // trocar de herói só na praça do começo do mapa (onde o jogador nasce)
+  function naPracaInicio(h) {
+    if (!h || !E.def) return true;
+    if (h.arena) return false;
+    const [ex, ez] = E.def.entrada;
+    const praca = (E.def.pracas || []).find(p => Math.hypot(ex - p.x, ez - p.z) < Math.max(p.w, p.h) / 2 + 3);
+    if (praca) return Math.hypot(h.x - praca.x, h.z - praca.z) < Math.max(praca.w, praca.h) / 2 + 1.5;
+    return Math.hypot(h.x - ex, h.z - ez) < 12;
+  }
   function telaHeroi(primeiraVez) {
+    if (!primeiraVez && E.heroi && !naPracaInicio(E.heroi)) { aviso('Para trocar de herói, volte à praça do começo do mapa'); return; }
     const classes = Object.keys(CLASSES).map(k => {
       const c = P.classes[k], r = rankInfo(c.estrelas);
       return `<button type="button" class="classe ${P.classe === k ? 'sel' : ''}" data-classe="${k}"><b>${CLASSES[k].nome}</b><small>${r.nome} ★ ${r.estrelas}</small><small>${CLASSES[k].habs.join(' · ')}</small></button>`;
@@ -2980,7 +3543,7 @@
       telaHeroi, telaRanking, perfilPadrao, dist, selo, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
-    _t: { CONFIG, E, P, R, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
+    _t: { CONFIG, E, P, R, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
   };
   if (temDOM && !global.ESPERAR_LOGIN) global.addEventListener('load', () => Jogo.iniciar().catch(err => {
     const el = $('carregando'); if (el) el.innerHTML = '<div>NÃO FOI POSSÍVEL INICIAR<p>' + (err && err.message || err) + '</p></div>';

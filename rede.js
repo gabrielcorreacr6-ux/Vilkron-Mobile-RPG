@@ -194,6 +194,18 @@
     return a;
   }
   Rede.carregarAjustes = carregarAjustes;
+  // vídeos das cinemáticas (Supabase Storage, pasta pública "cinematicas")
+  Rede.enviarVideo = async (arquivo, slot) => {
+    const ext = ((arquivo.name || '').split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
+    const caminho = 'video' + (slot + 1) + '_' + Date.now() + '.' + ext;
+    const { error } = await sb.storage.from('cinematicas').upload(caminho, arquivo, { contentType: arquivo.type || 'video/mp4', upsert: true, cacheControl: '3600' });
+    if (error) throw new Error(/row-level|policy|Unauthorized|403/i.test(error.message) ? 'Sem permissão para enviar (rode a parte 7 do SQL)' : /Bucket not found/i.test(error.message) ? 'Falta criar a pasta de vídeos (rode a parte 7 do SQL)' : error.message);
+    const { data } = sb.storage.from('cinematicas').getPublicUrl(caminho);
+    return { url: data.publicUrl, caminho, nome: arquivo.name || caminho, mb: +(arquivo.size / 1048576).toFixed(1) };
+  };
+  Rede.apagarVideo = async caminho => { const { error } = await sb.storage.from('cinematicas').remove([caminho]); if (error) throw error; };
+  // o admin pode mudar dano/defesa a qualquer hora: busca de novo de tempos em tempos
+  setInterval(() => { if (Rede.eu) carregarAjustes().catch(() => {}); }, 5 * 60 * 1000);
 
   /* ---------------- AMIGOS ---------------- */
   async function carregarAmigos() {

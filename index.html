@@ -95,6 +95,12 @@ button { font: inherit; color: inherit; }
 #modalCorpo ul { padding-left: 18px; margin: 6px 0; }
 #modalCorpo li { margin: 4px 0; }
 .nota { color: var(--apagado); font-size: 13px; }
+#cinematica { position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; align-items: center; justify-content: center; }
+#cinematica video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+#cinematica .pular { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); padding: 10px 18px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.5); background: rgba(0,0,0,0.55); color: #fff; font-weight: 700; font-size: 15px; }
+#cinematica .pular:disabled { opacity: 0.6; }
+#cinematica .som { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); padding: 10px 16px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.5); background: rgba(0,0,0,0.55); color: #fff; font-size: 15px; }
+.rotulo.inline { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
 .evento { border: 1px solid #e3b44c; border-radius: 10px; padding: 8px 10px; margin: 8px 0; background: rgba(227,180,76,0.12); font-size: 13px; line-height: 1.5; }
 .form.meta { border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 8px; }
 .linha { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--linha); flex-wrap: wrap; }
@@ -234,13 +240,13 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
-<script src="servidor.js?v=19"></script>
-<script src="config-online.js?v=19"></script>
-<script src="efeitos.js?v=19"></script>
-<script src="skins.js?v=19"></script>
-<script src="mapas.js?v=19"></script>
-<script src="rede.js?v=19"></script>
-<script src="jogo.js?v=19"></script>
-<script src="painel.js?v=19"></script>
+<script src="servidor.js?v=23"></script>
+<script src="config-online.js?v=23"></script>
+<script src="efeitos.js?v=23"></script>
+<script src="skins.js?v=23"></script>
+<script src="mapas.js?v=23"></script>
+<script src="rede.js?v=23"></script>
+<script src="jogo.js?v=23"></script>
+<script src="painel.js?v=23"></script>
 </body>
 </html>

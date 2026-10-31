@@ -165,6 +165,7 @@
       Rede.aoConviteEquipe = c => conviteEquipe(c);
       Rede.aoMudarPerfil = r => { atualizarMenus(r); };
       Rede.prepararJogo();                    // perfil do servidor antes de montar o mapa
+      await tocarCinematicas();               // vídeos do admin (pula depois de 5 s)
       await global.Jogo.iniciar();
       if (eu.papel === 'moderador') {
         const pago = await Rede.rpc('receber_salario').catch(() => 0);
@@ -287,7 +288,8 @@
   setInterval(() => {
     const Rede = global.Rede; if (!Rede || !Rede.eu || !global.Jogo || !J().P.skinEquipada) return;
     const P = J().P, eq = P.skinEquipada[P.classe];
-    if (eq && !Rede.temSkin(P.classe, eq)) { P.skinEquipada[P.classe] = 'default'; J().salvar(); J().criarHeroi(); aviso('Sua skin de teste acabou'); }
+    // só tira a skin se ela venceu de verdade (perfil já carregado e não é o admin, que tem todas)
+    if (eq && eq !== 'default' && Rede.eu.skins && Rede.eu.papel !== 'admin' && !Rede.temSkin(P.classe, eq)) { P.skinEquipada[P.classe] = 'default'; J().salvar(); J().criarHeroi(); aviso('Sua skin de teste acabou'); }
   }, 60000);
 
   /* ---------- amigos ---------- */
@@ -442,8 +444,8 @@
   let jogadorSel = null;
   function telaAdmin(aba) {
     if (typeof aba !== 'string') aba = 'jogadores';
-    const abas = { jogadores: 'Jogadores', banimentos: 'Banimentos', recompensas: 'Recompensas', premios: 'Prêmios dos mobs', loja: 'Loja de skins', evento: 'Evento da arena', moderadores: 'Moderadores', poderes: 'Meus poderes' };
-    const f = { jogadores: admJogadores, banimentos: admBanimentos, recompensas: admRecompensas, premios: admPremios, loja: admLoja, evento: admEvento, moderadores: admModeradores, poderes: admPoderes }[aba];
+    const abas = { jogadores: 'Jogadores', banimentos: 'Banimentos', recompensas: 'Recompensas', premios: 'Prêmios dos mobs', balanco: 'Dano e defesa', loja: 'Loja de skins', evento: 'Evento da arena', cinematicas: 'Cinemáticas', moderadores: 'Moderadores', poderes: 'Meus poderes' };
+    const f = { jogadores: admJogadores, banimentos: admBanimentos, recompensas: admRecompensas, premios: admPremios, balanco: admBalanco, loja: admLoja, evento: admEvento, cinematicas: admCinematicas, moderadores: admModeradores, poderes: admPoderes }[aba];
     f(abasHtml(abas, aba), el => ligarAbas(el, telaAdmin));
   }
   const adm = (topo, html, ligar, montarAbas) => modal('Administrador', topo + html, el => { montarAbas(el); if (ligar) ligar(el); });
@@ -713,6 +715,110 @@
         if (await tentar(() => global.Rede.rpc('salvar_config', { p_chave: 'arena_evento', p_valor: valor }), 'Evento salvo') !== undefined) telaAdmin('evento');
       });
     }, abas);
+  }
+
+  // ---- dano e defesa: geral (vale em todo lugar) ou só num mapa (vale por cima do geral) ----
+  let escopoBalanco = 'geral';
+  async function admBalanco(topo, abas) {
+    const aj = await global.Rede.carregarAjustes();
+    const b = aj.balanco && typeof aj.balanco === 'object' ? aj.balanco : {};
+    const MAPAS = global.MAPAS, CFG = global.Jogo.CONFIG;
+    const atual = escopoBalanco === 'geral' ? (b.geral || {}) : ((b.mapas || {})[escopoBalanco] || {});
+    const grupos = [
+      ['Heróis', Object.keys(CLASSES_NOMES).map(k => [k, CLASSES_NOMES[k]])],
+      ['Mobs', Object.keys(CFG.mobs).map(k => [k, k[0].toUpperCase() + k.slice(1)])],
+      ['Minions', Object.keys(CFG.minions).filter(k => typeof CFG.minions[k] === 'object').map(k => [k, k[0].toUpperCase() + k.slice(1)])],
+      ['Arena', [['torre', 'Torres']]]
+    ];
+    const ph = escopoBalanco === 'geral' ? ['100', '0'] : ['geral', 'geral'];
+    const html = `
+      <p class="nota"><b>Dano</b> em %: 100 é o normal, 150 bate 50% mais forte, 50 bate a metade. <b>Defesa</b> em %: quanto do dano recebido é ignorado (0 a 90). Vazio = sem mudança.</p>
+      <p class="nota">Em <b>Geral</b> vale para todos os mapas (o melhor lugar para os heróis). Escolhendo um mapa, o valor dele vale só ali, por cima do geral.</p>
+      <div class="linha"><span>Onde vale</span><select id="bEscopo" class="campo curto"><option value="geral">Geral (todos os mapas)</option>${MAPAS.ordem.map(m => `<option value="${m}" ${escopoBalanco === m ? 'selected' : ''}>${esc(MAPAS.lista[m].nome)}</option>`).join('')}</select></div>
+      ${grupos.map(([titulo, itens]) => `<h3 class="sub">${titulo}</h3>` + itens.map(([k, nome]) => `<div class="linha"><span>${esc(nome)}</span><div class="botoes">
+        <label class="rotulo inline">Dano %<input class="campo curto" style="width:76px" type="number" min="0" max="1000" data-bal="${k}" data-k="dano" placeholder="${ph[0]}" value="${atual[k] && atual[k].dano !== undefined ? atual[k].dano : ''}"></label>
+        <label class="rotulo inline">Defesa %<input class="campo curto" style="width:76px" type="number" min="0" max="90" data-bal="${k}" data-k="defesa" placeholder="${ph[1]}" value="${atual[k] && atual[k].defesa !== undefined ? atual[k].defesa : ''}"></label></div></div>`).join('')).join('')}
+      <div class="botoes"><button class="acao" id="bLimpar" type="button">Limpar ${escopoBalanco === 'geral' ? 'o geral' : 'este mapa'}</button><button class="acao forte" id="bSalvar" type="button">Salvar</button></div>`;
+    adm(topo, html, el => {
+      el.querySelector('#bEscopo').value = escopoBalanco;
+      el.querySelector('#bEscopo').addEventListener('change', e => { escopoBalanco = e.target.value; telaAdmin('balanco'); });
+      const salvar = async limpar => {
+        const novo = { geral: Object.assign({}, b.geral || {}), mapas: Object.assign({}, b.mapas || {}) };
+        const tab = {};
+        if (!limpar) el.querySelectorAll('[data-bal]').forEach(i => {
+          if (i.value === '') return;
+          let v = Number(i.value); if (!isFinite(v)) return;
+          v = i.dataset.k === 'defesa' ? Math.max(0, Math.min(90, v)) : Math.max(0, Math.min(1000, v));
+          (tab[i.dataset.bal] = tab[i.dataset.bal] || {})[i.dataset.k] = v;
+        });
+        if (escopoBalanco === 'geral') novo.geral = tab; else { if (Object.keys(tab).length) novo.mapas[escopoBalanco] = tab; else delete novo.mapas[escopoBalanco]; }
+        if (await tentar(() => global.Rede.rpc('salvar_config', { p_chave: 'balanco', p_valor: novo }), limpar ? 'Valores apagados' : 'Dano e defesa salvos') !== undefined) {
+          global.Jogo.ajustes = Object.assign({}, global.Jogo.ajustes, { balanco: novo }); telaAdmin('balanco');
+        }
+      };
+      el.querySelector('#bSalvar').addEventListener('click', () => salvar(false));
+      el.querySelector('#bLimpar').addEventListener('click', () => salvar(true));
+    }, abas);
+  }
+
+  // ---- cinemáticas: até 2 vídeos que passam depois do login, antes da escolha do herói ----
+  async function admCinematicas(topo, abas) {
+    const aj = await global.Rede.carregarAjustes();
+    const lista = (aj.cinematicas && Array.isArray(aj.cinematicas.videos)) ? aj.cinematicas.videos : [];
+    const slot = i => {
+      const v = lista[i];
+      return `<div class="form"><h3 class="sub">Vídeo ${i + 1}</h3>
+        ${v ? `<p class="nota"><b>${esc(v.nome || 'vídeo')}</b> · ${v.mb ? v.mb + ' MB' : ''}</p><video src="${esc(v.url)}" controls muted playsinline preload="metadata" style="width:100%;max-height:180px;border-radius:8px;background:#000"></video>` : '<p class="nota">Vazio</p>'}
+        <input class="campo" type="file" accept="video/mp4,video/webm,video/quicktime" data-arquivo="${i}">
+        <div class="botoes"><button class="acao forte" type="button" data-enviar="${i}">${v ? 'Substituir' : 'Enviar'}</button>${v ? `<button class="acao" type="button" data-remover="${i}">Remover</button>` : ''}</div>
+        <p class="nota" data-estado="${i}" hidden></p></div>`;
+    };
+    const html = `<p class="nota">Os vídeos passam para todos os jogadores sempre que entram no jogo, logo depois do login e antes da escolha do herói. Dá para pular depois de 5 segundos. Use MP4 de até 50 MB (limite do plano grátis do Supabase).</p>${slot(0)}${slot(1)}`;
+    adm(topo, html, el => {
+      const guardar = async videos => global.Rede.rpc('salvar_config', { p_chave: 'cinematicas', p_valor: { videos: videos.filter(Boolean) } });
+      el.querySelectorAll('[data-enviar]').forEach(b => b.addEventListener('click', async () => {
+        const i = Number(b.dataset.enviar), arq = el.querySelector(`[data-arquivo="${i}"]`).files[0], est = el.querySelector(`[data-estado="${i}"]`);
+        if (!arq) return aviso('Escolha o arquivo do vídeo primeiro');
+        if (arq.size > 50 * 1024 * 1024) return aviso('O vídeo passa de 50 MB: diminua a qualidade ou corte um pedaço');
+        b.disabled = true; est.hidden = false; est.textContent = 'Enviando ' + (arq.size / 1048576).toFixed(1) + ' MB... não feche esta janela';
+        try {
+          const novo = await global.Rede.enviarVideo(arq, i);
+          const videos = lista.slice(); const velho = videos[i]; videos[i] = novo;
+          await guardar(videos);
+          if (velho && velho.caminho) global.Rede.apagarVideo(velho.caminho).catch(() => {});
+          aviso('Vídeo ' + (i + 1) + ' salvo'); telaAdmin('cinematicas');
+        } catch (e) { est.textContent = 'Não deu certo: ' + (e.message || e); b.disabled = false; }
+      }));
+      el.querySelectorAll('[data-remover]').forEach(b => b.addEventListener('click', async () => {
+        const i = Number(b.dataset.remover), videos = lista.slice(), velho = videos[i]; videos[i] = null;
+        if (await tentar(() => guardar(videos), 'Vídeo removido') !== undefined) { if (velho && velho.caminho) global.Rede.apagarVideo(velho.caminho).catch(() => {}); telaAdmin('cinematicas'); }
+      }));
+    }, abas);
+  }
+
+  /* ---------- tocar as cinemáticas (depois do login, antes do herói) ---------- */
+  async function tocarCinematicas() {
+    let aj = null; try { aj = await global.Rede.carregarAjustes(); } catch (e) { return; }
+    const videos = (aj && aj.cinematicas && Array.isArray(aj.cinematicas.videos)) ? aj.cinematicas.videos.filter(v => v && v.url) : [];
+    for (const v of videos) await tocarUm(v);
+  }
+  function tocarUm(v) {
+    return new Promise(fim => {
+      const t = doc.createElement('div'); t.id = 'cinematica';
+      t.innerHTML = `<video playsinline preload="auto"></video><button type="button" class="pular" disabled>Pular em 5</button><button type="button" class="som" hidden>🔊 Ligar o som</button>`;
+      doc.body.appendChild(t);
+      const vid = t.querySelector('video'), pular = t.querySelector('.pular'), som = t.querySelector('.som');
+      let acabou = false, falta = 5;
+      const sair = () => { if (acabou) return; acabou = true; clearInterval(rel); try { vid.pause(); } catch (e) {} t.remove(); fim(); };
+      const rel = setInterval(() => { falta--; if (falta > 0) pular.textContent = 'Pular em ' + falta; else { pular.textContent = 'Pular ›'; pular.disabled = false; } }, 1000);
+      pular.addEventListener('click', () => { if (!pular.disabled) sair(); });
+      som.addEventListener('click', () => { vid.muted = false; som.hidden = true; vid.play().catch(() => {}); });
+      vid.addEventListener('ended', sair); vid.addEventListener('error', sair);
+      vid.src = v.url;
+      // celular só deixa tocar com som depois de um toque: se não deixar, toca mudo com o botão de som
+      vid.play().catch(() => { vid.muted = true; som.hidden = false; vid.play().catch(sair); });
+      setTimeout(() => { if (!acabou && vid.readyState === 0) sair(); }, 15000);   // não carregou: segue o jogo
+    });
   }
 
   async function admModeradores(topo, abas) {

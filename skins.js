@@ -30,15 +30,26 @@
   const CATALOGO = {
     classes: {
       suporte:  { nome: 'Suporte',  corPadrao: '#3fc1b0', skins: [
-        { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 } ] },
+        { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
+        // armas: {} = sem cajado (só os gestos das mãos)
+        { id: 'ciber', nome: 'Ajuda Cibernética', aceitaCor: false, preco: 0, armas: {} },
+        { id: 'medicina', nome: 'Medicina Vilkronomita', aceitaCor: false, preco: 0, armas: {} } ] },
       soldado:  { nome: 'Soldado',  corPadrao: '#c0392b', skins: [
         { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
         // armas: espada própria da skin (assets/armas/espada_lava.glb); os efeitos de fogo ficam no jogo.js (TEMAS)
-        { id: 'lava', nome: 'Cavaleiro de Lava', aceitaCor: false, preco: 0, armas: { padrao: 'espada_lava' } } ] },
+        { id: 'lava', nome: 'Soldado Infernal', aceitaCor: false, preco: 0, armas: { padrao: 'espada_lava' } },
+        { id: 'cacadora', nome: 'Caçadora Sombria', aceitaCor: false, preco: 0, armas: { padrao: 'espada_cacadora' } },
+        { id: 'vilkronomita', nome: 'Vilkronomita das Sombras', aceitaCor: false, preco: 0, armas: { padrao: 'machado_vilkronomita' } },
+        { id: 'viking', nome: 'Último Vikeng de Vilkron', aceitaCor: false, preco: 0, armas: { padrao: 'espada_viking' } },
+        { id: 'samurai', nome: 'Samurai de Vilkron', aceitaCor: false, preco: 0, armas: { padrao: 'katana_samurai' } } ] },
       mago:     { nome: 'Mago',     corPadrao: '#8e44ad', skins: [
-        { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 } ] },
+        { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
+        { id: 'anubis', nome: 'Vontade de Anubis', aceitaCor: false, preco: 0 },
+        { id: 'noturna', nome: 'Chamas Noturna', aceitaCor: false, preco: 0 } ] },
       atirador: { nome: 'Atirador', corPadrao: '#d68910', skins: [
-        { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 } ] }
+        { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
+        { id: 'cosmos', nome: 'Atirador do Cosmos', aceitaCor: false, preco: 0 },
+        { id: 'paintball', nome: 'Maníaco do Paintball', aceitaCor: false, preco: 0 } ] }
     },
     generos: { m: 'Homem', f: 'Mulher' },
 
@@ -127,7 +138,8 @@
     // 'frente' = cano sempre para onde o personagem olha.
     armas: {
       espada:  { modo: 'empunhar' },
-      espada_lava: { modo: 'empunhar' },
+      espada_lava: { modo: 'empunhar' }, espada_cacadora: { modo: 'empunhar' }, machado_vilkronomita: { modo: 'empunhar' },
+      espada_viking: { modo: 'empunhar' }, katana_samurai: { modo: 'empunhar' },
       cajado:  { modo: 'vertical' },
       rifle:   { modo: 'frente' },
       pistola: { modo: 'frente' }
@@ -991,6 +1003,8 @@
     const cor = o.cor || perfil.cores[o.classe] || def.corPadrao;
 
     let gltf = await carregarModelo(`${BASE}chars/${o.classe}_${o.genero}_${skin.id}`);
+    // skin com um modelo só (vale para homem e mulher): usa o arquivo do outro gênero
+    if (!gltf && skin.id !== 'default') gltf = await carregarModelo(`${BASE}chars/${o.classe}_${o.genero === 'f' ? 'm' : 'f'}_${skin.id}`);
     if (!gltf && skin.id !== 'default') {
       // modelo da skin ainda não foi enviado: usa o padrão para não travar
       skin = def.skins[0];
@@ -1181,6 +1195,11 @@
     if (ind && min) {
       meio = ind.position.clone().add(min.position).multiplyScalar(0.5);
       atravessa = ind.position.clone().sub(min.position).normalize();
+    } else {
+      // mão sem ossos dos dedos (o Rig veio simplificado): pegada média dos outros bonecos, na escala desta mão
+      const k = (mao.position && mao.position.length ? mao.position.length() : 0.264) / 0.264;
+      meio = new THREE.Vector3(0.01, 0.165, -0.018).multiplyScalar(k);
+      atravessa = new THREE.Vector3(-0.16, 0.08, 0.98).normalize();
     }
     suporte.position.copy(meio).multiplyScalar(0.6);
     if (def.modo === 'empunhar') {
@@ -1310,7 +1329,7 @@
       const ctx = cv.getContext('2d');
       ctx.fillStyle = corFallback(nome); ctx.fillRect(0, 0, 4, 4);
       tex = new THREE.CanvasTexture(cv);
-      new THREE.TextureLoader().load(`${BASE}tex/${nome}.jpg?v=17`, img => {
+      new THREE.TextureLoader().load(`${BASE}tex/${nome}.jpg?v=20`, img => {
         tex.image = img.image; tex.needsUpdate = true;
       }, undefined, () => {});
     } else {

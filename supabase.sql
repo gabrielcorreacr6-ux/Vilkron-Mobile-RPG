@@ -747,3 +747,32 @@ end $$;
 
 revoke all on function public.premio_evento_arena(int, int) from anon, public;
 grant execute on function public.premio_evento_arena(int, int) to authenticated;
+
+-- ===== Vilkron: dano/defesa do admin e cinemáticas (rodar uma vez no SQL Editor) =====
+
+-- o admin passa a salvar também o balanço (dano e defesa) e a lista de vídeos
+create or replace function public.salvar_config(p_chave text, p_valor jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform _exigir(array['admin']);
+  if p_chave not in ('mobs', 'pvp', 'drops', 'arena_evento', 'balanco', 'cinematicas') then raise exception 'Chave inválida'; end if;
+  insert into config (chave, valor) values (p_chave, p_valor)
+    on conflict (chave) do update set valor = excluded.valor;
+end $$;
+
+-- pasta pública dos vídeos (todos assistem; só o admin envia, troca ou apaga)
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('cinematicas', 'cinematicas', true, 52428800, array['video/mp4', 'video/webm', 'video/quicktime'])
+on conflict (id) do update set public = true, file_size_limit = 52428800, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists cine_ler on storage.objects;
+create policy cine_ler on storage.objects for select using (bucket_id = 'cinematicas');
+drop policy if exists cine_admin_enviar on storage.objects;
+create policy cine_admin_enviar on storage.objects for insert to authenticated
+  with check (bucket_id = 'cinematicas' and exists (select 1 from public.perfis where id = auth.uid() and papel = 'admin'));
+drop policy if exists cine_admin_trocar on storage.objects;
+create policy cine_admin_trocar on storage.objects for update to authenticated
+  using (bucket_id = 'cinematicas' and exists (select 1 from public.perfis where id = auth.uid() and papel = 'admin'));
+drop policy if exists cine_admin_apagar on storage.objects;
+create policy cine_admin_apagar on storage.objects for delete to authenticated
+  using (bucket_id = 'cinematicas' and exists (select 1 from public.perfis where id = auth.uid() and papel = 'admin'));
