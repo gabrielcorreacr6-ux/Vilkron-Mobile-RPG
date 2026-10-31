@@ -850,6 +850,12 @@
   function atualizarProjeteis(dt) {
     for (let i = E.projeteis.length - 1; i >= 0; i--) {
       const p = E.projeteis[i];
+      if (p.alvo && !p.alvo.morto) {
+        // vira devagar na direção do alvo (até ~6 rad/s): perdoa o movimento do inimigo
+        const queria = Math.atan2(p.alvo.x - p.x, p.alvo.z - p.z), atual = Math.atan2(p.dx, p.dz);
+        const nova = girarPara(atual, queria, dt * 6);
+        p.dx = Math.sin(nova); p.dz = Math.cos(nova);
+      }
       const passo = p.vel * dt;
       p.x += p.dx * passo; p.z += p.dz * passo; p.restante -= passo;
       p.obj.position.set(p.x, p.y, p.z);
@@ -879,6 +885,21 @@
       if (e.tipo === 'serpente' && !e.emerso) return;
       if (remoto(e) && !deMim(origem)) return;
       if (Math.hypot(e.x - x, e.z - z) <= raio + e.raio) { fn(e); n++; }
+    });
+    return n;
+  }
+  // golpe em leque na frente (meia-abertura em radianos): mais fácil de acertar que um ponto
+  function cone(origem, ang, raio, abertura, fn) {
+    let n = 0;
+    E.entidades.forEach(e => {
+      if (e.morto || !inimigos(e, origem) || e === origem) return;
+      if (e.tipo === 'serpente' && !e.emerso) return;
+      if (remoto(e) && !deMim(origem)) return;
+      const dx = e.x - origem.x, dz = e.z - origem.z, d = Math.hypot(dx, dz);
+      if (d > raio + e.raio) return;
+      const da = Math.abs(Math.atan2(Math.sin(Math.atan2(dx, dz) - ang), Math.cos(Math.atan2(dx, dz) - ang)));
+      if (d > e.raio + 0.6 && da > abertura) return;
+      fn(e); n++;
     });
     return n;
   }
@@ -1033,6 +1054,30 @@
     hud();
     return h;
   }
+  // Escolha do alvo do ataque básico:
+  //  - arrastando o botão: o inimigo mais perto da linha mirada (até 35°)
+  //  - só tocando: o alvo travado, senão herói inimigo, senão o mais perto
+  function escolherAlvo(h, alcance, angMira) {
+    const valido = e => e && !e.morto && inimigos(e, h) && e.tipo !== 'clone' && !(e.tipo === 'serpente' && !e.emerso) &&
+      !(remoto(e) && (invisivel(e) || zonaSegura(e.x, e.z) || PODERES.semVantagem)) && !(e.tipo === 'heroi') && !(e.obj && e.obj.visible === false && remoto(e));
+    let melhor = null, nota = Infinity;
+    E.entidades.forEach(e => {
+      if (!valido(e)) return;
+      const d = dist(e, h); if (d > alcance + e.raio) return;
+      let n = d;
+      if (angMira !== null && angMira !== undefined) {
+        const da = Math.abs(Math.atan2(Math.sin(Math.atan2(e.x - h.x, e.z - h.z) - angMira), Math.cos(Math.atan2(e.x - h.x, e.z - h.z) - angMira)));
+        if (da > 0.61) return;                       // fora do cone de 35°
+        n = da * 8 + d * 0.3;
+      } else {
+        if (e === h.alvoTravado && h.travaAte > E.t) n -= 100;   // continua no mesmo alvo
+        else if (remoto(e)) n -= 4;                               // herói inimigo primeiro
+        else if (e.tipo === 'minion' || e.tipo === 'torre') n += 2;
+      }
+      if (n < nota) { nota = n; melhor = e; }
+    });
+    return melhor;
+  }
   function alvoMaisPerto(origem, alcance) {
     let melhor = null, md = alcance;
     E.entidades.forEach(e => {
@@ -1054,17 +1099,25 @@
   function usar(slot, mira) {
     const h = E.heroi; if (!h || !podeAgir(h)) return false;
     if (h.cds[slot] > E.t) return false;
+    // o atirador só atira parado (o salto é a exceção: é movimento)
+    if (h.classe === 'atirador' && slot !== 3 && Entrada.mag > 0.12) return false;
     const saltoLivre = h.classe === 'atirador' && slot === 3;      // o salto pode ser usado no meio de qualquer animação
     if (h.anim && ['ataque', 'habilidade1', 'habilidade2', 'habilidade3'].indexOf(h.anim.estado) >= 0 && slot !== 0 && !saltoLivre) return false;
     const cls = CLASSES[h.classe];
     let ang = h.rot, alvo = null;
-    if (mira) ang = mira.ang;
+    if (slot === 0) {
+      // ataque básico: mira assistida (prefere o alvo travado e heróis inimigos)
+      alvo = escolherAlvo(h, cls.alcance + (mira ? 1.5 : 3), mira ? mira.ang : null);
+      if (alvo) ang = Math.atan2(alvo.x - h.x, alvo.z - h.z);
+      else if (mira) ang = mira.ang;
+      h.alvoTravado = alvo; h.travaAte = E.t + 2.5;
+    } else if (mira) ang = mira.ang;
     else {
-      alvo = alvoMaisPerto(h, slot === 0 ? cls.alcance + 3 : 12);
+      alvo = alvoMaisPerto(h, 12);
       if (alvo) ang = Math.atan2(alvo.x - h.x, alvo.z - h.z);
     }
     h.rot = ang;
-    if (h.classe === 'atirador' && slot === 0) { h.miraAng = ang; h.miraAte = E.t + 0.7; }
+    h.ultimoAlvo = alvo;
     let cd = cls.cd[slot];
     if (slot === 0) cd /= velAtaque(h);
     h.cds[slot] = E.t + cd;
@@ -1214,7 +1267,7 @@
     soldado: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.45, aoAcertar: () => {
         const tm = tema(h);
-        area(h.x + Math.sin(ang) * 1.3, h.z + Math.cos(ang) * 1.3, 1.6, h, e => {
+        cone(h, h.rot, 3.0, 1.2, e => {
           causarDano(e, CLASSES.soldado.dano, h);
           emitir('faisca', e.x, 1.1, e.z, { n: 10, cor: tm.faisca, vel: 3.5, subida: 2, grav: 9, vida: 0.4 });
         });
@@ -1240,7 +1293,7 @@
     ],
     suporte: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () =>
-        atirar(h, h.rot, { vel: 18, restante: CLASSES.suporte.alcance, dano: CLASSES.suporte.dano, cor: tema(h).principal, tamanho: 0.8, rastro: tema(h).brilho, impacto: tema(h).brilho }) }),
+        atirar(h, h.rot, { alvo: h.ultimoAlvo, raio: 0.8, restante: CLASSES.suporte.alcance + 1.5, vel: 18, dano: CLASSES.suporte.dano, cor: tema(h).principal, tamanho: 0.8, rastro: tema(h).brilho, impacto: tema(h).brilho }) }),
       (h) => h.anim.tocar('habilidade1', { momento: 0.55, aoAcertar: () => {
         const tm = tema(h);
         anelEfeito(h.x, h.z, 7, tm.cura, 0.8, true);
@@ -1259,7 +1312,7 @@
     ],
     mago: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () =>
-        atirar(h, h.rot, { vel: 15, restante: CLASSES.mago.alcance, dano: CLASSES.mago.dano, cor: tema(h).principal, tamanho: 0.9,
+        atirar(h, h.rot, { alvo: h.ultimoAlvo, raio: 0.8, vel: 15, restante: CLASSES.mago.alcance + 1.5, dano: CLASSES.mago.dano, cor: tema(h).principal, tamanho: 0.9,
           rastro: tema(h).brasa, impacto: tema(h).brasa, efeito: e => aplicarSlow(e, 0.3, 0.2) }) }),
       (h, ang, mira) => {
         const d = mira ? clamp(mira.dist, 2, 10) : 6;
@@ -1294,7 +1347,7 @@
         h.anim.tocar('ataque', { velocidade: velAtaque(h), momento: 0.45, aoAcertar: () => {
           const explode = h.explosivoAte > E.t;
           const tm = tema(h);
-          atirar(h, h.rot, { vel: 24, restante: CLASSES.atirador.alcance, dano: CLASSES.atirador.dano, cor: explode ? tm.explosivo : tm.principal, tamanho: explode ? 1.15 : 0.95,
+          atirar(h, h.rot, { alvo: h.ultimoAlvo, raio: 0.8, vel: 24, restante: CLASSES.atirador.alcance + 1.5, dano: CLASSES.atirador.dano, cor: explode ? tm.explosivo : tm.principal, tamanho: explode ? 1.15 : 0.95,
             rastro: explode ? tm.brasa : tm.faisca, impacto: explode ? tm.explosivo : tm.principal,
             efeito: explode ? a => explosaoEnergia(h, a.x, a.z) : null });
         } });
@@ -1900,14 +1953,18 @@
             if (e.tipo !== 'torre') { e.x += Math.sin(iv.ang) * 3; e.z += Math.cos(iv.ang) * 3; }
           });
           if (iv.resta <= 0) h.investida = null;
-        } else if (!ocupadoHeroi(h) && Entrada.mag > 0.12) {
+        } else if (h.classe === 'atirador' && Entrada.mag > 0.12 && h.anim && /^(ataque|habilidade1|habilidade2)$/.test(h.anim.estado || '') && !(h.travadoAte > E.t)) {
+          // começou a andar no meio do tiro: o tiro é cancelado e ele só anda
+          h.anim.aoAcertar = null; h.anim.cancelar && h.anim.cancelar();
+        }
+        if (!h.investida && !ocupadoHeroi(h) && Entrada.mag > 0.12) {
           const dir = Math.atan2(Entrada.x, Entrada.z);
           // atirando: o corpo fica virado para o alvo enquanto as pernas andam
-          h.rot = h.miraAte > E.t ? girarPara(h.rot, h.miraAng, dt * 20) : girarPara(h.rot, dir, dt * 12);
+          h.rot = girarPara(h.rot, dir, dt * 12);
           vel = h.vel * Entrada.mag * lentidao(h);
           h.x += Math.sin(dir) * vel * dt; h.z += Math.cos(dir) * vel * dt;
         }
-        if (Entrada.atacando && E.t >= h.cds[0]) usar(0, null);
+        if (Entrada.atacando && E.t >= h.cds[0]) usar(0, Entrada.miraAtaque !== null ? { ang: Entrada.miraAtaque, dist: 10 } : null);
         h.anim.mover(vel);
       }
       h.x = clamp(h.x, -E.def.tam[0] / 2, E.def.tam[0] / 2);
@@ -1974,6 +2031,16 @@
         (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => { m.transparent = invis; m.opacity = invis ? 0.35 : 1; m.needsUpdate = true; });
       });
     }
+    // marcador do alvo do ataque básico (anel vermelho no chão)
+    if (!h.marcaAlvo) {
+      h.marcaAlvo = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 32), new THREE.MeshBasicMaterial({ color: 0xff5a4a, transparent: true, opacity: 0.8, depthWrite: false }));
+      h.marcaAlvo.rotation.x = -Math.PI / 2; h.marcaAlvo.renderOrder = 7;
+    }
+    if (h.marcaAlvo.parent !== E.mundo) E.mundo.add(h.marcaAlvo);
+    const ta = h.alvoTravado;
+    const mostra = !!(ta && !ta.morto && h.travaAte > E.t && !(ta.obj && ta.obj.visible === false));
+    h.marcaAlvo.visible = mostra;
+    if (mostra) { const esc = Math.max(1, ta.raio * 1.3); h.marcaAlvo.position.set(ta.x, 0.12, ta.z); h.marcaAlvo.scale.setScalar(esc * (1 + 0.06 * Math.sin(E.t * 8))); }
     // olho cortado sobre a cabeça dentro da moita
     if (!h.olho) { h.olho = new THREE.Sprite(new THREE.SpriteMaterial({ map: R.olhoTex, depthWrite: false, transparent: true })); h.olho.scale.set(0.7, 0.7, 1); }
     if (h.olho.parent !== E.mundo) E.mundo.add(h.olho);
@@ -1982,7 +2049,7 @@
   }
 
   /* ======================= ENTRADA (joystick e mira) ======================= */
-  const Entrada = { x: 0, z: 0, mag: 0, atacando: false };
+  const Entrada = { x: 0, z: 0, mag: 0, atacando: false, miraAtaque: null };
 
   /* ======================= TELA (HUD) ======================= */
   const $ = id => temDOM ? document.getElementById(id) : null;
@@ -2192,9 +2259,23 @@
     global.addEventListener('keyup', e => { const k = e.key.toLowerCase(); teclas[k] = false; doTeclado(); if (k === 'j') Entrada.atacando = false; });
 
     // ataque: segurar ataca sem parar
-    const bA = $('bAtaque');
-    bA.addEventListener('pointerdown', e => { e.preventDefault(); Entrada.atacando = true; bA.classList.add('ativo'); });
-    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => bA.addEventListener(t, () => { Entrada.atacando = false; bA.classList.remove('ativo'); }));
+    // ataque: segurar ataca sem parar; arrastar o dedo escolhe a direção (mira assistida)
+    const bA = $('bAtaque'), miraEl = $('mira');
+    let idA = null, axc = 0, ayc = 0;
+    bA.addEventListener('pointerdown', e => {
+      e.preventDefault(); idA = e.pointerId; const r = bA.getBoundingClientRect();
+      axc = r.left + r.width / 2; ayc = r.top + r.height / 2;
+      try { bA.setPointerCapture(e.pointerId); } catch (er) {}
+      Entrada.atacando = true; Entrada.miraAtaque = null; bA.classList.add('ativo');
+    });
+    bA.addEventListener('pointermove', e => {
+      if (e.pointerId !== idA) return;
+      const dx = e.clientX - axc, dy = e.clientY - ayc, d = Math.hypot(dx, dy);
+      if (d > 16) { Entrada.miraAtaque = Math.atan2(dx, dy); miraEl.hidden = false; miraEl.dataset.ang = Entrada.miraAtaque; miraEl.dataset.dist = 1; }
+      else { Entrada.miraAtaque = null; miraEl.hidden = true; }
+    });
+    const soltarA = e => { if (e.pointerId !== idA) return; idA = null; Entrada.atacando = false; Entrada.miraAtaque = null; miraEl.hidden = true; bA.classList.remove('ativo'); };
+    ['pointerup', 'pointercancel'].forEach(t => bA.addEventListener(t, soltarA));
 
     // habilidades e relógio: toque mira sozinho, arrastar escolhe direção
     const mira = $('mira');

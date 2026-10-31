@@ -15,6 +15,7 @@
 
   const Rede = global.Rede = {
     ativo, eu: null, sb: null, remotos: new Map(), amigos: new Set(), pedidos: [], amizades: [],
+    equipe: new Set(), equipeId: null, lider: null, membros: [], convitesEquipe: [], aoConviteEquipe: null,
     aoMudarPerfil: null, aoMensagens: null, aoBanido: null
   };
   if (!ativo) return;
@@ -77,7 +78,9 @@
     ouvirMeuPerfil();
     carregarAjustes();
     carregarAmigos();
+    carregarEquipe();
     setInterval(() => sincronizar(), 15000);
+    setInterval(() => carregarEquipe(), 20000);
     if (global.document && global.document.addEventListener)
       global.document.addEventListener('visibilitychange', () => { if (global.document.hidden) sincronizar(true); });
   };
@@ -139,6 +142,8 @@
     sb.channel('perfil_' + Rede.eu.id)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'perfis', filter: 'id=eq.' + Rede.eu.id }, () => sincronizar())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensagens', filter: 'para=eq.' + Rede.eu.id }, () => Rede.lerMensagens())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipe_membros' }, () => carregarEquipe())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'convites_equipe', filter: 'para=eq.' + Rede.eu.id }, () => carregarEquipe())
       .subscribe();
   }
 
@@ -165,9 +170,46 @@
     Rede.amizades = data || [];
     Rede.amigos = new Set(Rede.amizades.filter(a => a.aceita).map(a => (a.de === eu ? a.para : a.de)));
     Rede.pedidos = Rede.amizades.filter(a => !a.aceita && a.para === eu).map(a => a.de);
-    Rede.remotos.forEach((r, uid) => { if (r.ent) r.ent.time = Rede.amigos.has(uid) ? 'jogador' : 'r_' + uid; });
+    atualizarTimes();
     return Rede.amizades;
   }
+
+  /* ---------------- EQUIPE (até 4, não se ferem) ---------------- */
+  // Só a equipe é aliada no combate. Amigos fora da equipe aparecem no minimapa, mas podem lutar.
+  Rede.aliado = uid => Rede.equipe.has(uid);
+  function atualizarTimes() {
+    Rede.remotos.forEach((r, uid) => {
+      if (!r.ent) return;
+      r.ent.time = Rede.aliado(uid) ? 'jogador' : 'r_' + uid;
+      const cor = Rede.aliado(uid) ? 'equipe' : 'outro';
+      if (r.corRotulo !== cor && r.rotulo && r.rotulo.parent) {
+        r.rotulo.parent.remove(r.rotulo);
+        r.rotulo = J.api.textoSprite(r.p.n, 2.2, Rede.aliado(uid) ? '#9fd8ff' : '#ffb4a8'); r.rotulo.renderOrder = 11; J.api.E.mundo.add(r.rotulo);
+      }
+      r.corRotulo = cor;
+    });
+  }
+  let convitesVistos = new Set();
+  async function carregarEquipe() {
+    if (!Rede.eu) return;
+    const eu = Rede.eu.id;
+    const { data: m } = await sb.from('equipe_membros').select('jogador, equipe, entrou_em');
+    const { data: eqs } = await sb.from('equipes').select('id, lider');
+    const { data: cv } = await sb.from('convites_equipe').select('equipe, de, para, criado_em').eq('para', eu);
+    Rede.membros = m || [];
+    Rede.equipeId = Rede.membros.length ? Rede.membros[0].equipe : null;
+    const minha = (eqs || []).find(e => e.id === Rede.equipeId);
+    Rede.lider = minha ? minha.lider : null;
+    Rede.equipe = new Set(Rede.membros.map(x => x.jogador).filter(u => u !== eu));
+    Rede.convitesEquipe = cv || [];
+    Rede.convitesEquipe.forEach(c => {
+      const k = c.equipe + '|' + c.criado_em;
+      if (!convitesVistos.has(k)) { convitesVistos.add(k); if (Rede.aoConviteEquipe) Rede.aoConviteEquipe(c); }
+    });
+    atualizarTimes();
+    return Rede.membros;
+  }
+  Rede.carregarEquipe = carregarEquipe;
   Rede.carregarAmigos = carregarAmigos;
   Rede.nicks = async ids => {
     if (!ids.length) return {};
@@ -230,11 +272,11 @@
         if (r.ent) tirarEntidade(r.ent);
         const A = J.api;
         r.ent = A.nova({
-          tipo: 'remoto', uid: p.u, nick: p.n, num: p.num, classe: p.c, skin: p.s, time: Rede.amigos.has(p.u) ? 'jogador' : 'r_' + p.u,
+          tipo: 'remoto', uid: p.u, nick: p.n, num: p.num, classe: p.c, skin: p.s, time: Rede.aliado(p.u) ? 'jogador' : 'r_' + p.u,
           obj, anim: global.Skins.animador(obj), x: p.x, z: p.z, rot: p.r, vida: p.v, vidaMax: p.vm, raio: 0.6
         });
         r.visual = visual; r.cor = p.k;
-        r.rotulo = A.textoSprite(p.n, 2.2, Rede.amigos.has(p.u) ? '#9fd8ff' : '#ffb4a8');
+        r.rotulo = A.textoSprite(p.n, 2.2, Rede.aliado(p.u) ? '#9fd8ff' : '#ffb4a8'); r.corRotulo = Rede.aliado(p.u) ? 'equipe' : 'outro';
         r.rotulo.renderOrder = 11; A.E.mundo.add(r.rotulo);
       } catch (e) { console.warn('jogador remoto', e); }
       finally { r.criando = false; }
@@ -274,7 +316,7 @@
       if (!e.morto) e.anim.mover(Math.hypot(e.x - ax, e.z - az) / Math.max(dt, 1e-3));
       if (e.escudo && e.escudoAte < E.t) e.escudo = 0;
       e.invisivelRede = !!p.i; e.naMoita = !!p.b;
-      const amigo = Rede.amigos.has(uid);
+      const amigo = Rede.amigos.has(uid) || Rede.aliado(uid);
       // invisível (admin/moderador): só o admin vê, meio transparente. Moita: só amigos veem.
       const ver = (!p.i || souAdmin) && (!p.b || amigo);
       e.obj.visible = ver;
@@ -302,7 +344,7 @@
   function receberDano(d) {
     if (d.para !== Rede.eu.id) return;
     const r = Rede.remotos.get(d.de); if (!r || !r.ent) return;
-    if (Rede.amigos.has(d.de)) return;
+    if (Rede.aliado(d.de)) return;                 // da mesma equipe: ninguém se fere
     const h = J.api.E.heroi; if (!h || h.morto) return;
     J.api.causarDano(h, Math.min(Number(d.v) || 0, 2000), r.ent, { verdadeiro: !!d.vd });
   }
@@ -317,7 +359,7 @@
 
   // stun, lentidão e corte de cura vindos de outro jogador
   function receberEfeito(a) {
-    if (a.para !== Rede.eu.id || Rede.amigos.has(a.de)) return;
+    if (a.para !== Rede.eu.id || Rede.aliado(a.de)) return;
     const r = Rede.remotos.get(a.de); if (!r) return;
     const h = J.api.E.heroi; if (!h || h.morto) return;
     if (J.api.zonaSegura(h.x, h.z) || global.Jogo.poderes.imortal) return;

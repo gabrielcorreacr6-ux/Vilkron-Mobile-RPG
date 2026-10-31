@@ -91,6 +91,7 @@
       instalarMenus(eu);
       Rede.aoBanido = r => { telaBanido(r); };
       Rede.aoMensagens = mostrarMensagens;
+      Rede.aoConviteEquipe = c => conviteEquipe(c);
       Rede.aoMudarPerfil = r => { atualizarMenus(r); };
       Rede.prepararJogo();                    // perfil do servidor antes de montar o mapa
       await global.Jogo.iniciar();
@@ -109,7 +110,7 @@
   function instalarMenus(eu) {
     const menu = $('menu');
     const itens = [
-      ['skins_loja', 'Loja de skins'], ['skins_minhas', 'Minhas skins'], ['amigos', 'Amigos'],
+      ['equipe', 'Equipe'], ['skins_loja', 'Loja de skins'], ['skins_minhas', 'Minhas skins'], ['amigos', 'Amigos'],
       ['mensagens', 'Mensagens'], ['moderacao', 'Moderação'], ['meuid', 'Meu ID'], ['sair', 'Sair da conta']
     ];
     const primeiro = menu.querySelector('[data-menu]');
@@ -131,7 +132,7 @@
 
     global.Jogo.ganchos.menu = q => {
       const f = {
-        skins_loja: telaLojaSkins, skins_minhas: telaMinhasSkins, amigos: telaAmigos, mensagens: telaMensagens,
+        equipe: telaEquipe, skins_loja: telaLojaSkins, skins_minhas: telaMinhasSkins, amigos: telaAmigos, mensagens: telaMensagens,
         moderacao: telaModeracao, meuid: telaMeuId, sair: () => global.Rede.sair()
       }[q];
       if (f) { f(); return true; }
@@ -228,7 +229,7 @@
     const enviados = Rede.amizades.filter(a => !a.aceita && a.de === Rede.eu.id).map(a => a.para);
     const nome = id => n[id] ? esc(n[id].nick) + ' <small class="inline">#' + n[id].num + '</small>' : '?';
     modal('Amigos', `
-      <p class="nota">Seu ID: <b>${Rede.eu.num}</b>. Amigos aparecem no minimapa, são aliados e dão visão dos inimigos perto deles.</p>
+      <p class="nota">Seu ID: <b>${Rede.eu.num}</b>. Amigos aparecem no minimapa e dão visão dos inimigos perto deles. Para não se ferirem, chame-os para a sua Equipe.</p>
       <div class="linha"><input id="iAmigo" class="campo" inputmode="numeric" placeholder="ID do amigo"><button class="acao" id="bAddAmigo" type="button">Adicionar</button></div>
       ${pedidos.length ? '<h3 class="sub">Pedidos para você</h3>' + pedidos.map(id => `<div class="linha"><span>${nome(id)}</span><div class="botoes">
         <button class="acao fina forte" data-aceitar="${id}" type="button">Aceitar</button><button class="acao fina" data-recusar="${id}" type="button">Recusar</button></div></div>`).join('') : ''}
@@ -244,6 +245,55 @@
       el.querySelectorAll('[data-aceitar]').forEach(b => b.addEventListener('click', async () => { await tentar(() => Rede.rpc('responder_amizade', { p_de: b.dataset.aceitar, p_aceitar: true }), 'Amizade aceita'); telaAmigos(); }));
       el.querySelectorAll('[data-recusar]').forEach(b => b.addEventListener('click', async () => { await tentar(() => Rede.rpc('responder_amizade', { p_de: b.dataset.recusar, p_aceitar: false })); telaAmigos(); }));
       el.querySelectorAll('[data-remover]').forEach(b => b.addEventListener('click', async () => { await tentar(() => Rede.rpc('desfazer_amizade', { p_outro: b.dataset.remover })); telaAmigos(); }));
+    });
+  }
+
+  /* ---------- equipe ---------- */
+  async function conviteEquipe(c) {
+    const n = await global.Rede.nicks([c.de]);
+    const quem = n[c.de] ? n[c.de].nick : 'Um amigo';
+    const abrir = () => {
+      if (!J().E.heroi || !$('modal').hidden) { setTimeout(abrir, 1500); return; }
+      modal('Convite de equipe', `<p><b>${esc(quem)}</b> chamou você para a equipe dele.</p>
+        <p class="nota">Na equipe (até 4 jogadores) ninguém fere ninguém. Se você já está em outra equipe, sai dela ao aceitar.</p>
+        <div class="botoes"><button class="acao forte" id="cAceitar" type="button">Aceitar</button><button class="acao" id="cRecusar" type="button">Recusar</button></div>`, el => {
+        el.querySelector('#cAceitar').addEventListener('click', async () => { await tentar(() => global.Rede.rpc('responder_convite_equipe', { p_equipe: c.equipe, p_aceitar: true }), r => r); await global.Rede.carregarEquipe(); J().fecharModal(); });
+        el.querySelector('#cRecusar').addEventListener('click', async () => { await tentar(() => global.Rede.rpc('responder_convite_equipe', { p_equipe: c.equipe, p_aceitar: false }), r => r); await global.Rede.carregarEquipe(); J().fecharModal(); });
+      });
+    };
+    abrir();
+  }
+  async function telaEquipe() {
+    const Rede = global.Rede;
+    await Promise.all([Rede.carregarAmigos(), Rede.carregarEquipe()]);
+    const eu = Rede.eu.id, souLider = Rede.lider === eu;
+    const ids = Array.from(new Set(Rede.membros.map(m => m.jogador).concat(Array.from(Rede.amigos), Rede.convitesEquipe.map(c => c.de))));
+    const n = await Rede.nicks(ids);
+    const nome = id => n[id] ? esc(n[id].nick) + ' <small class="inline">#' + n[id].num + '</small>' : '?';
+    const membros = Rede.membros.slice().sort((a, b) => (a.jogador === Rede.lider ? -1 : b.jogador === Rede.lider ? 1 : 0));
+    const fora = Array.from(Rede.amigos).filter(id => !Rede.membros.some(m => m.jogador === id));
+    const cheia = membros.length >= 4;
+    modal('Equipe', `
+      <p class="nota">Até 4 jogadores. Na equipe ninguém fere ninguém, a cura e o escudo do suporte valem para todos e vocês se veem no minimapa.</p>
+      ${Rede.convitesEquipe.length ? '<h3 class="sub">Convites para você</h3>' + Rede.convitesEquipe.map(c => `<div class="linha"><span>${nome(c.de)}</span><div class="botoes">
+        <button class="acao fina forte" type="button" data-aceitar="${c.equipe}">Entrar</button><button class="acao fina" type="button" data-recusar="${c.equipe}">Recusar</button></div></div>`).join('') : ''}
+      <h3 class="sub">Sua equipe ${membros.length ? '(' + membros.length + '/4)' : ''}</h3>
+      ${membros.length ? membros.map(m => `<div class="linha"><span>${m.jogador === Rede.lider ? '👑 ' : ''}${m.jogador === eu ? '<b>Você</b>' : nome(m.jogador)}
+          ${m.jogador !== eu && Rede.remotos.has(m.jogador) ? ' <small class="inline online">neste mapa</small>' : ''}</span>
+          ${souLider && m.jogador !== eu ? `<button class="acao fina" type="button" data-expulsar="${m.jogador}">Expulsar</button>` : ''}</div>`).join('')
+        + '<button class="acao" id="eSair" type="button">Sair da equipe</button>'
+        : '<p class="nota">Você ainda não está em uma equipe. Chame um amigo abaixo para criar a sua.</p>'}
+      <h3 class="sub">Chamar amigos</h3>
+      ${fora.length ? fora.map(id => `<div class="linha"><span>${nome(id)}${Rede.remotos.has(id) ? ' <small class="inline online">neste mapa</small>' : ''}</span>
+        <button class="acao fina" type="button" data-chamar="${n[id] ? n[id].num : ''}" ${cheia ? 'disabled' : ''}>${cheia ? 'Equipe cheia' : 'Chamar'}</button></div>`).join('')
+        : '<p class="nota">Só amigos podem entrar na equipe. Adicione amigos em ⋮ › Amigos.</p>'}`, el => {
+      const depois = async r => { if (r !== undefined) { await Rede.carregarEquipe(); telaEquipe(); } };
+      el.querySelectorAll('[data-chamar]').forEach(b => b.addEventListener('click', async () => depois(await tentar(() => Rede.rpc('convidar_equipe', { p_num: Number(b.dataset.chamar) }), r => r))));
+      el.querySelectorAll('[data-expulsar]').forEach(b => b.addEventListener('click', async () => depois(await tentar(() => Rede.rpc('expulsar_equipe', { p_jogador: b.dataset.expulsar }), r => r))));
+      el.querySelectorAll('[data-aceitar]').forEach(b => b.addEventListener('click', async () => depois(await tentar(() => Rede.rpc('responder_convite_equipe', { p_equipe: Number(b.dataset.aceitar), p_aceitar: true }), r => r))));
+      el.querySelectorAll('[data-recusar]').forEach(b => b.addEventListener('click', async () => depois(await tentar(() => Rede.rpc('responder_convite_equipe', { p_equipe: Number(b.dataset.recusar), p_aceitar: false }), r => r))));
+      const sair = el.querySelector('#eSair');
+      if (sair) sair.addEventListener('click', async () => depois(await tentar(() => Rede.rpc('sair_equipe'), r => r)));
     });
   }
 
@@ -611,13 +661,13 @@
       g.drawImage(fundo, tx(-W / 2), tz(-H / 2), W * k, H * k);
       const Rede = global.Rede, souAdmin = Rede && Rede.eu && Rede.eu.papel === 'admin';
       const amigos = [];
-      if (Rede && Rede.remotos) Rede.remotos.forEach((r, uid) => { if (r.ent && Rede.amigos.has(uid) && !r.ent.morto) amigos.push(r.ent); });
+      if (Rede && Rede.remotos) Rede.remotos.forEach((r, uid) => { if (r.ent && (Rede.amigos.has(uid) || Rede.aliado(uid)) && !r.ent.morto) amigos.push(r.ent); });
       const olhos = [h].concat(amigos);
       const ponto = (x, z, cor, r) => { g.fillStyle = cor; g.beginPath(); g.arc(tx(x), tz(z), r, 0, 7); g.fill(); g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 1; g.stroke(); };
       // inimigos (outros jogadores, mobs e minions vermelhos) só com visão
       E.entidades.forEach(e => {
         if (e.morto || e === h) return;
-        const amigo = e.tipo === 'remoto' && Rede.amigos.has(e.uid);
+        const amigo = e.tipo === 'remoto' && (Rede.amigos.has(e.uid) || Rede.aliado(e.uid));
         if (amigo) return;
         if (e.tipo === 'remoto') {
           if ((e.invisivelRede && !souAdmin) || e.naMoita) return;

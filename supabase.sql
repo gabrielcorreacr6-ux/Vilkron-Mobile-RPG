@@ -252,6 +252,9 @@ begin
   if eu.invisivel then return jsonb_build_object('xp', 0, 'ouro', 0, 'tipo', 'invisivel'); end if;
   select * into v from perfis where id = p_vitima;
   if v.id is null or v.id = eu.id then raise exception 'Abate inválido'; end if;
+  if exists (select 1 from equipe_membros a join equipe_membros b on a.equipe = b.equipe where a.jogador = eu.id and b.jogador = v.id) then
+    return jsonb_build_object('xp', 0, 'ouro', 0, 'tipo', 'equipe');
+  end if;
   if exists (select 1 from abates where assassino = eu.id and vitima = v.id and em > now() - interval '60 seconds') then
     return jsonb_build_object('xp', 0, 'ouro', 0, 'tipo', 'repetido');
   end if;
@@ -326,6 +329,115 @@ language plpgsql security definer set search_path = public as $$
 begin
   delete from amizades where (de = auth.uid() and para = p_outro) or (para = auth.uid() and de = p_outro);
 end $$;
+
+-- ---------------- EQUIPE (até 4 jogadores que não se ferem) ----------------
+create table if not exists public.equipes (
+  id        bigint generated always as identity primary key,
+  lider     uuid not null references public.perfis(id) on delete cascade,
+  criada_em timestamptz not null default now()
+);
+create table if not exists public.equipe_membros (
+  jogador  uuid primary key references public.perfis(id) on delete cascade,   -- cada jogador em uma equipe só
+  equipe   bigint not null references public.equipes(id) on delete cascade,
+  entrou_em timestamptz not null default now()
+);
+create table if not exists public.convites_equipe (
+  equipe    bigint not null references public.equipes(id) on delete cascade,
+  para      uuid not null references public.perfis(id) on delete cascade,
+  de        uuid not null references public.perfis(id) on delete cascade,
+  criado_em timestamptz not null default now(),
+  primary key (equipe, para)
+);
+alter table public.equipes enable row level security;
+alter table public.equipe_membros enable row level security;
+alter table public.convites_equipe enable row level security;
+
+create or replace function public.minha_equipe() returns bigint
+language sql stable security definer set search_path = public as $$
+  select equipe from equipe_membros where jogador = auth.uid()
+$$;
+drop policy if exists eq_ler on public.equipes;
+create policy eq_ler on public.equipes for select to authenticated using (id = public.minha_equipe() or exists (select 1 from convites_equipe c where c.equipe = id and c.para = auth.uid()));
+drop policy if exists eqm_ler on public.equipe_membros;
+create policy eqm_ler on public.equipe_membros for select to authenticated using (equipe = public.minha_equipe());
+drop policy if exists eqc_ler on public.convites_equipe;
+create policy eqc_ler on public.convites_equipe for select to authenticated using (para = auth.uid() or equipe = public.minha_equipe());
+
+create or replace function public._amigos(a uuid, b uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from amizades where aceita and ((de = a and para = b) or (de = b and para = a)))
+$$;
+
+create or replace function public.criar_equipe() returns bigint
+language plpgsql security definer set search_path = public as $$
+declare eu perfis; e bigint;
+begin
+  eu := _eu();
+  select equipe into e from equipe_membros where jogador = eu.id;
+  if e is not null then return e; end if;
+  insert into equipes (lider) values (eu.id) returning id into e;
+  insert into equipe_membros (jogador, equipe) values (eu.id, e);
+  return e;
+end $$;
+
+-- só amigos podem ser chamados; a equipe é criada na hora se ainda não existir
+create or replace function public.convidar_equipe(p_num bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare eu perfis; o perfis; e bigint; n int;
+begin
+  eu := _eu(); o := _por_num(p_num);
+  if o.id = eu.id then raise exception 'Esse é você'; end if;
+  if not _amigos(eu.id, o.id) then raise exception 'Só dá para chamar amigos para a equipe'; end if;
+  e := criar_equipe();
+  select count(*) into n from equipe_membros where equipe = e;
+  if n >= 4 then raise exception 'A equipe já tem 4 jogadores'; end if;
+  if exists (select 1 from equipe_membros where jogador = o.id and equipe = e) then raise exception '% já está na equipe', o.nick; end if;
+  insert into convites_equipe (equipe, para, de) values (e, o.id, eu.id) on conflict (equipe, para) do update set criado_em = now(), de = excluded.de;
+  return 'Convite enviado para ' || o.nick;
+end $$;
+
+create or replace function public.responder_convite_equipe(p_equipe bigint, p_aceitar boolean) returns text
+language plpgsql security definer set search_path = public as $$
+declare eu perfis; n int;
+begin
+  eu := _eu();
+  if not exists (select 1 from convites_equipe where equipe = p_equipe and para = eu.id) then raise exception 'Convite não encontrado'; end if;
+  delete from convites_equipe where equipe = p_equipe and para = eu.id;
+  if not p_aceitar then return 'Convite recusado'; end if;
+  select count(*) into n from equipe_membros where equipe = p_equipe;
+  if n >= 4 then raise exception 'A equipe já está cheia'; end if;
+  perform sair_equipe();                                    -- sai da equipe antiga, se tiver
+  insert into equipe_membros (jogador, equipe) values (eu.id, p_equipe);
+  return 'Você entrou na equipe';
+end $$;
+
+create or replace function public.sair_equipe() returns text
+language plpgsql security definer set search_path = public as $$
+declare eu perfis; e bigint; novo uuid;
+begin
+  eu := _eu();
+  select equipe into e from equipe_membros where jogador = eu.id;
+  if e is null then return 'Você não está em equipe'; end if;
+  delete from equipe_membros where jogador = eu.id;
+  select jogador into novo from equipe_membros where equipe = e order by entrou_em limit 1;
+  if novo is null then delete from equipes where id = e;          -- ficou vazia: desfaz
+  else update equipes set lider = novo where id = e and lider = eu.id; end if;
+  return 'Você saiu da equipe';
+end $$;
+
+create or replace function public.expulsar_equipe(p_jogador uuid) returns text
+language plpgsql security definer set search_path = public as $$
+declare eu perfis; e bigint;
+begin
+  eu := _eu();
+  select id into e from equipes where lider = eu.id;
+  if e is null then raise exception 'Só o líder pode expulsar'; end if;
+  if p_jogador = eu.id then raise exception 'Para sair, use Sair da equipe'; end if;
+  delete from equipe_membros where jogador = p_jogador and equipe = e;
+  return 'Jogador removido da equipe';
+end $$;
+
+-- desfazer amizade também tira os dois da mesma equipe? Não: a equipe continua até alguém sair.
 
 -- ---------------- MODERADOR E ADMIN ----------------
 create or replace function public._exigir(p_papeis text[]) returns perfis
@@ -573,4 +685,6 @@ revoke execute on function public._eu(), public._por_num(bigint), public._exigir
 do $$ begin
   begin alter publication supabase_realtime add table public.perfis; exception when others then null; end;
   begin alter publication supabase_realtime add table public.mensagens; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.equipe_membros; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.convites_equipe; exception when others then null; end;
 end $$;

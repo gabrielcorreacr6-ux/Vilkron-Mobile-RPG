@@ -108,9 +108,9 @@
           { clipe: 'extra_combo_2', de: 0.73, ate: 0.97, golpe: 0.4 }
         ] }
       },
-      // atirador de energia: sem arma, a bola sai da mão; pode atirar correndo
+      // atirador de energia: sem arma, a bola sai da mão; só atira parado
       atirador: {
-        ataque: { andando: true, variacoes: [
+        ataque: { variacoes: [
           { clipe: 'ataque', golpe: 0.5 },
           { clipe: 'extra_lancar_7', de: 0.1, ate: 0.7, golpe: 0.45 },
           { clipe: 'extra_lancar_4', de: 0.0, ate: 0.65, golpe: 0.42 },
@@ -592,6 +592,14 @@
       const fade = op.fade !== undefined ? op.fade : 0.2;
       if (this.acoes[estado]) this._tocarAcao(estado, fade, op.velocidade);
       else if (!UMA_VEZ[estado] && this.acoes[this._baseDisponivel()]) this._tocarAcao(this._baseDisponivel(), fade);
+    }
+
+    // interrompe o golpe/habilidade e volta a andar/ficar parado
+    cancelar() {
+      if (this.morto || !UMA_VEZ[this.estado] || this.estado === 'dano') return;
+      this.aoAcertar = null; this.aoTerminar = null;
+      if (this.acaoCima) { this.acaoCima.fadeOut(0.1); this.acaoCima = null; }
+      this.estado = null; this.tocar(this.base, { fade: 0.12 });
     }
 
     _baseDisponivel() {
