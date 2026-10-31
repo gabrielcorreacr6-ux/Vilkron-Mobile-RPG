@@ -182,7 +182,7 @@
   function instalarMenus(eu) {
     const menu = $('menu');
     const itens = [
-      ['equipe', 'Equipe'], ['skins_loja', 'Loja de skins'], ['skins_minhas', 'Minhas skins'], ['amigos', 'Amigos'],
+      ['conversas', 'Conversas'], ['equipe', 'Equipe'], ['skins_loja', 'Loja de skins'], ['skins_minhas', 'Minhas skins'], ['amigos', 'Amigos'],
       ['mensagens', 'Mensagens'], ['moderacao', 'Moderação'], ['meuid', 'Meu ID'], ['sair', 'Sair da conta']
     ];
     const primeiro = menu.querySelector('[data-menu]');
@@ -202,9 +202,17 @@
     bAdmin.addEventListener('click', telaAdmin);
     $('topo').appendChild(bAdmin);
 
+    // botão de conversa (com o número de mensagens novas)
+    const bChat = doc.createElement('button');
+    bChat.id = 'bChat'; bChat.type = 'button'; bChat.className = 'caixa hud'; bChat.setAttribute('aria-label', 'Conversas');
+    bChat.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="currentColor"/></svg><b hidden></b>';
+    bChat.addEventListener('click', () => telaChat());
+    doc.body.appendChild(bChat);
+    global.Rede.aoChat = m => { marcarNaoLidas(); if (chatAberto && chatAberto.atualizar) chatAberto.atualizar(m); };
+
     global.Jogo.ganchos.menu = q => {
       const f = {
-        equipe: telaEquipe, skins_loja: telaLojaSkins, skins_minhas: telaMinhasSkins, amigos: telaAmigos, mensagens: telaMensagens,
+        conversas: () => telaChat(), equipe: telaEquipe, skins_loja: telaLojaSkins, skins_minhas: telaMinhasSkins, amigos: telaAmigos, mensagens: telaMensagens,
         moderacao: telaModeracao, meuid: telaMeuId, sair: () => global.Rede.sair()
       }[q];
       if (f) { f(); return true; }
@@ -296,7 +304,9 @@
   async function telaAmigos() {
     const Rede = global.Rede;
     await Rede.carregarAmigos();
-    const ids = Array.from(new Set(Rede.amizades.map(a => (a.de === Rede.eu.id ? a.para : a.de))));
+    if (Rede.carregarChat && !Rede.chat.carregado) { Rede.chat.carregado = true; await Rede.carregarChat(); }
+    const bloq = Array.from(Rede.chat.bloqueados);
+    const ids = Array.from(new Set(Rede.amizades.map(a => (a.de === Rede.eu.id ? a.para : a.de)).concat(bloq)));
     const n = await Rede.nicks(ids);
     const amigos = Array.from(Rede.amigos), pedidos = Rede.pedidos;
     const enviados = Rede.amizades.filter(a => !a.aceita && a.de === Rede.eu.id).map(a => a.para);
@@ -305,10 +315,14 @@
       <p class="nota">Seu ID: <b>${Rede.eu.num}</b>. Amigos aparecem no minimapa e dão visão dos inimigos perto deles. Para não se ferirem, chame-os para a sua Equipe.</p>
       <div class="linha"><input id="iAmigo" class="campo" inputmode="numeric" placeholder="ID do amigo"><button class="acao" id="bAddAmigo" type="button">Adicionar</button></div>
       ${pedidos.length ? '<h3 class="sub">Pedidos para você</h3>' + pedidos.map(id => `<div class="linha"><span>${nome(id)}</span><div class="botoes">
-        <button class="acao fina forte" data-aceitar="${id}" type="button">Aceitar</button><button class="acao fina" data-recusar="${id}" type="button">Recusar</button></div></div>`).join('') : ''}
+        <button class="acao fina forte" data-aceitar="${id}" type="button">Aceitar</button><button class="acao fina" data-recusar="${id}" type="button">Recusar</button><button class="acao fina" data-bloquear="${id}" type="button">Bloquear</button></div></div>`).join('') : ''}
       <h3 class="sub">Amigos</h3>
-      ${amigos.map(id => `<div class="linha"><span>${nome(id)} ${Rede.remotos.has(id) ? '<small class="inline online">neste mapa</small>' : ''}</span>
-        <button class="acao fina" data-remover="${id}" type="button">Remover</button></div>`).join('') || '<p class="nota">Nenhum ainda.</p>'}
+      ${amigos.map(id => `<div class="linha"><span>${nome(id)} ${Rede.remotos.has(id) ? '<small class="inline online">neste mapa</small>' : ''}${Rede.chat.silenciados.has(id) ? ' <small class="inline">silenciado</small>' : ''}</span>
+        <div class="botoes"><button class="acao fina forte" data-conversar="${id}" type="button">Conversar</button>
+        <button class="acao fina" data-silenciar="${id}" type="button">${Rede.chat.silenciados.has(id) ? 'Tirar silêncio' : 'Silenciar'}</button>
+        <button class="acao fina" data-bloquear="${id}" type="button">Bloquear</button>
+        <button class="acao fina" data-remover="${id}" type="button">Excluir</button></div></div>`).join('') || '<p class="nota">Nenhum ainda.</p>'}
+      ${bloq.length ? '<h3 class="sub">Bloqueados</h3>' + bloq.map(id => `<div class="linha"><span>${nome(id)}</span><button class="acao fina" data-desbloquear="${id}" type="button">Desbloquear</button></div>`).join('') : ''}
       ${enviados.length ? '<h3 class="sub">Esperando resposta</h3>' + enviados.map(id => `<div class="linha"><span>${nome(id)}</span></div>`).join('') : ''}`, el => {
       el.querySelector('#bAddAmigo').addEventListener('click', async () => {
         const num = Number(el.querySelector('#iAmigo').value);
@@ -317,8 +331,78 @@
       });
       el.querySelectorAll('[data-aceitar]').forEach(b => b.addEventListener('click', async () => { await tentar(() => Rede.rpc('responder_amizade', { p_de: b.dataset.aceitar, p_aceitar: true }), 'Amizade aceita'); telaAmigos(); }));
       el.querySelectorAll('[data-recusar]').forEach(b => b.addEventListener('click', async () => { await tentar(() => Rede.rpc('responder_amizade', { p_de: b.dataset.recusar, p_aceitar: false })); telaAmigos(); }));
-      el.querySelectorAll('[data-remover]').forEach(b => b.addEventListener('click', async () => { await tentar(() => Rede.rpc('desfazer_amizade', { p_outro: b.dataset.remover })); telaAmigos(); }));
+      el.querySelectorAll('[data-remover]').forEach(b => b.addEventListener('click', async () => { await tentar(() => Rede.rpc('desfazer_amizade', { p_outro: b.dataset.remover }), 'Amizade desfeita'); telaAmigos(); }));
+      el.querySelectorAll('[data-conversar]').forEach(b => b.addEventListener('click', () => telaChat('privado', b.dataset.conversar)));
+      el.querySelectorAll('[data-silenciar]').forEach(b => b.addEventListener('click', async () => { const id = b.dataset.silenciar; await tentar(() => Rede.silenciar(id, !Rede.chat.silenciados.has(id)), r => r); telaAmigos(); }));
+      el.querySelectorAll('[data-bloquear]').forEach(b => b.addEventListener('click', async () => { await tentar(() => Rede.bloquear(b.dataset.bloquear), r => r); telaAmigos(); }));
+      el.querySelectorAll('[data-desbloquear]').forEach(b => b.addEventListener('click', async () => { await tentar(() => Rede.desbloquear(b.dataset.desbloquear), r => r); telaAmigos(); }));
     });
+  }
+
+  /* ---------- conversas: equipe, amigos e privado ---------- */
+  let chatAberto = null;
+  function marcarNaoLidas() {
+    const b = $('bChat'); if (!b) return; const n = global.Rede.chat.naoLidas, i = b.querySelector('b');
+    const aberto = !!(chatAberto && $('modal') && !$('modal').hidden && doc.querySelector('#chatLista, .pessoa, [data-chataba]')); if (!aberto) chatAberto = null;
+    i.hidden = !n || aberto; i.textContent = n > 9 ? '9+' : n;
+  }
+  const horaBR = d => new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  async function telaChat(aba, para) {
+    const Rede = global.Rede, eu = Rede.eu.id;
+    aba = aba || (chatAberto && chatAberto.aba) || 'equipe';
+    Rede.chat.naoLidas = 0; marcarNaoLidas();
+    await Promise.all([Rede.carregarAmigos(), Rede.carregarEquipe ? Rede.carregarEquipe() : null]);
+    const msgs = Rede.chat.mensagens;
+    const daVez = m => !(m.de !== eu && Rede.calado(m.de)) && (aba === 'equipe' ? m.tipo === 'equipe' : aba === 'amigos' ? m.tipo === 'amigos'
+      : m.tipo === 'privado' && para && ((m.de === eu && m.para === para) || (m.de === para && m.para === eu)));
+    // conversas privadas: quem já falou com você + seus amigos
+    const pessoas = Array.from(new Set(msgs.filter(m => m.tipo === 'privado').map(m => m.de === eu ? m.para : m.de).concat(Array.from(Rede.amigos)))).filter(id => id && id !== eu);
+    await Rede.nicks(pessoas.concat(para ? [para] : []));
+    const nk = id => { const n = Rede.nickJa(id); return n ? esc(n.nick) : '?'; };
+    const linha = m => `<div class="msg ${m.de === eu ? 'eu' : ''}"><b>${m.de === eu ? 'Você' : nk(m.de)}</b><span>${esc(m.texto)}</span><small>${horaBR(m.criado_em)}</small></div>`;
+    const abaB = (k, n) => `<button type="button" class="aba ${aba === k ? 'sel' : ''}" data-chataba="${k}">${n}</button>`;
+    let corpo;
+    if (aba === 'privado' && !para) {
+      corpo = pessoas.length ? pessoas.map(id => {
+        const ult = msgs.filter(m => m.tipo === 'privado' && (m.de === id || m.para === id)).slice(-1)[0];
+        return `<button type="button" class="pessoa" data-com="${id}"><b>${nk(id)}</b>${Rede.chat.silenciados.has(id) ? ' <small class="inline">silenciado</small>' : ''}<small>${ult ? esc(ult.texto).slice(0, 40) : 'Comece uma conversa'}</small></button>`;
+      }).join('') : '<p class="nota">Nenhuma conversa ainda. Adicione amigos em Amigos.</p>';
+    } else {
+      const semEquipe = aba === 'equipe' && !(Rede.membros && Rede.membros.length);
+      const topoPriv = aba === 'privado' ? `<div class="linha"><button type="button" class="acao fina" data-chataba="privado">‹ Voltar</button><b>${nk(para)}</b>
+        <div class="botoes"><button type="button" class="acao fina" data-silenciar="${para}">${Rede.chat.silenciados.has(para) ? 'Tirar silêncio' : 'Silenciar'}</button>
+        <button type="button" class="acao fina" data-bloquear="${para}">Bloquear</button></div></div>` : '';
+      corpo = `${topoPriv}
+        ${semEquipe ? '<p class="nota">Você não está em uma equipe. Crie ou entre numa equipe (menu ⋮ → Equipe) para conversar com ela; as mensagens aparecem num balão em cima da cabeça.</p>' : ''}
+        ${aba === 'amigos' ? '<p class="nota">Todos os seus amigos leem o que você escreve aqui.</p>' : ''}
+        <div class="chatLista" id="chatLista">${msgs.filter(daVez).map(linha).join('') || '<p class="nota">Nenhuma mensagem ainda.</p>'}</div>
+        <div class="chatEnviar"><input id="chatTexto" class="campo" maxlength="200" placeholder="Escreva uma mensagem" ${semEquipe ? 'disabled' : ''}><button class="acao forte" id="chatIr" type="button" ${semEquipe ? 'disabled' : ''}>Enviar</button></div>`;
+    }
+    modal('Conversas', `<div class="abas">${abaB('equipe', 'Equipe')}${abaB('amigos', 'Amigos')}${abaB('privado', 'Privado')}</div>${corpo}`, el => {
+      chatAberto = { aba, para };
+      el.querySelectorAll('[data-chataba]').forEach(b => b.addEventListener('click', () => telaChat(b.dataset.chataba, null)));
+      el.querySelectorAll('[data-com]').forEach(b => b.addEventListener('click', () => telaChat('privado', b.dataset.com)));
+      el.querySelectorAll('[data-silenciar]').forEach(b => b.addEventListener('click', async () => { const id = b.dataset.silenciar; await tentar(() => Rede.silenciar(id, !Rede.chat.silenciados.has(id)), r => r); telaChat('privado', id); }));
+      el.querySelectorAll('[data-bloquear]').forEach(b => b.addEventListener('click', async () => { if (await tentar(() => Rede.bloquear(b.dataset.bloquear), r => r) !== undefined) telaChat('privado', null); }));
+      const lista = el.querySelector('#chatLista'), txt = el.querySelector('#chatTexto'), ir = el.querySelector('#chatIr');
+      if (lista) lista.scrollTop = lista.scrollHeight;
+      const mandar = async () => {
+        const t = txt.value.trim(); if (!t) return;
+        ir.disabled = true;
+        const ok = await tentar(() => Rede.enviarChat(aba, aba === 'privado' ? para : null, t));
+        ir.disabled = false; if (ok !== undefined) { txt.value = ''; txt.focus(); }
+      };
+      if (ir) { ir.addEventListener('click', mandar); txt.addEventListener('keydown', e => { if (e.key === 'Enter') mandar(); }); }
+      chatAberto.atualizar = m => {
+        if (!lista || !lista.isConnected) return;
+        if (m && !daVez(m)) return;
+        if (m) { const vazio = lista.querySelector('.nota'); if (vazio) vazio.remove(); lista.insertAdjacentHTML('beforeend', linha(m)); }
+        else lista.innerHTML = Rede.chat.mensagens.filter(daVez).map(linha).join('');
+        lista.scrollTop = lista.scrollHeight; Rede.chat.naoLidas = 0; marcarNaoLidas();
+      };
+    });
+    // fechou a janela: volta a contar as novas
+    const fechar = $('modalFechar'); if (fechar && !fechar.dataset.chat) { fechar.dataset.chat = '1'; fechar.addEventListener('click', () => { chatAberto = null; marcarNaoLidas(); }); }
   }
 
   /* ---------- equipe ---------- */
@@ -838,7 +922,9 @@
     const eu = global.Rede.eu;
     const html = `
       <div class="linha"><div><b>Imortal</b><small>Nada tira sua vida.</small></div><button class="acao ${eu.imortal ? 'forte' : ''}" id="pImortal" type="button">${eu.imortal ? 'Ligado' : 'Desligado'}</button></div>
-      <div class="linha"><div><b>Invisível</b><small>Nenhum jogador vê você. Enquanto invisível você não ataca jogadores.</small></div><button class="acao ${eu.invisivel ? 'forte' : ''}" id="pInvis" type="button">${eu.invisivel ? 'Ligado' : 'Desligado'}</button></div>`;
+      <div class="linha"><div><b>Invisível</b><small>Nenhum jogador vê você. Enquanto invisível você não ataca jogadores.</small></div><button class="acao ${eu.invisivel ? 'forte' : ''}" id="pInvis" type="button">${eu.invisivel ? 'Ligado' : 'Desligado'}</button></div>
+      <h3 class="sub">Teleporte</h3><p class="nota">Vai direto para qualquer mapa, sem aeroporto nem passe.</p>
+      <div class="botoes">${global.MAPAS.ordem.map(m => `<button class="acao fina ${J().E.mapa === m ? 'sel' : ''}" type="button" data-teleporte="${m}">${esc(global.MAPAS.lista[m].nome)}</button>`).join('')}</div>`;
     adm(topo, html, el => {
       const trocar = async (imortal, invisivel) => {
         const r = await tentar(() => global.Rede.rpc('meus_poderes', { p_imortal: imortal, p_invisivel: invisivel }));
@@ -846,6 +932,10 @@
       };
       el.querySelector('#pImortal').addEventListener('click', () => trocar(!eu.imortal, null));
       el.querySelector('#pInvis').addEventListener('click', () => trocar(null, !eu.invisivel));
+      el.querySelectorAll('[data-teleporte]').forEach(b => b.addEventListener('click', async () => {
+        if (global.Rede.eu.papel !== 'admin') return aviso('Só o administrador');
+        J().fecharModal(); const e = await J().teleportar(b.dataset.teleporte); if (e) aviso(e);
+      }));
     }, abas);
   }
 

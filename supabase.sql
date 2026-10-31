@@ -776,3 +776,138 @@ create policy cine_admin_trocar on storage.objects for update to authenticated
 drop policy if exists cine_admin_apagar on storage.objects;
 create policy cine_admin_apagar on storage.objects for delete to authenticated
   using (bucket_id = 'cinematicas' and exists (select 1 from public.perfis where id = auth.uid() and papel = 'admin'));
+
+-- ===== Vilkron: chat (equipe, amigos, privado), bloquear e silenciar (rodar uma vez) =====
+
+create table if not exists public.chat (
+  id        bigint generated always as identity primary key,
+  de        uuid not null references public.perfis(id) on delete cascade,
+  tipo      text not null check (tipo in ('equipe', 'amigos', 'privado')),
+  equipe    bigint,
+  para      uuid references public.perfis(id) on delete cascade,
+  texto     text not null check (char_length(texto) between 1 and 200),
+  criado_em timestamptz not null default now()
+);
+create index if not exists chat_quando on public.chat (criado_em desc);
+create index if not exists chat_para on public.chat (para);
+
+create table if not exists public.bloqueios (
+  quem      uuid not null references public.perfis(id) on delete cascade,
+  bloqueado uuid not null references public.perfis(id) on delete cascade,
+  primary key (quem, bloqueado)
+);
+create table if not exists public.silenciados (
+  quem       uuid not null references public.perfis(id) on delete cascade,
+  silenciado uuid not null references public.perfis(id) on delete cascade,
+  primary key (quem, silenciado)
+);
+alter table public.chat enable row level security;
+alter table public.bloqueios enable row level security;
+alter table public.silenciados enable row level security;
+
+-- ajudantes (rodam com permissão do dono, para a regra de leitura não depender das regras de outras tabelas)
+create or replace function public._na_equipe(p_equipe bigint) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from equipe_membros where equipe = p_equipe and jogador = auth.uid()) $$;
+create or replace function public._amigo_de(p_outro uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from amizades where aceita and ((de = p_outro and para = auth.uid()) or (para = p_outro and de = auth.uid()))) $$;
+create or replace function public._bloqueei(p_outro uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from bloqueios where quem = auth.uid() and bloqueado = p_outro) $$;
+
+-- quem lê cada mensagem: quem mandou; no privado, quem recebe; na equipe, os membros; em amigos, os amigos de quem mandou.
+-- Mensagens de quem você bloqueou nunca chegam.
+drop policy if exists chat_ler on public.chat;
+create policy chat_ler on public.chat for select to authenticated using (
+  (de = auth.uid()
+   or (tipo = 'privado' and para = auth.uid())
+   or (tipo = 'equipe' and _na_equipe(equipe))
+   or (tipo = 'amigos' and _amigo_de(de)))
+  and not _bloqueei(de)
+);
+drop policy if exists bloq_ler on public.bloqueios;
+create policy bloq_ler on public.bloqueios for select to authenticated using (quem = auth.uid());
+drop policy if exists sil_ler on public.silenciados;
+create policy sil_ler on public.silenciados for select to authenticated using (quem = auth.uid());
+
+-- mandar mensagem (o servidor confere equipe, amizade, bloqueio e o ritmo: 1 por segundo)
+create or replace function public.enviar_chat(p_tipo text, p_para uuid, p_texto text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare eu perfis; t text; eq bigint; novo bigint;
+begin
+  eu := _eu();
+  if eu.banido_ate is not null and eu.banido_ate > now() then raise exception 'Conta banida'; end if;
+  t := btrim(coalesce(p_texto, ''));
+  if t = '' then raise exception 'Mensagem vazia'; end if;
+  t := left(t, 200);
+  if exists (select 1 from chat where de = eu.id and criado_em > now() - interval '1 second') then raise exception 'Calma: uma mensagem por segundo'; end if;
+  if p_tipo = 'equipe' then
+    select equipe into eq from equipe_membros where jogador = eu.id;
+    if eq is null then raise exception 'Você não está em uma equipe'; end if;
+    insert into chat (de, tipo, equipe, texto) values (eu.id, 'equipe', eq, t) returning id into novo;
+  elsif p_tipo = 'amigos' then
+    insert into chat (de, tipo, texto) values (eu.id, 'amigos', t) returning id into novo;
+  elsif p_tipo = 'privado' then
+    if p_para is null or p_para = eu.id then raise exception 'Para quem?'; end if;
+    if exists (select 1 from bloqueios where quem = p_para and bloqueado = eu.id) then raise exception 'Esse jogador não recebe suas mensagens'; end if;
+    if exists (select 1 from bloqueios where quem = eu.id and bloqueado = p_para) then raise exception 'Você bloqueou esse jogador: desbloqueie para conversar'; end if;
+    insert into chat (de, tipo, para, texto) values (eu.id, 'privado', p_para, t) returning id into novo;
+  else raise exception 'Tipo de conversa inválido';
+  end if;
+  -- limpeza: conversas com mais de 7 dias somem
+  delete from chat where criado_em < now() - interval '7 days';
+  return novo;
+end $$;
+
+-- bloquear: desfaz a amizade, apaga pedidos e impede mensagens e novos pedidos
+create or replace function public.bloquear(p_outro uuid) returns text
+language plpgsql security definer set search_path = public as $$
+declare eu perfis;
+begin
+  eu := _eu();
+  if p_outro = eu.id then raise exception 'Esse é você'; end if;
+  insert into bloqueios (quem, bloqueado) values (eu.id, p_outro) on conflict do nothing;
+  delete from amizades where (de = eu.id and para = p_outro) or (de = p_outro and para = eu.id);
+  return 'Jogador bloqueado';
+end $$;
+create or replace function public.desbloquear(p_outro uuid) returns text
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from bloqueios where quem = auth.uid() and bloqueado = p_outro;
+  return 'Jogador desbloqueado';
+end $$;
+-- silenciar: as mensagens dele somem só para você (continua amigo)
+create or replace function public.silenciar(p_outro uuid, p_sim boolean) returns text
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_sim then insert into silenciados (quem, silenciado) values (auth.uid(), p_outro) on conflict do nothing;
+  else delete from silenciados where quem = auth.uid() and silenciado = p_outro; end if;
+  return case when p_sim then 'Jogador silenciado' else 'Jogador sem silêncio' end;
+end $$;
+
+-- pedido de amizade não passa se um bloqueou o outro
+create or replace function public.pedir_amizade(p_num bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare eu perfis; o perfis;
+begin
+  eu := _eu(); o := _por_num(p_num);
+  if o.id = eu.id then raise exception 'Esse é você'; end if;
+  if exists (select 1 from bloqueios where quem = eu.id and bloqueado = o.id) then raise exception 'Você bloqueou esse jogador: desbloqueie primeiro'; end if;
+  if exists (select 1 from bloqueios where quem = o.id and bloqueado = eu.id) then raise exception 'Não foi possível enviar o pedido'; end if;
+  if exists (select 1 from amizades where de = o.id and para = eu.id) then
+    update amizades set aceita = true where de = o.id and para = eu.id;
+    return 'Agora vocês são amigos';
+  end if;
+  insert into amizades (de, para) values (eu.id, o.id) on conflict do nothing;
+  return 'Pedido enviado para ' || o.nick;
+end $$;
+
+revoke all on function public.enviar_chat(text, uuid, text), public.bloquear(uuid), public.desbloquear(uuid), public.silenciar(uuid, boolean) from anon, public;
+grant execute on function public.enviar_chat(text, uuid, text), public.bloquear(uuid), public.desbloquear(uuid), public.silenciar(uuid, boolean) to authenticated;
+grant select on public.chat, public.bloqueios, public.silenciados to authenticated;
+
+-- mensagens chegam ao vivo
+do $$ begin
+  begin alter publication supabase_realtime add table public.chat; exception when others then null; end;
+end $$;

@@ -56,7 +56,7 @@
         { tipo: 'dragao', x: 34, z: -26 }, { tipo: 'barao', x: 38, z: 8 }, { tipo: 'aranha', x: -30, z: 42 }
       ],
       minions: [{
-        intervalo: 45, cavernaIni: [90, -12], cavernaFim: [-72, 40],
+        intervalo: 30, cavernaIni: [90, -12], cavernaFim: [-72, 40],
         ida: [[88, -10], [70, -8], [48, -2], [28, -6], [11, -6]],
         barco: [[5, -6], [6, 4], [-2, 30], [5, 55]],
         volta: [[-1, 59], [-24, 52], [-50, 45], [-70, 41]]
@@ -85,7 +85,7 @@
       ],
       // minions chegam de barco no início e vão até a caverna perto do aeroporto
       minions: [{
-        intervalo: 45, inicio: 'barco', cavernaFim: [-90, 32],
+        intervalo: 30, inicio: 'barco', cavernaFim: [-90, 32],
         barco: [[66, -84], [60, -50], [55, -18], [56, 20]],
         volta: [[49, 20], [32, 24], [10, 30], [-20, 26], [-50, 20], [-76, 30], [-88, 32]]
       }],
@@ -117,7 +117,7 @@
       ],
       buffPorMob: 0.003,          // cada mob derrotado: +0,3% de dano
       minions: [{
-        intervalo: 45, cavernaIni: [118, -16], cavernaFim: [-104, 44],
+        intervalo: 30, cavernaIni: [118, -16], cavernaFim: [-104, 44],
         ida: [[116, -14], [96, -6], [72, 0], [44, 0], [20, 0], [0, 0], [-22, -2], [-44, 6], [-66, 14], [-86, 26], [-102, 40]]
       }],
       passe: { nivel: 10, preco: { simples: 120, ferias: 200, cidadania: 1500 } }
@@ -145,8 +145,8 @@
         { tipo: 'barao', x: 40, z: 72 }, { tipo: 'aranha', x: 90, z: 74 }
       ],
       minions: [
-        { intervalo: 45, cavernaIni: [-134, 6], cavernaFim: [134, -24], ida: [[-130, 10], [-100, 18], [-60, 20], [-20, 22], [20, 22], [60, 20], [100, 6], [130, -22]] },
-        { intervalo: 45, cavernaIni: [134, 6], cavernaFim: [-134, -24], ida: [[130, 14], [100, 28], [60, 30], [20, 32], [-20, 32], [-60, 30], [-100, 8], [-130, -22]] }
+        { intervalo: 30, cavernaIni: [-134, 6], cavernaFim: [134, -24], ida: [[-130, 10], [-100, 18], [-60, 20], [-20, 22], [20, 22], [60, 20], [100, 6], [130, -22]] },
+        { intervalo: 30, cavernaIni: [134, 6], cavernaFim: [-134, -24], ida: [[130, 14], [100, 28], [60, 30], [20, 32], [-20, 32], [-60, 30], [-100, 8], [-130, -22]] }
       ],
       passe: { nivel: 15, preco: { simples: 180, ferias: 300, cidadania: 2200 } }
     },
@@ -177,7 +177,7 @@
         { tipo: 'barao', x: 42, z: 44 }, { tipo: 'aranha', x: -8, z: 6 }
       ],
       minions: [{
-        intervalo: 45, cavernaIni: [-96, -10], cavernaFim: [96, 16],
+        intervalo: 30, cavernaIni: [-96, -10], cavernaFim: [96, 16],
         ida: [[-90, -8], [-82, -6], [-52, -36], [-5, 0], [36, -38], [78, -2], [94, 14]]
       }],
       passe: { nivel: 20, preco: { simples: 250, ferias: 420, cidadania: 3000 } }
