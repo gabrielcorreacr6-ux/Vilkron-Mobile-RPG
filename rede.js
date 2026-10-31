@@ -9,7 +9,8 @@
    ============================================================ */
 (function (global) {
   'use strict';
-  const cfg = global.ONLINE || {};
+  // servidor.js tem prioridade (config-online.js fica só para versões antigas)
+  const cfg = (global.SERVIDOR && global.SERVIDOR.url) ? global.SERVIDOR : (global.ONLINE || {});
   const ativo = !!(cfg.url && cfg.chave && global.supabase && global.supabase.createClient);
   global.ESPERAR_LOGIN = ativo;
 
@@ -33,10 +34,41 @@
   Rede.rpc = rpc;
 
   /* ---------------- LOGIN ---------------- */
-  Rede.entrarGoogle = () => sb.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: global.location.origin + global.location.pathname }
-  });
+  // Cadastro e login com e-mail (Gmail, Hotmail/Outlook) e senha
+  const site = () => global.location.origin + global.location.pathname;
+  const DOMINIOS = ['gmail.com', 'hotmail.com', 'hotmail.com.br', 'outlook.com', 'outlook.com.br', 'live.com'];
+  Rede.emailValido = email => /^[^\s@]+@[^\s@]+$/.test(email) && DOMINIOS.indexOf(email.split('@')[1].toLowerCase()) >= 0;
+  function traduzir(m) {
+    m = String(m || '');
+    if (/invalid login credentials/i.test(m)) return 'E-mail ou senha errados';
+    if (/email not confirmed/i.test(m)) return 'Confirme o e-mail primeiro: abra o link que enviamos para você';
+    if (/already registered|already exists/i.test(m)) return 'Esse e-mail já tem cadastro. Use Entrar.';
+    if (/password should be at least/i.test(m)) return 'A senha precisa ter pelo menos 6 caracteres';
+    if (/rate limit|too many/i.test(m)) return 'Muitas tentativas. Espere alguns minutos e tente de novo.';
+    return m;
+  }
+  Rede.entrar = async (email, senha) => {
+    const { data, error } = await sb.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: senha });
+    if (error) throw new Error(traduzir(error.message));
+    return data.session;
+  };
+  Rede.cadastrar = async (email, senha) => {
+    email = email.trim().toLowerCase();
+    if (!Rede.emailValido(email)) throw new Error('Use um e-mail Gmail, Hotmail ou Outlook');
+    const { data, error } = await sb.auth.signUp({ email, password: senha, options: { emailRedirectTo: site() } });
+    if (error) throw new Error(traduzir(error.message));
+    return data.session;          // vazio quando o Supabase pede confirmação por e-mail
+  };
+  Rede.esqueciSenha = async email => {
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: site() });
+    if (error) throw new Error(traduzir(error.message));
+  };
+  Rede.novaSenha = async senha => {
+    const { error } = await sb.auth.updateUser({ password: senha });
+    if (error) throw new Error(traduzir(error.message));
+  };
+  Rede.aoRecuperarSenha = null;
+  sb.auth.onAuthStateChange(ev => { if (ev === 'PASSWORD_RECOVERY' && Rede.aoRecuperarSenha) Rede.aoRecuperarSenha(); });
   Rede.sair = async () => { try { await sincronizar(true); } catch (e) {} await sb.auth.signOut(); global.location.reload(); };
   Rede.sessao = async () => (await sb.auth.getSession()).data.session;
   Rede.uid = () => Rede.eu && Rede.eu.id;

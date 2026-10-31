@@ -37,13 +37,74 @@
   }
   function fecharTelaCheia() { const t = $('telaOnline'); if (t) t.hidden = true; }
 
-  function telaLogin(erro) {
+  // Cadastro e login com e-mail e senha (Gmail, Hotmail ou Outlook)
+  const CHAVE_NICK = 'vilkron_nick_pendente';
+  function telaLogin(aviso, aba) {
+    aba = aba || 'entrar';
+    const abaHtml = (k, n) => `<button type="button" class="aba ${aba === k ? 'sel' : ''}" data-aba="${k}">${n}</button>`;
+    const corpo = {
+      entrar: `
+        <input id="lEmail" class="campo" type="email" autocomplete="email" placeholder="E-mail (Gmail, Hotmail ou Outlook)">
+        <input id="lSenha" class="campo" type="password" autocomplete="current-password" placeholder="Senha">
+        <button class="acao forte grande" id="lIr" type="button">Entrar</button>
+        <button class="link" id="lEsqueci" type="button">Esqueci a senha</button>`,
+      criar: `
+        <input id="lNick" class="campo" maxlength="16" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Nick (3 a 16 letras, números ou _)">
+        <input id="lEmail" class="campo" type="email" autocomplete="email" placeholder="E-mail (Gmail, Hotmail ou Outlook)">
+        <input id="lSenha" class="campo" type="password" autocomplete="new-password" placeholder="Senha (mínimo 6)">
+        <input id="lSenha2" class="campo" type="password" autocomplete="new-password" placeholder="Repita a senha">
+        <button class="acao forte grande" id="lIr" type="button">Criar conta</button>`,
+      esqueci: `
+        <p class="nota">Digite o e-mail da conta. Vamos mandar um link para você criar uma senha nova.</p>
+        <input id="lEmail" class="campo" type="email" autocomplete="email" placeholder="E-mail">
+        <button class="acao forte grande" id="lIr" type="button">Mandar link</button>`
+    }[aba];
     const t = telaCheia(`
       <h1>VILKRON</h1>
-      <p class="nota">Entre com sua conta Google para salvar seu progresso e jogar com os amigos.</p>
+      ${aba !== 'esqueci' ? '<div class="abas centro">' + abaHtml('entrar', 'Entrar') + abaHtml('criar', 'Criar conta') + '</div>' : ''}
+      ${aviso ? '<p class="' + (aviso.ok ? 'certo' : 'erro') + '">' + esc(aviso.texto || aviso) + '</p>' : ''}
+      ${corpo}
+      ${aba === 'esqueci' ? '<button class="link" data-aba="entrar" type="button">Voltar</button>' : ''}`);
+    t.querySelectorAll('[data-aba]').forEach(b => b.addEventListener('click', () => telaLogin(null, b.dataset.aba)));
+    const v = id => (t.querySelector('#' + id) || {}).value || '';
+    const ir = async () => {
+      const botao = t.querySelector('#lIr'); botao.disabled = true;
+      try {
+        const Rede = global.Rede;
+        if (aba === 'entrar') {
+          await Rede.entrar(v('lEmail'), v('lSenha'));
+          comecar();
+        } else if (aba === 'criar') {
+          const nick = v('lNick').trim();
+          if (!/^[A-Za-z0-9_]{3,16}$/.test(nick)) throw new Error('O nick precisa ter de 3 a 16 letras, números ou _');
+          if (v('lSenha').length < 6) throw new Error('A senha precisa ter pelo menos 6 caracteres');
+          if (v('lSenha') !== v('lSenha2')) throw new Error('As duas senhas não são iguais');
+          try { global.localStorage.setItem(CHAVE_NICK, nick); } catch (e) {}
+          const sessao = await Rede.cadastrar(v('lEmail'), v('lSenha'));
+          if (sessao) comecar();
+          else telaLogin({ ok: true, texto: 'Conta criada! Abra o e-mail que enviamos, toque no link de confirmação e depois entre aqui.' }, 'entrar');
+        } else {
+          await Rede.esqueciSenha(v('lEmail'));
+          telaLogin({ ok: true, texto: 'Pronto! Veja seu e-mail e toque no link para criar a senha nova.' }, 'entrar');
+        }
+      } catch (e) { botao.disabled = false; const p = t.querySelector('.erro, .certo'); if (p) p.remove(); botao.insertAdjacentHTML('beforebegin', '<p class="erro">' + esc(e.message) + '</p>'); }
+    };
+    t.querySelector('#lIr').addEventListener('click', ir);
+    t.querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') ir(); }));
+    const esq = t.querySelector('#lEsqueci'); if (esq) esq.addEventListener('click', () => telaLogin(null, 'esqueci'));
+  }
+  function telaNovaSenha(erro) {
+    const t = telaCheia(`<h1>Senha nova</h1>
       ${erro ? '<p class="erro">' + esc(erro) + '</p>' : ''}
-      <button class="acao forte grande" id="bGoogle" type="button">Entrar com Google</button>`);
-    t.querySelector('#bGoogle').addEventListener('click', () => global.Rede.entrarGoogle());
+      <input id="nS1" class="campo" type="password" autocomplete="new-password" placeholder="Senha nova (mínimo 6)">
+      <input id="nS2" class="campo" type="password" autocomplete="new-password" placeholder="Repita a senha">
+      <button class="acao forte grande" id="nIr" type="button">Salvar senha</button>`);
+    t.querySelector('#nIr').addEventListener('click', async () => {
+      const a = t.querySelector('#nS1').value, b = t.querySelector('#nS2').value;
+      if (a.length < 6) return telaNovaSenha('A senha precisa ter pelo menos 6 caracteres');
+      if (a !== b) return telaNovaSenha('As duas senhas não são iguais');
+      try { await global.Rede.novaSenha(a); global.location.replace(global.location.pathname); } catch (e) { telaNovaSenha(e.message); }
+    });
   }
 
   function telaNick(erro) {
@@ -75,15 +136,25 @@
   }
 
   /* ======================= INÍCIO ======================= */
+  let comecou = false;
   async function comecar() {
     const Rede = global.Rede;
     instalarMinimapa();
     if (!Rede || !Rede.ativo) return;           // offline: o jogo.js começa sozinho
     try {
+      Rede.aoRecuperarSenha = () => telaNovaSenha();
+      if (/type=recovery/.test(global.location.hash)) { telaNovaSenha(); return; }
       const s = await Rede.sessao();
       if (!s) { telaLogin(); return; }
+      if (comecou) return; comecou = true;
       let eu = await Rede.lerPerfil();
-      if (!eu) eu = await telaNick();
+      if (!eu) {
+        // nick escolhido no cadastro (quando precisou confirmar o e-mail antes)
+        let pend = null; try { pend = global.localStorage.getItem(CHAVE_NICK); } catch (e) {}
+        if (pend) { try { eu = await Rede.criarPerfil(pend); } catch (e) { eu = await telaNick(e.message); } }
+        else eu = await telaNick();
+        try { global.localStorage.removeItem(CHAVE_NICK); } catch (e) {}
+      }
       Rede.eu = eu;
       if (Rede.banido(eu)) { telaBanido(eu); return; }
       fecharTelaCheia();

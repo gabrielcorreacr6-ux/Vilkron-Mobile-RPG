@@ -143,7 +143,39 @@
       vec3 col = mix(cor, vec3(1.0), smoothstep(0.6, 1.0, vLado) * (1.0 - vIdade));
       gl_FragColor = vec4(col * a, 1.0);
     }`;
-  Efeitos.SHADERS = { RUIDO, VERT_UV, VERT_MUNDO, FRAG_ORBE, FRAG_FOGO, FRAG_ANEL, FRAG_CHAO, VERT_ESCUDO, FRAG_ESCUDO, VERT_RASTRO, FRAG_RASTRO };
+  // ---- água: rasa e clara nas margens, funda e escura no meio, ondulando, com brilho e espuma
+  const FRAG_AGUA = RUIDO + `
+    uniform vec3 raso; uniform vec3 fundo; uniform float t; uniform float luz; uniform float fluxo; uniform float radial;
+    varying vec2 vUv; varying vec3 vMundo;
+    void main() {
+      float prof = radial > 0.5 ? 1.0 - length(vUv * 2.0 - 1.0) : 1.0 - abs(vUv.y * 2.0 - 1.0);
+      prof = clamp(prof, 0.0, 1.0);
+      vec2 q = fluxo > 0.5 ? vec2(vUv.x * 0.35 - t * 0.45, vUv.y * 2.2) : vMundo.xz * 0.35 + vec2(t * 0.05, t * 0.03);
+      float n1 = fbm(q + vec2(0.0, t * 0.08));
+      float n2 = fbm(q * 2.1 - vec2(t * 0.22, -t * 0.13) + 3.7);
+      float fundura = smoothstep(0.0, 0.75, prof);
+      vec3 col = mix(raso, fundo, fundura);
+      col *= 0.82 + 0.3 * n1;                                            // manchas de profundidade
+      float ondas = smoothstep(0.58, 0.82, n1 * 0.55 + n2 * 0.6);       // reflexos da luz
+      float linhas = 1.0 - smoothstep(0.0, 0.04, abs(n2 - 0.52));      // fios de luz no fundo
+      float espuma = (1.0 - smoothstep(0.03, 0.2, prof)) * (0.55 + 0.6 * fbm(q * 3.0 + t * 0.3));
+      col += vec3(0.75, 0.9, 1.0) * ondas * 0.28 * (0.4 + 0.6 * fundura);
+      col += raso * linhas * 0.18 * (1.0 - fundura * 0.5);
+      col = mix(col, vec3(0.92, 0.96, 1.0), clamp(espuma, 0.0, 1.0) * 0.55);
+      float a = smoothstep(0.0, 0.07, prof) * 0.94;
+      gl_FragColor = vec4(col * luz, a);
+    }`;
+  Efeitos.agua = (raso, fundo, opc) => {
+    if (!pronto()) return null;
+    opc = opc || {};
+    return new THREE.ShaderMaterial({
+      vertexShader: VERT_MUNDO, fragmentShader: FRAG_AGUA, transparent: true, depthWrite: false,
+      uniforms: { t: tempo, raso: corU(raso), fundo: corU(fundo), luz: Efeitos.luzAgua, fluxo: { value: opc.rio ? 1 : 0 }, radial: { value: opc.radial ? 1 : 0 } }
+    });
+  };
+  Efeitos.luzAgua = { value: 1 };   // escurece a água à noite
+
+  Efeitos.SHADERS = { FRAG_AGUA, RUIDO, VERT_UV, VERT_MUNDO, FRAG_ORBE, FRAG_FOGO, FRAG_ANEL, FRAG_CHAO, VERT_ESCUDO, FRAG_ESCUDO, VERT_RASTRO, FRAG_RASTRO };
 
   const pronto = () => !!(THREE && THREE.ShaderMaterial);
   function mat(vert, frag, unif) {
