@@ -77,8 +77,16 @@ button { font: inherit; color: inherit; }
 #itens { left: 50%; transform: translateX(-50%); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; padding: 5px; }
 #itens button { width: 42px; height: 42px; border-radius: 8px; border: 1px solid var(--linha); background: rgba(0,0,0,0.3); position: relative; cursor: pointer; padding: 0; touch-action: none; }
 #itens button:disabled { opacity: 0.4; }
-#itens button em { font-style: normal; font-size: 18px; }
-#itens button i { position: absolute; right: 2px; bottom: 1px; font-style: normal; font-size: 10px; font-family: var(--hud); color: var(--ouro); }
+#itens button em { font-style: normal; display: block; width: 24px; height: 24px; margin: 1px auto 0; }
+#itens button em svg { width: 24px; height: 24px; display: block; }
+#itens button b { display: block; font-size: 8px; line-height: 9px; color: #e9dcc0; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; }
+#itens button { height: 46px !important; }
+#itens .alca { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 42px; touch-action: none; cursor: grab; }
+#itens .alca .pega { flex: 1; height: 14px; border-radius: 4px; background: radial-gradient(circle, rgba(233,220,192,0.55) 1.2px, transparent 1.6px) 0 0 / 6px 6px; }
+#itens .alca .min { width: 20px !important; height: 18px !important; border-radius: 5px; font-size: 14px; line-height: 14px; color: #e9dcc0; background: rgba(0,0,0,0.35); border: 1px solid var(--linha); }
+#itens.minimizado > button { display: none; }
+#itens.movido { transform: none !important; bottom: auto !important; right: auto !important; }
+#itens button i { position: absolute; right: 3px; top: 1px; font-style: normal; font-size: 10px; font-family: var(--hud); color: var(--ouro); }
 
 #joy { position: fixed; z-index: 4; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid var(--linha); background: rgba(16,22,18,0.35); pointer-events: none; }
 #joy i { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(243,236,216,0.55); border: 2px solid var(--ouro); }
@@ -206,11 +214,12 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
 <button id="bInteragir" class="hud" type="button" hidden>Interagir</button>
 
 <div id="itens" class="hud caixa" aria-label="Itens">
-  <button id="item_cura" type="button" title="Frasco de cura"><em>❤</em><i>0</i></button>
-  <button id="item_vel" type="button" title="Frasco de velocidade"><em>»</em><i>0</i></button>
-  <button id="item_invis" type="button" title="Frasco de invisibilidade"><em>◌</em><i>0</i></button>
-  <button id="item_relogio" type="button" title="Relógio que para o tempo (arraste para mirar)"><em>◷</em><i>0</i></button>
-  <button id="item_cacador" type="button" title="Frasco caçador experiente"><em>✶</em><i>0</i></button>
+  <div class="alca" title="Arraste para mudar de lugar"><span class="pega"></span><button type="button" class="min" aria-label="Minimizar itens">–</button></div>
+  <button id="item_cura" type="button" title="Frasco de cura"><em><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M12 3h8v3h-1v5.2c4.2 1.4 7 5 7 9.3C26 26 21.5 30 16 30S6 26 6 20.5c0-4.3 2.8-7.9 7-9.3V6h-1z" fill="#ff4d5a" stroke="#1a1408" stroke-width="1.4"/><path d="M8.2 20h15.6c-.4 4.6-3.7 7.6-7.8 7.6S8.6 24.6 8.2 20z" fill="#000" opacity=".22"/><rect x="12" y="2" width="8" height="3" rx="1" fill="#c9a26b" stroke="#1a1408" stroke-width="1"/><path d="M16 25l-4.6-4.3a2.8 2.8 0 0 1 4-4l.6.6.6-.6a2.8 2.8 0 0 1 4 4z" fill="#fff"/></svg></em><b>Cura</b><i>0</i></button>
+  <button id="item_vel" type="button" title="Frasco de velocidade"><em><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M12 3h8v3h-1v5.2c4.2 1.4 7 5 7 9.3C26 26 21.5 30 16 30S6 26 6 20.5c0-4.3 2.8-7.9 7-9.3V6h-1z" fill="#3ddc84" stroke="#1a1408" stroke-width="1.4"/><path d="M8.2 20h15.6c-.4 4.6-3.7 7.6-7.8 7.6S8.6 24.6 8.2 20z" fill="#000" opacity=".22"/><rect x="12" y="2" width="8" height="3" rx="1" fill="#c9a26b" stroke="#1a1408" stroke-width="1"/><path d="M17.5 13l-5 8h3.6l-1.6 6 5.5-8.6h-3.7z" fill="#fff"/></svg></em><b>Veloc.</b><i>0</i></button>
+  <button id="item_invis" type="button" title="Frasco de invisibilidade"><em><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M12 3h8v3h-1v5.2c4.2 1.4 7 5 7 9.3C26 26 21.5 30 16 30S6 26 6 20.5c0-4.3 2.8-7.9 7-9.3V6h-1z" fill="#9b7bff" stroke="#1a1408" stroke-width="1.4"/><path d="M8.2 20h15.6c-.4 4.6-3.7 7.6-7.8 7.6S8.6 24.6 8.2 20z" fill="#000" opacity=".22"/><rect x="12" y="2" width="8" height="3" rx="1" fill="#c9a26b" stroke="#1a1408" stroke-width="1"/><path d="M10.5 21c2-3 9-3 11 0-2 3-9 3-11 0z" fill="none" stroke="#fff" stroke-width="1.6"/><circle cx="16" cy="21" r="1.6" fill="#fff"/><path d="M11 26l10-10" stroke="#fff" stroke-width="1.8"/></svg></em><b>Invis.</b><i>0</i></button>
+  <button id="item_relogio" type="button" title="Relógio que para o tempo (arraste para mirar)"><em><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="13" y="2" width="6" height="3" rx="1" fill="#c9a26b" stroke="#1a1408"/><circle cx="16" cy="18" r="11" fill="#ffd34d" stroke="#1a1408" stroke-width="1.6"/><circle cx="16" cy="18" r="8.3" fill="#fff8e0"/><path d="M16 12v6.5l4 2.5" stroke="#1a1408" stroke-width="2" fill="none" stroke-linecap="round"/></svg></em><b>Relógio</b><i>0</i></button>
+  <button id="item_cacador" type="button" title="Frasco caçador experiente"><em><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M12 3h8v3h-1v5.2c4.2 1.4 7 5 7 9.3C26 26 21.5 30 16 30S6 26 6 20.5c0-4.3 2.8-7.9 7-9.3V6h-1z" fill="#ff9d3c" stroke="#1a1408" stroke-width="1.4"/><path d="M8.2 20h15.6c-.4 4.6-3.7 7.6-7.8 7.6S8.6 24.6 8.2 20z" fill="#000" opacity=".22"/><rect x="12" y="2" width="8" height="3" rx="1" fill="#c9a26b" stroke="#1a1408" stroke-width="1"/><circle cx="16" cy="21" r="4.2" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M16 14.5v3.3M16 24.2v3.3M9.5 21h3.3M19.2 21h3.3" stroke="#fff" stroke-width="1.6"/></svg></em><b>Caçador</b><i>0</i></button>
 </div>
 
 <div id="botoes" class="hud" aria-label="Combate">
@@ -241,13 +250,13 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
-<script src="servidor.js?v=25"></script>
-<script src="config-online.js?v=25"></script>
-<script src="efeitos.js?v=25"></script>
-<script src="skins.js?v=25"></script>
-<script src="mapas.js?v=25"></script>
-<script src="rede.js?v=25"></script>
-<script src="jogo.js?v=25"></script>
-<script src="painel.js?v=25"></script>
+<script src="servidor.js?v=26"></script>
+<script src="config-online.js?v=26"></script>
+<script src="efeitos.js?v=26"></script>
+<script src="skins.js?v=26"></script>
+<script src="mapas.js?v=26"></script>
+<script src="rede.js?v=26"></script>
+<script src="jogo.js?v=26"></script>
+<script src="painel.js?v=26"></script>
 </body>
 </html>

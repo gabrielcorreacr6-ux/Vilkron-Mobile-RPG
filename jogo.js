@@ -242,6 +242,7 @@
       r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.4, 'rgba(255,255,255,0.6)'); r.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = r; g.fillRect(0, 0, 64, 64);
     });
+    if (temDOM) setTimeout(() => ['notas', 'bala', 'fogo', 'moeda', 'teia', 'flecha'].forEach(n => carregarEfeito(n)), 500);
     R.olhoTex = canvasTex(64, 64, g => {
       g.fillStyle = 'rgba(20,20,20,0.75)'; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
       g.strokeStyle = '#fff'; g.lineWidth = 4; g.beginPath(); g.ellipse(32, 32, 18, 10, 0, 0, 7); g.stroke();
@@ -1285,6 +1286,11 @@
       origem, time: origem.time, efeito: null, verdadeiro: false
     }, o);
     p.obj = projetilVisual(p.visual || 'brilho', p.cor, p.tamanho || 0.7);
+    // brilho em volta do projétil dos mobs (a imagem sozinha some no mapa escuro)
+    if (p.halo !== undefined && p.obj.isSprite && R.brilhoTex) {
+      const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: R.brilhoTex, color: p.halo, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.9 }));
+      h.scale.set(1.9, 1.9, 1); h.renderOrder = 10; p.obj.add(h);
+    }
     p.obj.position.set(p.x, p.y, p.z);
     if (p.obj.isSprite || !p.obj.userData.deFrente) p.obj.material.rotation = -ang + Math.PI / 2;
     E.mundo.add(p.obj);
@@ -1308,10 +1314,22 @@
       return m;
     }
     const mat = new THREE.SpriteMaterial({ transparent: true, depthWrite: false, color: cor || 0xffffff });
+    const s = new THREE.Sprite(mat); s.scale.set(tam, tam, 1);
     if (nome === 'brilho') { mat.map = R.brilhoTex; mat.blending = THREE.AdditiveBlending; }
     else if (R.cacheSprite['ef_' + nome]) mat.map = R.cacheSprite['ef_' + nome];
-    else if (temDOM) R.texLoader.load('assets/efeitos/' + nome + '.png', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite['ef_' + nome] = t; mat.map = t; mat.needsUpdate = true; });
-    const s = new THREE.Sprite(mat); s.scale.set(tam, tam, 1); return s;
+    else if (temDOM) {
+      // enquanto a imagem não chega, a esfera fica escondida (antes aparecia um quadrado branco)
+      mat.visible = false;
+      carregarEfeito(nome, t => { mat.map = t; mat.visible = true; mat.needsUpdate = true; });
+    }
+    return s;
+  }
+  function carregarEfeito(nome, pronto) {
+    if (R.cacheSprite['ef_' + nome]) { if (pronto) pronto(R.cacheSprite['ef_' + nome]); return; }
+    R.esperaEfeito = R.esperaEfeito || {};
+    if (R.esperaEfeito[nome]) { if (pronto) R.esperaEfeito[nome].push(pronto); return; }
+    R.esperaEfeito[nome] = pronto ? [pronto] : [];
+    R.texLoader.load('assets/efeitos/' + nome + '.png', t => { t.encoding = THREE.sRGBEncoding; R.cacheSprite['ef_' + nome] = t; R.esperaEfeito[nome].forEach(f => f(t)); delete R.esperaEfeito[nome]; });
   }
   function atualizarProjeteis(dt) {
     for (let i = E.projeteis.length - 1; i >= 0; i--) {
@@ -1547,7 +1565,11 @@
     const cls = CLASSES[P.classe];
     const obj = await Skins.criarPersonagem({ classe: P.classe, genero: P.genero, cor: P.cor, skin: (P.skinEquipada || {})[P.classe] || 'default' });
     const velho = E.heroi;
-    if (velho) { Skins.remover(velho.obj); if (velho.obj.parent) velho.obj.parent.remove(velho.obj); E.entidades = E.entidades.filter(e => e !== velho); if (velho.barra.parent) velho.barra.parent.remove(velho.barra); if (velho.sombra.parent) velho.sombra.parent.remove(velho.sombra); }
+    if (velho) {
+      Skins.remover(velho.obj); E.entidades = E.entidades.filter(e => e !== velho);
+      // tudo que andava junto com o herói antigo sai junto (antes o selo de elo ficava flutuando sozinho)
+      [velho.obj, velho.barra, velho.sombra, velho.seloSprite, velho.marcaAlvo, velho.olho, velho.rastro && velho.rastro.mesh].forEach(o => { if (o && o.parent) o.parent.remove(o); });
+    }
     const h = nova({
       tipo: 'heroi', time: 'jogador', classe: P.classe, skin: (P.skinEquipada || {})[P.classe] || 'padrao', obj, anim: Skins.animador(obj),
       x: velho ? velho.x : E.def.entrada[0], z: velho ? velho.z : E.def.entrada[1], rot: velho ? velho.rot : 0,
@@ -1890,16 +1912,44 @@
       g.restore();
     }),
     glifo: k => texSkin('glifo' + (k % 10), 64, 64, g => { g.strokeStyle = '#ffffff'; g.lineWidth = 6; g.lineCap = 'round'; g.translate(32, 32); glifo(g, k, 52); }),
-    raiz: () => texSkin('raiz', 128, 256, g => {
-      const tronco = (x, y, ang, len, larg, prof) => {
-        const x2 = x + Math.sin(ang) * len, y2 = y - Math.cos(ang) * len;
-        g.lineWidth = larg; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.sin(ang + 0.6) * len * 0.5, y - Math.cos(ang + 0.6) * len * 0.5, x2, y2); g.stroke();
-        if (prof < 3) { tronco(x2, y2, ang + 0.5, len * 0.62, larg * 0.6, prof + 1); tronco(x2, y2, ang - 0.4, len * 0.7, larg * 0.65, prof + 1); }
+    raiz: () => texSkin('raiz2', 128, 256, g => {
+      // raiz grossa de verdade: corpo afinando, casca com sombreado, galhos que se enrolam e musgo brilhando nas pontas
+      const rnd = semeado(23);
+      const corpo = (pts, w0, w1) => {
+        const esq = [], dir = [];
+        pts.forEach((p, i) => {
+          const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+          let tx = b[0] - a[0], ty = b[1] - a[1]; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+          const w = (w0 + (w1 - w0) * i / (pts.length - 1)) / 2;
+          esq.push([p[0] - ty * w, p[1] + tx * w]); dir.push([p[0] + ty * w, p[1] - tx * w]);
+        });
+        g.beginPath(); esq.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); dir.reverse().forEach(p => g.lineTo(p[0], p[1])); g.closePath();
+        const gr = g.createLinearGradient(30, 0, 98, 0); gr.addColorStop(0, '#1e130a'); gr.addColorStop(0.45, '#6b4527'); gr.addColorStop(0.6, '#4a2f1a'); gr.addColorStop(1, '#170e07');
+        g.fillStyle = gr; g.fill();
+        g.strokeStyle = 'rgba(20,12,6,0.9)'; g.lineWidth = 1.5; g.stroke();
+        // veios da casca
+        g.strokeStyle = 'rgba(150,110,70,0.35)'; g.lineWidth = 1;
+        for (let k = 0; k < 3; k++) { g.beginPath(); pts.forEach((p, i) => { const off = (k - 1) * (w0 + (w1 - w0) * i / (pts.length - 1)) * 0.22; i ? g.lineTo(p[0] + off, p[1]) : g.moveTo(p[0] + off, p[1]); }); g.stroke(); }
+        return pts[pts.length - 1];
       };
-      g.lineCap = 'round';
-      g.strokeStyle = 'rgba(90,255,140,0.55)'; g.shadowColor = '#5aff8c'; g.shadowBlur = 12; tronco(64, 254, 0.05, 110, 22, 0);
-      g.shadowBlur = 0; g.strokeStyle = '#3b2a1c'; tronco(64, 254, 0.05, 110, 16, 0);
-      g.strokeStyle = 'rgba(140,110,80,0.6)'; tronco(62, 254, 0.05, 110, 5, 0);
+      const caminho = (x, y, ang, len, curva, n) => { const pts = []; for (let i = 0; i <= n; i++) { const t = i / n, a = ang + curva * t * t; pts.push([x, y]); x += Math.sin(a) * len / n; y -= Math.cos(a) * len / n; } return pts; };
+      const pontas = [];
+      const tronco = caminho(64, 258, 0.05, 220, -0.5, 18);
+      // galhos saindo do tronco
+      [[0.35, -1.1, 70, 1.4], [0.5, 1.0, 64, -1.6], [0.68, -0.8, 50, 1.8], [0.8, 0.9, 40, -1.5]].forEach(([t, ang, len, curva]) => {
+        const p = tronco[Math.round(t * (tronco.length - 1))]; const pts = caminho(p[0], p[1], ang, len, curva, 10);
+        pontas.push(corpo(pts, 14 - t * 8, 2));
+      });
+      pontas.push(corpo(tronco, 30, 4));
+      // musgo e folhinhas brilhando nas pontas
+      pontas.forEach(([x, y]) => {
+        g.save(); g.shadowColor = '#66ff88'; g.shadowBlur = 14; g.fillStyle = 'rgba(110,255,140,0.9)';
+        for (let k = 0; k < 3; k++) { g.beginPath(); g.ellipse(x + (rnd() - 0.5) * 10, y + (rnd() - 0.5) * 8, 5, 2.6, rnd() * 3, 0, 7); g.fill(); }
+        g.restore();
+      });
+      g.save(); g.shadowColor = '#4dff7a'; g.shadowBlur = 10; g.fillStyle = 'rgba(70,200,90,0.75)';
+      for (let k = 0; k < 9; k++) { const p = tronco[3 + Math.floor(rnd() * 12)]; g.beginPath(); g.ellipse(p[0] + (rnd() - 0.5) * 18, p[1], 4, 2, rnd() * 3, 0, 7); g.fill(); }
+      g.restore();
     }),
     raio: () => texSkin('raio', 128, 512, g => {
       const rnd = semeado(99), pts = [[64, 0]];
@@ -2018,7 +2068,10 @@
   // raiz saindo do chão: sobe rápido, fica, e afunda (devagar = afunda durante toda a duração)
   function raizSobe(x, z, alt, dur, devagar) {
     const sobe = 0.18;
-    figura(TX.raiz(), x, 0, z, alt, 0xffffff, dur, { normal: true, base: true, largura: 0.5, opacidade: 1, entra: 0.05, sai: 0.3, ordem: 11,
+    particulas(x, z, { n: Math.round(2 + alt * 2), cor: 0x3a2a1a, tam: 0.35 + alt * 0.12, cresce: 1.6, velH: 1.6 + alt * 0.5, velV: 2 + alt, gravidade: 9, vida: 0.55, opacidade: 0.9, y: 0.1 });
+    decalque(TX.racha(0x3fdc5a), x, z, 0.35 + alt * 0.25, 0xffffff, dur, { normal: true, entra: 0.05, devagar: !!devagar, opacidade: 0.9 });
+    emitir('faisca', x, 0.15, z, { n: 3, cor: 0x7dff9a, vel: 0.8, subida: 1.6, vida: 0.5 });
+    figura(TX.raiz(), x, 0, z, alt, 0xffffff, dur, { normal: true, base: true, largura: 0.55, opacidade: 1, entra: 0.05, sai: 0.3, ordem: 11,
       altura: (t, d) => t < sobe ? t / sobe : devagar ? 1 - (t - sobe) / (d - sobe) * 0.95 : (t > d - 0.4 ? (d - t) / 0.4 : 1) });
   }
   // raio caindo do céu
@@ -2239,6 +2292,36 @@
     }
   };
   let paintballCor = false;
+
+  /* ---------- efeitos dos ataques dos mobs ---------- */
+  const texTeia = () => texSkin('teiaChao', 256, 256, g => {
+    g.strokeStyle = '#ffffff'; g.lineWidth = 2.2;
+    for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; g.beginPath(); g.moveTo(128, 128); g.lineTo(128 + Math.cos(a) * 124, 128 + Math.sin(a) * 124); g.stroke(); }
+    for (let r = 18; r < 124; r += 17) { g.beginPath(); for (let i = 0; i <= 10; i++) { const a = i / 10 * Math.PI * 2, rr = r * (i % 2 ? 0.93 : 1); i ? g.lineTo(128 + Math.cos(a) * rr, 128 + Math.sin(a) * rr) : g.moveTo(128 + Math.cos(a) * rr, 128 + Math.sin(a) * rr); } g.stroke(); }
+  });
+  const alturaDe = a => (a.altura || 1.8) * (a.obj && a.obj.scale ? a.obj.scale.y : 1);
+  const FX_MOB = {
+    // maestro: notas roxas com brilho, e notas girando em volta de quem leva
+    notas: { halo: 0xb26bff, rastro: 0xd9a0ff, impacto: 0xd9a0ff,
+      saida: (e, ang) => { anelEfeito(e.x, e.z, 1.2, 0xb26bff, 0.35, true); emitir('faisca', e.x, 1.4, e.z, { n: 10, cor: 0xd9a0ff, vel: 1.2, subida: 1.5, vida: 0.5 }); },
+      acerto: (a, crit) => { const y = alturaDe(a) * 0.6; for (let k = 0; k < 6; k++) { const ang = k / 6 * 6.28; emitir('media', a.x + Math.cos(ang) * 0.5, y, a.z + Math.sin(ang) * 0.5, { n: 1, cor: 0xc58bff, vel: 0.6, dir: [-Math.sin(ang), Math.cos(ang)], subida: 0.8, vida: 0.6 }); } anelEfeito(a.x, a.z, 1, 0xb26bff, 0.4, true); } },
+    // veterano: clarão do tiro, rastro de bala e faíscas no impacto
+    bala: { halo: 0xffd27a, rastro: 0xffe9b0, impacto: 0xfff1c4,
+      saida: (e, ang) => { const x = e.x + Math.sin(ang) * 0.9, z = e.z + Math.cos(ang) * 0.9; figura(R.brilhoTex || TX.bola(), x, 1.2, z, 1.4, 0xffd27a, 0.1, { entra: 0.01, sai: 0.08 }); emitir('faisca', x, 1.2, z, { n: 8, cor: 0xffd27a, vel: 4, dir: [Math.sin(ang), Math.cos(ang)], espalha: 0.4, vida: 0.2 }); particulas(x, z, { n: 2, cor: 0x7a7a7a, tam: 0.4, cresce: 2, velH: 0.3, velV: 0.5, gravidade: -0.2, vida: 0.6, opacidade: 0.5, y: 1.2 }); },
+      acerto: a => { emitir('faisca', a.x, alturaDe(a) * 0.55, a.z, { n: 14, cor: 0xffd27a, vel: 4, subida: 2, grav: 10, vida: 0.35 }); } },
+    // dragão: bola de fogo com rastro de brasa e o alvo pegando fogo
+    fogo: { halo: 0xff6a1a, rastro: 0xff8a2a, impacto: 0xff4a10,
+      saida: (e, ang) => { emitir('grande', e.x + Math.sin(ang) * 1.2, 1.3, e.z + Math.cos(ang) * 1.2, { n: 3, cor: 0xff6a1a, vel: 1.5, dir: [Math.sin(ang), Math.cos(ang)], vida: 0.35 }); },
+      acerto: a => { labareda(a.x, a.z, 0xff5a14, 1.4, 1.2); emitir('grande', a.x, 0.8, a.z, { n: 4, cor: 0xff6a1a, vel: 1.5, subida: 2, vida: 0.45 }); const fim = E.t + 1.2; E.efeitos.push({ atualizar(dt) { if (Math.random() < dt * 14) emitir('faisca', a.x + (Math.random() - 0.5) * 0.6, 0.3 + Math.random() * alturaDe(a) * 0.7, a.z, { n: 1, cor: 0xff8a2a, vel: 0.2, subida: 1.5, vida: 0.4 }); return E.t > fim || a.morto; } }); } },
+    // barão: moeda girando com brilho dourado e chuva de moedas no impacto (o crítico é maior)
+    moeda: { halo: 0xffd34d, rastro: 0xffe14d, impacto: 0xffe14d,
+      saida: e => emitir('faisca', e.x, 1.3, e.z, { n: 8, cor: 0xffe14d, vel: 1, subida: 1, vida: 0.4 }),
+      acerto: (a, crit) => { emitir('faisca', a.x, alturaDe(a) * 0.6, a.z, { n: crit ? 30 : 16, cor: 0xffd34d, vel: crit ? 5 : 3.5, subida: 3, grav: 12, vida: 0.6 }); anelEfeito(a.x, a.z, crit ? 1.8 : 1.1, 0xffd34d, 0.4, true); if (crit) aviso('Crítico do Barão!'); } },
+    // aranha: teia brilhando no voo e grudada no chão enquanto prende
+    teia: { halo: 0xe8f4ff, rastro: 0xffffff, impacto: 0xe8f4ff,
+      acerto: a => { decalque(texTeia(), a.x, a.z, 1.1, 0xe8f4ff, 1.4, { normal: true, entra: 0.05, sai: 0.5, opacidade: 0.85, seguir: a }); emitir('faisca', a.x, 0.8, a.z, { n: 10, cor: 0xffffff, vel: 2, subida: 1, vida: 0.4 }); } },
+    mordida: a => { emitir('faisca', a.x, alturaDe(a) * 0.5, a.z, { n: 10, cor: 0x9cff6b, vel: 2.5, subida: 1, grav: 8, vida: 0.35 }); anelEfeito(a.x, a.z, 0.9, 0x6bdc4a, 0.3, true); }
+  };
   // mancha de tinta grudada no inimigo por 2 s (só o visual)
   function marcaTinta(e, cor, tam) {
     if (!e || e.morto) return;
@@ -2634,18 +2717,25 @@
     if (e.especie === 'aranha') {
       if (!e.grudada) {
         e.anim.tocar('habilidade1', { momento: 0.5, aoAcertar: () => atirar(e, ang, { vel: 14, restante: c.alcance + 1, dano: e.dano * 0.5, visual: 'teia', tamanho: 1.1,
-          efeito: a => { a.stunAte = E.t + c.stunTeia; aplicarSlow(a, c.slowTeia[0], c.slowTeia[1]); e.grudada = true; } }) });
+          halo: FX_MOB.teia.halo, rastro: FX_MOB.teia.rastro, impacto: FX_MOB.teia.impacto,
+          efeito: a => { a.stunAte = E.t + c.stunTeia; aplicarSlow(a, c.slowTeia[0], c.slowTeia[1]); e.grudada = true; FX_MOB.teia.acerto(a); } }) });
       } else {
-        e.anim.tocar('ataque', { momento: 0.5, aoAcertar: () => { if (dist(alvo, e) < c.corpoACorpo + 0.6) causarDano(alvo, e.dano, e); } });
+        e.anim.tocar('ataque', { momento: 0.5, aoAcertar: () => { if (dist(alvo, e) < c.corpoACorpo + 0.6) { causarDano(alvo, e.dano, e); FX_MOB.mordida(alvo); } } });
       }
       return;
     }
     let dano = e.dano;
-    if (c.criticoQuinto && e.ataques % 5 === 0) dano *= 1 + c.criticoQuinto;
-    e.anim.tocar('ataque', { momento: 0.5, aoAcertar: () => atirar(e, ang, {
-      vel: 13, restante: c.alcance + 1.5, dano, visual: c.projetil, tamanho: 1.1, verdadeiro: !!c.verdadeiro,
-      efeito: c.slow ? a => aplicarSlow(a, c.slow[0], c.slow[1]) : null
-    }) });
+    const critico = c.criticoQuinto && e.ataques % 5 === 0;
+    if (critico) dano *= 1 + c.criticoQuinto;
+    const fx = FX_MOB[c.projetil] || {};
+    e.anim.tocar('ataque', { momento: 0.5, aoAcertar: () => {
+      if (fx.saida) fx.saida(e, ang);
+      atirar(e, ang, {
+        vel: 13, restante: c.alcance + 1.5, dano, visual: c.projetil, tamanho: critico ? 1.5 : 1.1, verdadeiro: !!c.verdadeiro,
+        halo: fx.halo, rastro: fx.rastro, impacto: fx.impacto,
+        efeito: a => { if (c.slow) aplicarSlow(a, c.slow[0], c.slow[1]); if (fx.acerto) fx.acerto(a, critico); }
+      });
+    } });
   }
 
   /* ---------- serpente (Ascensão) ---------- */
@@ -2799,7 +2889,7 @@
       else if (E.t >= e.prontoEm && e.anim.estado !== 'ataque') {
         e.prontoEm = E.t + e.cfg.intervalo;
         const ang = e.rot;
-        if (e.especie === 'balistico') e.anim.tocar('ataque', { momento: 0.5, aoAcertar: () => atirar(e, ang, { vel: 16, restante: e.alcance + 1, dano: e.dano, visual: 'flecha', tamanho: 0.9 }) });
+        if (e.especie === 'balistico') e.anim.tocar('ataque', { momento: 0.5, aoAcertar: () => atirar(e, ang, { vel: 16, restante: e.alcance + 1, dano: e.dano, visual: 'flecha', tamanho: 0.9, rastro: 0xe8dcc0, impacto: 0xfff1c4 }) });
         else e.anim.tocar('ataque', { momento: 0.5, aoAcertar: () => { if (!alvo.morto && dist(alvo, e) < e.alcance + 0.8) causarDano(alvo, e.dano, e); } });
       }
     } else if (e.rota) {
@@ -3119,7 +3209,7 @@
     for (let i = E.entidades.length - 1; i >= 0; i--) {
       const e = E.entidades[i];
       if (e.removerEm !== undefined && E.t >= e.removerEm && (e.morto || e.tipo === 'clone')) {
-        Skins.remover(e.obj); E.mundo.remove(e.obj); E.mundo.remove(e.barra); E.mundo.remove(e.sombra);
+        Skins.remover(e.obj); E.mundo.remove(e.obj); E.mundo.remove(e.barra); E.mundo.remove(e.sombra); if (e.seloSprite && e.seloSprite.parent) e.seloSprite.parent.remove(e.seloSprite);
         E.entidades.splice(i, 1);
       }
     }
@@ -3385,8 +3475,41 @@
   }
 
   function textoMira() { const b = temDOM && document.querySelector('[data-menu="mira"]'); if (b) b.textContent = 'Mira auxiliar: ' + (MIRA_AUX.ligada ? 'ligada' : 'desligada'); }
+  // coluna de itens: arrasta pela alça para qualquer lugar e minimiza no "–" (fica salvo neste celular)
+  function ligarItens() {
+    const box = $('itens'); if (!box) return;
+    const alca = box.querySelector('.alca'), min = box.querySelector('.min'); if (!alca || !min) return;
+    const CH = 'vilkron_itens';
+    let est = {}; try { est = JSON.parse(global.localStorage.getItem(CH) || '{}') || {}; } catch (e) {}
+    const guardar = () => { try { global.localStorage.setItem(CH, JSON.stringify(est)); } catch (e) {} };
+    const colocar = () => {
+      box.classList.toggle('minimizado', !!est.min); min.textContent = est.min ? '+' : '–';
+      min.setAttribute('aria-label', est.min ? 'Mostrar itens' : 'Minimizar itens');
+      if (est.x === undefined) { box.classList.remove('movido'); box.style.left = box.style.top = ''; return; }
+      const r = box.getBoundingClientRect(), W = global.innerWidth, H = global.innerHeight;
+      const x = clamp(est.x, 4, Math.max(4, W - r.width - 4)), y = clamp(est.y, 4, Math.max(4, H - r.height - 4));
+      box.classList.add('movido'); box.style.left = x + 'px'; box.style.top = y + 'px';
+    };
+    min.addEventListener('pointerdown', e => e.stopPropagation());
+    min.addEventListener('click', e => { e.stopPropagation(); est.min = !est.min; guardar(); colocar(); });
+    let id = null, ox = 0, oy = 0, mexeu = false;
+    alca.addEventListener('pointerdown', e => {
+      id = e.pointerId; mexeu = false; const r = box.getBoundingClientRect(); ox = e.clientX - r.left; oy = e.clientY - r.top;
+      alca.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    alca.addEventListener('pointermove', e => {
+      if (e.pointerId !== id) return; mexeu = true;
+      est.x = e.clientX - ox; est.y = e.clientY - oy; colocar();
+    });
+    const soltar = e => { if (e.pointerId !== id) return; id = null; if (mexeu) guardar(); };
+    alca.addEventListener('pointerup', soltar); alca.addEventListener('pointercancel', soltar);
+    // dois toques na alça: volta para o lugar de fábrica
+    let ultimo = 0; alca.addEventListener('click', () => { const t = Date.now(); if (t - ultimo < 350) { delete est.x; delete est.y; guardar(); colocar(); } ultimo = t; });
+    global.addEventListener('resize', colocar);
+    colocar();
+  }
   function ligarControles() {
-    textoMira();
+    textoMira(); ligarItens();
     const canvas = R.renderer.domElement;
     const joy = $('joy'), knob = joy.querySelector('i');
     let joyId = null, jx = 0, jy = 0;

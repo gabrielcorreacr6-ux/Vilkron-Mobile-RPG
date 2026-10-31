@@ -53,7 +53,7 @@
     },
     generos: { m: 'Homem', f: 'Mulher' },
     // realce das skins (cores mais vivas): metal máximo e quanto a textura acende sozinha
-    realceSkins: { metal: 0.3, brilho: 0.38 },
+    realceSkins: { metal: 0.3, brilho: 0.4, noite: 0.18 },
 
     mapas: {
       mapa1:    { escalaMob: 1.0,  variante: 'default' },
@@ -329,6 +329,7 @@
         if (mapa && mapa.image && mapa.image.width && global.document) {
           m.userData.mapOriginal = mapa;
           m.map = texturaTingida(mapa, hex);
+          if (m.userData.realcado) m.emissiveMap = m.map;
           m.needsUpdate = true;
           return;
         }
@@ -1002,7 +1003,9 @@
         m.userData.realcado = true;
         if (m.metalness !== undefined) m.metalness = Math.min(m.metalness, CATALOGO.realceSkins.metal);
         if (m.roughness !== undefined) m.roughness = Math.max(m.roughness, 0.45);
-        if (m.map && m.emissive) { m.emissiveMap = m.map; m.emissive.setScalar(CATALOGO.realceSkins.brilho); }
+        // no gráfico alto o mapa é noite: o herói acende um pouco mais para não sumir no escuro
+        const k = CATALOGO.realceSkins.brilho + (global.Efeitos && global.Efeitos.qualidade === 'alta' ? CATALOGO.realceSkins.noite : 0);
+        if (m.map && m.emissive) { m.emissiveMap = m.map; m.emissive.setScalar(k); }
         m.needsUpdate = true;
       });
     });
@@ -1033,7 +1036,7 @@
       corpo = clonar(gltf);
       normalizar(corpo, ALTURA_HEROI);
       if (skin.aceitaCor) aplicarCor(corpo, cor);
-      else realcarCores(corpo);
+      realcarCores(corpo);
     } else {
       corpo = boneco(ALTURA_HEROI, def.corPadrao, cor);
     }
