@@ -52,6 +52,8 @@
         { id: 'paintball', nome: 'Maníaco do Paintball', aceitaCor: false, preco: 0 } ] }
     },
     generos: { m: 'Homem', f: 'Mulher' },
+    // realce das skins (cores mais vivas): metal máximo e quanto a textura acende sozinha
+    realceSkins: { metal: 0.3, brilho: 0.38 },
 
     mapas: {
       mapa1:    { escalaMob: 1.0,  variante: 'default' },
@@ -990,6 +992,22 @@
     return raiz;
   }
 
+  // Skins do Meshy vêm com muito "metal" e o jogo não tem reflexo de ambiente: o metal fica quase preto.
+  // Aqui o metal é reduzido e a própria textura acende um pouco, para as cores aparecerem vivas.
+  function realcarCores(obj) {
+    obj.traverse(n => {
+      if (!n.isMesh) return;
+      (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => {
+        if (!m || m.userData.realcado) return;
+        m.userData.realcado = true;
+        if (m.metalness !== undefined) m.metalness = Math.min(m.metalness, CATALOGO.realceSkins.metal);
+        if (m.roughness !== undefined) m.roughness = Math.max(m.roughness, 0.45);
+        if (m.map && m.emissive) { m.emissiveMap = m.map; m.emissive.setScalar(CATALOGO.realceSkins.brilho); }
+        m.needsUpdate = true;
+      });
+    });
+  }
+
   /* ================= API: PERSONAGENS ================= */
   async function criarPersonagem(opcoes) {
     const o = Object.assign({}, { classe: perfil.classe, genero: perfil.genero }, opcoes);
@@ -1015,6 +1033,7 @@
       corpo = clonar(gltf);
       normalizar(corpo, ALTURA_HEROI);
       if (skin.aceitaCor) aplicarCor(corpo, cor);
+      else realcarCores(corpo);
     } else {
       corpo = boneco(ALTURA_HEROI, def.corPadrao, cor);
     }

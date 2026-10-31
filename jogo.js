@@ -319,17 +319,21 @@
     const rnd = semeado(semente * 97 + 13);
     const t = canvasTex(512, 512, g => {
       g.clearRect(0, 0, 512, 512);
-      for (let i = 0; i < 70; i++) {
-        const x = rnd() * 512, y = rnd() * 512, r = 30 + rnd() * 90, escura = rnd() < 0.62;
-        const grad = g.createRadialGradient(x, y, 0, x, y, r);
-        grad.addColorStop(0, escura ? 'rgba(18,40,14,0.55)' : 'rgba(214,206,110,0.32)');
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-        g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+      // manchas suaves (sem o amarelo de antes) e desenhadas "dando a volta" na borda: sem linhas retas no chão
+      for (let i = 0; i < 60; i++) {
+        const x = rnd() * 512, y = rnd() * 512, r = 40 + rnd() * 90, escura = rnd() < 0.7;
+        for (const ox of [-512, 0, 512]) for (const oy of [-512, 0, 512]) {
+          const cx = x + ox, cy = y + oy; if (cx + r < 0 || cx - r > 512 || cy + r < 0 || cy - r > 512) continue;
+          const grad = g.createRadialGradient(cx, cy, 0, cx, cy, r);
+          grad.addColorStop(0, escura ? 'rgba(14,30,10,0.34)' : 'rgba(110,128,58,0.16)');
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          g.fillStyle = grad; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
+        }
       }
     });
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     const m = camada(uvRep(new THREE.PlaneGeometry(GW, GH), GW / 90, GH / 90),
-      new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.85 }), 0, 0, 0.005);
+      new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.8 }), 0, 0, 0.005);
     return m;
   }
 
@@ -1557,9 +1561,22 @@
   // Escolha do alvo do ataque básico:
   //  - arrastando o botão: o inimigo mais perto da linha mirada (até 35°)
   //  - só tocando: o alvo travado, senão herói inimigo, senão o mais perto
+  function alvoValido(h, e) {
+    return !!(e && !e.morto && E.entidades.indexOf(e) >= 0 && inimigos(e, h) && e.tipo !== 'clone' && !(e.tipo === 'serpente' && !e.emerso) &&
+      !(remoto(e) && (invisivel(e) || zonaSegura(e.x, e.z) || PODERES.semVantagem)) && !(e.tipo === 'heroi') && !(e.obj && e.obj.visible === false && remoto(e)));
+  }
+  // Mira auxiliar (menu ⋮): o alvo escolhido fica preso até morrer, sumir ou ficar longe;
+  // arrastar o ataque para outro inimigo troca o alvo. Desligada, o alvo só é preferido por 2,5 s.
+  const MIRA_AUX = { ligada: true, longe: 20 };
+  try { const v = global.localStorage.getItem('vilkron_mira_aux'); if (v !== null) MIRA_AUX.ligada = v === '1'; } catch (e) {}
+  function alvoPreso(h) {
+    const a = h.alvoPreso;
+    if (!MIRA_AUX.ligada || !a) return null;
+    if (!alvoValido(h, a) || dist(a, h) > MIRA_AUX.longe) { h.alvoPreso = null; return null; }
+    return a;
+  }
   function escolherAlvo(h, alcance, angMira) {
-    const valido = e => e && !e.morto && inimigos(e, h) && e.tipo !== 'clone' && !(e.tipo === 'serpente' && !e.emerso) &&
-      !(remoto(e) && (invisivel(e) || zonaSegura(e.x, e.z) || PODERES.semVantagem)) && !(e.tipo === 'heroi') && !(e.obj && e.obj.visible === false && remoto(e));
+    const valido = e => alvoValido(h, e);
     let melhor = null, nota = Infinity;
     E.entidades.forEach(e => {
       if (!valido(e)) return;
@@ -1607,13 +1624,19 @@
     let ang = h.rot, alvo = null;
     if (slot === 0) {
       // ataque básico: mira assistida (prefere o alvo travado e heróis inimigos)
-      alvo = escolherAlvo(h, cls.alcance + (mira ? 1.5 : 3), mira ? mira.ang : null);
+      const preso = alvoPreso(h), alcanceBasico = cls.alcance + (mira ? 1.5 : 3);
+      if (!mira && preso && dist(preso, h) <= alcanceBasico + preso.raio) alvo = preso;     // mira auxiliar: vai sozinho no alvo escolhido
+      else alvo = escolherAlvo(h, alcanceBasico, mira ? mira.ang : null);
       if (alvo) ang = Math.atan2(alvo.x - h.x, alvo.z - h.z);
       else if (mira) ang = mira.ang;
-      h.alvoTravado = alvo; h.travaAte = E.t + 2.5;
+      if (MIRA_AUX.ligada) {
+        if (alvo && (mira || !preso)) h.alvoPreso = alvo;        // arrastou para outro inimigo (ou não tinha alvo): troca
+        h.alvoTravado = h.alvoPreso || alvo; h.travaAte = E.t + 1e6;
+      } else { h.alvoTravado = alvo; h.travaAte = E.t + 2.5; }
     } else if (mira) ang = mira.ang;
     else {
-      alvo = alvoMaisPerto(h, 12);
+      const preso = alvoPreso(h);
+      alvo = preso && dist(preso, h) <= 14 ? preso : alvoMaisPerto(h, 12);   // habilidades também seguem o alvo escolhido
       if (alvo) ang = Math.atan2(alvo.x - h.x, alvo.z - h.z);
     }
     h.rot = ang;
@@ -3147,10 +3170,11 @@
     }
     // marcador do alvo do ataque básico (anel vermelho no chão)
     if (!h.marcaAlvo) {
-      h.marcaAlvo = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 32), new THREE.MeshBasicMaterial({ color: 0xff5a4a, transparent: true, opacity: 0.8, depthWrite: false }));
+      h.marcaAlvo = new THREE.Mesh(new THREE.RingGeometry(0.86, 0.95, 32), new THREE.MeshBasicMaterial({ color: 0xff5a4a, transparent: true, opacity: 0.45, depthWrite: false }));
       h.marcaAlvo.rotation.x = -Math.PI / 2; h.marcaAlvo.renderOrder = 7;
     }
     if (h.marcaAlvo.parent !== E.mundo) E.mundo.add(h.marcaAlvo);
+    if (MIRA_AUX.ligada && h.alvoTravado && h.alvoTravado === h.alvoPreso && !alvoPreso(h)) h.alvoTravado = null;
     const ta = h.alvoTravado;
     const mostra = !!(ta && !ta.morto && h.travaAte > E.t && !(ta.obj && ta.obj.visible === false));
     h.marcaAlvo.visible = mostra;
@@ -3360,7 +3384,9 @@
     if (!primeiraVez) $('modalFechar').hidden = false; else $('modalFechar').hidden = true;
   }
 
+  function textoMira() { const b = temDOM && document.querySelector('[data-menu="mira"]'); if (b) b.textContent = 'Mira auxiliar: ' + (MIRA_AUX.ligada ? 'ligada' : 'desligada'); }
   function ligarControles() {
+    textoMira();
     const canvas = R.renderer.domElement;
     const joy = $('joy'), knob = joy.querySelector('i');
     let joyId = null, jx = 0, jy = 0;
@@ -3465,6 +3491,12 @@
       else if (q === 'heroi') telaHeroi(false);
       else if (q === 'instrucoes') telaInstrucoes();
       else if (q === 'graficos') telaGraficos();
+      else if (q === 'mira') {
+        MIRA_AUX.ligada = !MIRA_AUX.ligada;
+        try { global.localStorage.setItem('vilkron_mira_aux', MIRA_AUX.ligada ? '1' : '0'); } catch (e) {}
+        if (!MIRA_AUX.ligada && E.heroi) { E.heroi.alvoPreso = null; E.heroi.travaAte = E.t + 2.5; }
+        textoMira(); aviso('Mira auxiliar ' + (MIRA_AUX.ligada ? 'ligada: o alvo escolhido fica marcado até cair, sumir ou ficar longe' : 'desligada'));
+      }
       else if (gancho('menu', q) === true) { /* tratado pelo painel online */ }
       else telaRanking(q);
     }));
@@ -3473,7 +3505,7 @@
     const mira = $('mira'), h = E.heroi;
     if (!mira || mira.hidden || !h) { if (E.marcaMira) E.marcaMira.visible = false; return; }
     if (!E.marcaMira) {
-      E.marcaMira = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1), new THREE.MeshBasicMaterial({ color: 0xe3b44c, transparent: true, opacity: 0.45, depthWrite: false }));
+      E.marcaMira = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 1), new THREE.MeshBasicMaterial({ color: 0xffe9b0, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }));
       E.marcaMira.rotation.x = -Math.PI / 2; E.marcaMira.renderOrder = 7;
     }
     if (E.marcaMira.parent !== E.mundo) E.mundo.add(E.marcaMira);
@@ -3543,7 +3575,7 @@
       telaHeroi, telaRanking, perfilPadrao, dist, selo, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
-    _t: { CONFIG, E, P, R, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
+    _t: { CONFIG, E, P, R, MIRA_AUX, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
   };
   if (temDOM && !global.ESPERAR_LOGIN) global.addEventListener('load', () => Jogo.iniciar().catch(err => {
     const el = $('carregando'); if (el) el.innerHTML = '<div>NÃO FOI POSSÍVEL INICIAR<p>' + (err && err.message || err) + '</p></div>';
