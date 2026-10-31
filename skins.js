@@ -119,6 +119,8 @@
         habilidade3: { clipe: 'habilidade1', duracao: 0.5 }
       },
       mago: { habilidade3: { clipe: 'extra_magia_longa' } },
+      // golem é pesado: golpes mais lentos que os dos heróis
+      golem: { ataque: { duracao: 1.6 }, habilidade1: { duracao: 1.8 } },
       suporte: { habilidade2: { duracao: 1.2 }, habilidade3: { clipe: 'habilidade1' } }
     },
 
@@ -1106,6 +1108,15 @@
     return { nome, obj: suporte, mao, modo: def.modo, ponta };
   }
 
+  // posição de um osso no mundo (para efeitos nas mãos)
+  function posicaoOsso(obj, nome, saida) {
+    const anim = obj && obj.userData && obj.userData.animador;
+    if (!anim || !obj.parent) return false;
+    anim._ossos = anim._ossos || {};
+    if (anim._ossos[nome] === undefined) anim._ossos[nome] = acharOsso(anim.corpo, nome) || null;
+    const o = anim._ossos[nome]; if (!o || !o.getWorldPosition) return false;
+    o.getWorldPosition(saida); return true;
+  }
   // Ponto de onde sai o tiro: a boca da arma que está na mão agora (no mundo)
   const _vp = new THREE.Vector3(), _vf = new THREE.Vector3();
   function pontaArma(obj, saida) {
@@ -1222,7 +1233,7 @@
 
   global.Skins = {
     CATALOGO, Perfil,
-    criarPersonagem, trocarSkin, trocarCor, pontaArma,
+    criarPersonagem, trocarSkin, trocarCor, pontaArma, posicaoOsso,
     criarMob, criarMinion, criarAranha, textura,
     animador, atualizar, remover,
     skinsDaClasse, registrarSkin,

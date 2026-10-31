@@ -230,7 +230,7 @@
         if (r.ent) tirarEntidade(r.ent);
         const A = J.api;
         r.ent = A.nova({
-          tipo: 'remoto', uid: p.u, nick: p.n, num: p.num, classe: p.c, time: Rede.amigos.has(p.u) ? 'jogador' : 'r_' + p.u,
+          tipo: 'remoto', uid: p.u, nick: p.n, num: p.num, classe: p.c, skin: p.s, time: Rede.amigos.has(p.u) ? 'jogador' : 'r_' + p.u,
           obj, anim: global.Skins.animador(obj), x: p.x, z: p.z, rot: p.r, vida: p.v, vidaMax: p.vm, raio: 0.6
         });
         r.visual = visual; r.cor = p.k;
@@ -287,11 +287,15 @@
     const r = Rede.remotos.get(a.u); if (!r || !r.ent || r.ent.morto) return;
     const e = r.ent; e.rot = a.a; r.p.r = a.a;
     e.anim.tocar(a.s === 0 ? 'ataque' : 'habilidade' + a.s);
-    // só o desenho do tiro: o dano chega separado, mandado por quem atirou
+    // só o desenho: o dano chega separado, mandado por quem atirou. As cores seguem a skin dele.
+    const tm = J.api.tema(e);
     if (a.s === 0 && e.classe !== 'soldado') {
       const cls = global.Jogo.CLASSES[e.classe];
-      const cor = { suporte: 0xfff3b0, mago: 0xc58bff, atirador: 0x7fe0ff }[e.classe];
-      setTimeout(() => { if (e.obj.parent) J.api.atirar(e, a.a, { soVisual: true, dano: 0, vel: e.classe === 'atirador' ? 24 : 16, restante: cls.alcance, cor, tamanho: 0.9 }); }, 250);
+      setTimeout(() => { if (e.obj.parent) J.api.atirar(e, a.a, { soVisual: true, dano: 0, vel: e.classe === 'atirador' ? 24 : 16, restante: cls.alcance, cor: tm.principal, rastro: tm.brasa || tm.faisca || tm.principal, tamanho: 0.9 }); }, 250);
+    }
+    if (a.s > 0) {
+      J.api.emitir('faisca', e.x, 1, e.z, { n: a.s === 3 ? 40 : 22, cor: tm.principal, vel: 3, subida: 2, vida: 0.5 });
+      J.api.anelEfeito(e.x, e.z, a.s === 3 ? 3 : 1.6, tm.principal, 0.5, true);
     }
   }
 

@@ -178,6 +178,12 @@
     } catch (e) { /* sem ambiente: segue sem reflexo */ }
     R.texLoader = new THREE.TextureLoader();
     R.cacheSprite = {};
+    // textura macia para poeira, respingos e brilhos
+    R.texParticula = canvasTex(64, 64, g => {
+      const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.45, 'rgba(255,255,255,0.55)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+    });
     R.sombraTex = canvasTex(64, 64, g => {
       const r = g.createRadialGradient(32, 32, 2, 32, 32, 32);
       r.addColorStop(0, 'rgba(0,0,0,0.45)'); r.addColorStop(1, 'rgba(0,0,0,0)');
@@ -446,6 +452,7 @@
   }
 
   function limparMapa() {
+    limparFx();
     E.entidades.forEach(e => { if (e.anim) Skins.remover(e.obj); });
     if (E.mundo) R.scene.remove(E.mundo);
     E.mundo = new THREE.Group(); R.scene.add(E.mundo);
@@ -846,6 +853,7 @@
       const passo = p.vel * dt;
       p.x += p.dx * passo; p.z += p.dz * passo; p.restante -= passo;
       p.obj.position.set(p.x, p.y, p.z);
+      if (p.rastro !== undefined) emitir('faisca', p.x, p.y, p.z, { n: 2, cor: p.rastro, vel: 0.35, vida: 0.3, subida: 0.2 });
       let acertou = null;
       for (const e of (p.soVisual ? [] : E.entidades)) {
         if (e.morto || e === p.origem || !inimigos(e, p) || e.tipo === 'clone' && p.time === 'jogador') continue;
@@ -854,6 +862,7 @@
         if (Math.hypot(e.x - p.x, e.z - p.z) < p.raio + e.raio) { acertou = e; break; }
       }
       if (acertou) {
+        if (p.impacto !== undefined) emitir('faisca', p.x, p.y, p.z, { n: 12, cor: p.impacto, vel: 3, vida: 0.35, subida: 1.5, grav: 6 });
         causarDano(acertou, p.dano, p.origem, { verdadeiro: p.verdadeiro });
         if (p.efeito) p.efeito(acertou);
       }
@@ -903,6 +912,111 @@
     });
   }
 
+  /* ======================= EFEITOS: PARTÍCULAS E TEMAS ======================= */
+  // Cores dos efeitos de cada herói. Uma skin nova só precisa de uma entrada aqui
+  // (ex.: TEMAS.atirador.ceifador = { principal: 0x7dff9a, ... }) para mudar todos os efeitos dela.
+  const TEMAS = {
+    soldado:  { padrao: { principal: 0xffd27a, faisca: 0xfff1c4, poeira: 0xcbb38f, brasa: 0xffa23a } },
+    suporte:  { padrao: { principal: 0xfff3b0, cura: 0x6dff9c, brilho: 0xffe08a, selo: 0xfff3b0, controle: 0xff6b6b } },
+    mago:     { padrao: { principal: 0xb26bff, brasa: 0xd9a0ff, fumaca: 0x6b4a8f, chama: 0x9b5cff } },
+    atirador: { padrao: { principal: 0x7fe0ff, faisca: 0xd9f8ff, explosivo: 0xffa23a, brasa: 0xffd27a } }
+  };
+  function tema(h) {
+    const t = TEMAS[h && h.classe] || TEMAS.soldado;
+    return Object.assign({}, t.padrao, t[h && h.skin] || {});
+  }
+  // Partículas com brilho, todas de uma vez só na placa de vídeo (leve no celular).
+  // Somem escurecendo, porque somam luz: preto = invisível.
+  const FX = {};
+  function poolFx(nome, max, tam) {
+    if (FX[nome]) return FX[nome];
+    const pos = new Float32Array(max * 3), cor = new Float32Array(max * 3);
+    for (let i = 0; i < max; i++) pos[i * 3 + 1] = -999;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(cor, 3));
+    const mat = new THREE.PointsMaterial({ size: tam, map: R.texParticula, vertexColors: true, transparent: true,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.renderOrder = 12;
+    R.scene.add(pts);
+    return (FX[nome] = { pts, geo, max, prox: 0, vivos: new Array(max).fill(null) });
+  }
+  const _cor = THREE.Color ? new THREE.Color() : null;
+  // emitir('faisca', x, y, z, { n, cor, vel, subida, vida, grav, raio, dir: [dx,dz], espalha })
+  function emitir(tipo, x, y, z, o) {
+    if (!R.scene) return;
+    const f = poolFx(tipo, tipo === 'grande' ? 300 : 900, { faisca: 0.22, media: 0.5, grande: 1.2 }[tipo] || 0.4);
+    o = o || {};
+    const n = o.n || 8, vel = o.vel === undefined ? 2 : o.vel, vida = o.vida || 0.6, raio = o.raio || 0;
+    _cor.set(o.cor === undefined ? 0xffffff : o.cor);
+    for (let k = 0; k < n; k++) {
+      const i = f.prox; f.prox = (f.prox + 1) % f.max;
+      const a = Math.random() * Math.PI * 2, rr = raio * Math.sqrt(Math.random());
+      let vx = Math.cos(a) * vel * (0.4 + Math.random() * 0.8), vz = Math.sin(a) * vel * (0.4 + Math.random() * 0.8);
+      if (o.dir) { const e = o.espalha || 0.6; vx = o.dir[0] * vel + vx * e; vz = o.dir[1] * vel + vz * e; }
+      f.vivos[i] = { x: x + Math.cos(a) * rr, y: y + (o.alturaVar || 0) * Math.random(), z: z + Math.sin(a) * rr,
+        vx, vz, vy: (o.subida || 0) * (0.6 + Math.random() * 0.8), t: 0, vida: vida * (0.6 + Math.random() * 0.8),
+        g: o.grav === undefined ? 0 : o.grav, r: _cor.r, gg: _cor.g, b: _cor.b, arrasto: o.arrasto || 0 };
+    }
+  }
+  function atualizarFx(dt) {
+    Object.keys(FX).forEach(nome => {
+      const f = FX[nome], pa = f.geo.attributes.position, ca = f.geo.attributes.color;
+      let algum = false;
+      for (let i = 0; i < f.max; i++) {
+        const p = f.vivos[i]; if (!p) continue;
+        algum = true;
+        p.t += dt; p.vy -= p.g * dt;
+        if (p.arrasto) { const k = Math.max(0, 1 - p.arrasto * dt); p.vx *= k; p.vz *= k; }
+        p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+        if (p.y < 0.05) { p.y = 0.05; p.vy *= -0.3; }
+        const k = 1 - p.t / p.vida;
+        if (k <= 0) { f.vivos[i] = null; pa.array[i * 3 + 1] = -999; ca.array[i * 3] = ca.array[i * 3 + 1] = ca.array[i * 3 + 2] = 0; continue; }
+        pa.array[i * 3] = p.x; pa.array[i * 3 + 1] = p.y; pa.array[i * 3 + 2] = p.z;
+        ca.array[i * 3] = p.r * k; ca.array[i * 3 + 1] = p.gg * k; ca.array[i * 3 + 2] = p.b * k;
+      }
+      if (algum || f.sujo) { pa.needsUpdate = true; ca.needsUpdate = true; f.sujo = algum; }
+    });
+  }
+  function limparFx() { Object.keys(FX).forEach(n => { const f = FX[n]; f.vivos.fill(null); f.geo.attributes.position.array.fill(-999); f.sujo = true; }); }
+  // brilho em volta do herói enquanto um efeito dura (aceleração, tiros explosivos...)
+  function aura(e, cor, dur, densidade, naMao) {
+    let acc = 0;
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt; acc += dt * (densidade || 20);
+      while (acc >= 1) {
+        acc -= 1;
+        if (naMao && e.obj && Skins.posicaoOsso && Skins.posicaoOsso(e.obj, 'righthand', _vfx)) emitir('faisca', _vfx.x, _vfx.y, _vfx.z, { n: 1, cor, vel: 0.4, subida: 0.8, vida: 0.35 });
+        else emitir('faisca', e.x, 0.2, e.z, { n: 1, cor, vel: 0.3, subida: 2.4, vida: 0.6, raio: 0.7, alturaVar: 1.2 });
+      }
+      if (this.t >= dur || e.morto) return true;
+    } });
+  }
+  const _vfx = THREE.Vector3 ? new THREE.Vector3() : null;
+  // coluna de luz (cura, selo)
+  function colunaLuz(x, z, cor, dur, raio) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(raio || 0.7, raio || 0.7, 4, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    m.position.set(x, 2, z); m.renderOrder = 8; E.mundo.add(m);
+    E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; const k = this.t / dur; m.material.opacity = 0.35 * (1 - k); m.scale.set(1 - k * 0.6, 1, 1 - k * 0.6); if (k >= 1) { E.mundo.remove(m); return true; } } });
+  }
+  // círculo de runas girando no chão (selo do suporte)
+  function circuloRunas(x, z, r, cor, dur) {
+    if (!R.texRunas) R.texRunas = canvasTex(256, 256, g => {
+      g.strokeStyle = '#ffffff'; g.lineWidth = 5; g.beginPath(); g.arc(128, 128, 120, 0, 7); g.stroke();
+      g.lineWidth = 2; g.beginPath(); g.arc(128, 128, 98, 0, 7); g.stroke();
+      g.fillStyle = '#ffffff'; g.font = 'bold 20px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const runas = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈ';
+      for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; g.save(); g.translate(128 + Math.cos(a) * 109, 128 + Math.sin(a) * 109); g.rotate(a + Math.PI / 2); g.fillText(runas[i], 0, 0); g.restore(); }
+      g.beginPath(); for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI * 2 * 2; g.lineTo(128 + Math.cos(a) * 92, 128 + Math.sin(a) * 92); } g.stroke();
+    });
+    const m = camada(new THREE.PlaneGeometry(r * 2, r * 2), new THREE.MeshBasicMaterial({ map: R.texRunas, color: cor, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }), x, z, 0.11);
+    m.renderOrder = 7;
+    E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; m.rotation.z += dt * 1.6; const k = this.t / dur; m.material.opacity = 0.9 * Math.min(1, (1 - k) * 3); m.scale.setScalar(0.85 + 0.15 * Math.min(1, this.t * 4)); if (k >= 1) { E.mundo.remove(m); return true; } } });
+  }
+  // fumaça (ilusão do mago, salto) — escura, não soma luz
+  function fumaca(x, z, cor, n) { particulas(x, z, { n: n || 10, cor, tam: 1.1, cresce: 2.2, velH: 1.6, velV: 1.4, gravidade: -0.5, vida: 0.8, raio: 0.4, opacidade: 0.55, y: 0.8 }); }
+
   /* ======================= HERÓI ======================= */
   async function criarHeroi() {
     const cls = CLASSES[P.classe];
@@ -910,7 +1024,7 @@
     const velho = E.heroi;
     if (velho) { Skins.remover(velho.obj); if (velho.obj.parent) velho.obj.parent.remove(velho.obj); E.entidades = E.entidades.filter(e => e !== velho); if (velho.barra.parent) velho.barra.parent.remove(velho.barra); if (velho.sombra.parent) velho.sombra.parent.remove(velho.sombra); }
     const h = nova({
-      tipo: 'heroi', time: 'jogador', classe: P.classe, obj, anim: Skins.animador(obj),
+      tipo: 'heroi', time: 'jogador', classe: P.classe, skin: (P.skinEquipada || {})[P.classe] || 'padrao', obj, anim: Skins.animador(obj),
       x: velho ? velho.x : E.def.entrada[0], z: velho ? velho.z : E.def.entrada[1], rot: velho ? velho.rot : 0,
       vida: cls.vida, vidaMax: cls.vida, raio: 0.6, vel: CONFIG.velHeroi,
       cds: [0, 0, 0, 0], arena: velho ? velho.arena : null, cacadorAte: 0, velBonus: 0, velBonusAte: 0
@@ -972,22 +1086,29 @@
     return bonus().velAtaque * (h && h.aceleradoAte > E.t ? 1 + CONFIG.atirador.aceleracao : 1);
   }
   function explosaoEnergia(h, x, z) {
-    const c = CONFIG.atirador;
-    anelEfeito(x, z, c.explosaoRaio, 0xffa23a, 0.45, true);
-    discoEfeito(x, z, c.explosaoRaio * 0.8, 0xffd27a, 0.3);
+    const c = CONFIG.atirador, tm = tema(h);
+    anelEfeito(x, z, c.explosaoRaio, tm.explosivo, 0.45, true);
+    discoEfeito(x, z, c.explosaoRaio * 0.8, tm.brasa, 0.3);
+    emitir('grande', x, 0.8, z, { n: 6, cor: tm.explosivo, vel: 2, subida: 1, vida: 0.35 });
+    emitir('faisca', x, 0.8, z, { n: 22, cor: tm.brasa, vel: 6, subida: 3, grav: 10, vida: 0.5 });
     area(x, z, c.explosaoRaio, h, e => causarDano(e, CLASSES.atirador.dano, h, { critExtra: c.explosaoCritico, semReacao: true }));
   }
   // ---------- ÚLTIMATES ----------
   function ultSoldado(h, ang) {
-    const u = CONFIG.ultimate.soldado, atingidos = new Set();
+    const u = CONFIG.ultimate.soldado, atingidos = new Set(), tm = tema(h);
     h.travadoAte = E.t + 1.1;
     h.anim.tocar('habilidade3', { momento: 0.78, aoAcertar: () => {
       // a espada bate no chão e a explosão corre em linha reta
       for (let i = 0, d = 1.4; d <= u.alcance; i++, d += 1.45) {
         const x = h.x + Math.sin(ang) * d, z = h.z + Math.cos(ang) * d;
         agendar(i * 0.055, () => {
-          anelEfeito(x, z, u.largura, 0xffa23a, 0.4, true);
-          discoEfeito(x, z, u.largura * 0.7, 0xffd27a, 0.25);
+          anelEfeito(x, z, u.largura, tm.brasa, 0.4, true);
+          discoEfeito(x, z, u.largura * 0.7, tm.principal, 0.25);
+          emitir('grande', x, 0.5, z, { n: 2, cor: tm.brasa, vel: 1, subida: 2, vida: 0.4 });
+          emitir('faisca', x, 0.3, z, { n: 10, cor: tm.principal, vel: 3, subida: 4, grav: 10, vida: 0.5 });
+          particulas(x, z, { n: 5, cor: 0xd9b38a, tam: 0.9, cresce: 2, velH: 2, velV: 1.5, gravidade: 2, vida: 0.7, opacidade: 0.7 });
+          if (i % 2 === 0) pedras(x, z, 3, 0x6b5a48, 4);
+          if (i === 0) tremer(h.x, h.z, 0.35, 0.4);
           area(x, z, u.largura, h, e => { if (atingidos.has(e)) return; atingidos.add(e); causarDano(e, CLASSES.soldado.dano * u.dano, h); });
         });
       }
@@ -1019,8 +1140,13 @@
         });
       };
       golpe(u.dano, 2);                                         // explosão: 150% do dano como dano real + lentidão
-      const fogo = chaoTriangulo(A, B, C, 0x9b5cff, u.dur);
+      const fogo = chaoTriangulo(A, B, C, tema(h).chama, u.dur);
+      const tm = tema(h);
+      const brasas = () => { for (let q = 0; q < 10; q++) { const r1 = Math.random(), r2 = Math.random(), w = r1 + r2 > 1 ? [1 - r1, 1 - r2] : [r1, r2];
+        emitir(q % 2 ? 'faisca' : 'media', A[0] + (B[0] - A[0]) * w[0] + (C[0] - A[0]) * w[1], 0.2, A[1] + (B[1] - A[1]) * w[0] + (C[1] - A[1]) * w[1], { n: 1, cor: q % 2 ? tm.brasa : tm.chama, vel: 0.3, subida: 3, vida: 0.8 }); } };
+      brasas();
       for (let k = 1; k <= u.dur / 0.5; k++) agendar(k * 0.5, () => golpe(0.25, 0.6));   // o chão continua queimando
+      for (let k = 1; k <= u.dur / 0.15; k++) agendar(k * 0.15, brasas);
       for (let k = 0; k < 14; k++) {
         const r1 = Math.random(), r2 = Math.random(), q = r1 + r2 > 1 ? [1 - r1, 1 - r2] : [r1, r2];
         const x = A[0] + (B[0] - A[0]) * q[0] + (C[0] - A[0]) * q[1], z = A[1] + (B[1] - A[1]) * q[0] + (C[1] - A[1]) * q[1];
@@ -1046,17 +1172,22 @@
   function ultSuporte(h) {
     const u = CONFIG.ultimate.suporte;
     h.travadoAte = E.t + 0.8;
+    const tm = tema(h);
+    circuloRunas(h.x, h.z, 2.2, tm.selo, 1.2);
     h.anim.tocar('habilidade3', { momento: 0.5, aoAcertar: () => {
-      anelEfeito(h.x, h.z, u.raio, 0xfff3b0, 0.8, true);
-      discoEfeito(h.x, h.z, u.raio, 0xfff3b0, 0.5);
+      anelEfeito(h.x, h.z, u.raio, tm.selo, 0.8, true);
+      discoEfeito(h.x, h.z, u.raio, tm.selo, 0.5);
+      circuloRunas(h.x, h.z, u.raio, tm.selo, 1.6);
+      emitir('faisca', h.x, 0.3, h.z, { n: 60, cor: tm.brilho, vel: 0.5, subida: 3, vida: 1.1, raio: u.raio });
       E.entidades.forEach(e => {
         if (e.morto || dist(e, h) > u.raio) return;
         if (aliado(e, h)) {
           if (remoto(e)) gancho('apoioRemoto', e, 'curaForte');
-          else if (e.tipo !== 'torre') { curar(e, e.vidaMax * u.cura); anelEfeito(e.x, e.z, 1.3, 0x6dff9c, 0.6, true); }
+          else if (e.tipo !== 'torre') { curar(e, e.vidaMax * u.cura); anelEfeito(e.x, e.z, 1.3, tm.cura, 0.6, true); colunaLuz(e.x, e.z, tm.cura, 1, 0.7); }
         } else if (e.tipo !== 'torre' && !(e.tipo === 'serpente' && !e.emerso)) {
           controlar(e, { stun: u.stun, antiCura: [u.antiCura, u.antiCuraDur] });
-          if (!remoto(e)) anelEfeito(e.x, e.z, 1.1, 0xff6b6b, 0.6, true);
+          colunaLuz(e.x, e.z, tm.controle, 0.9, 0.5);
+          if (!remoto(e)) anelEfeito(e.x, e.z, 1.1, tm.controle, 0.6, true);
         }
       });
     } });
@@ -1064,24 +1195,41 @@
   function ultAtirador(h, ang, mira) {
     const c = CONFIG.atirador;
     const d = mira ? clamp(mira.dist, 2, c.distSalto) : c.distSalto;
-    const [W, H] = E.def.tam;
-    anelEfeito(h.x, h.z, 1.2, 0x7fe0ff, 0.35, true);
+    const [W, H] = E.def.tam, tm = tema(h);
+    anelEfeito(h.x, h.z, 1.2, tm.principal, 0.35, true);
+    emitir('faisca', h.x, 1, h.z, { n: 26, cor: tm.principal, vel: 2.5, subida: 1.5, vida: 0.4, alturaVar: 1 });
+    const x0 = h.x, z0 = h.z;
     h.x = clamp(h.x + Math.sin(ang) * d, -W / 2 + 1, W / 2 - 1);
     h.z = clamp(h.z + Math.cos(ang) * d, -H / 2 + 1, H / 2 - 1);
     h.invulAte = Math.max(h.invulAte, E.t + 0.2);
-    anelEfeito(h.x, h.z, 1.4, 0x7fe0ff, 0.4, true);
-    discoEfeito(h.x, h.z, 1, 0x7fe0ff, 0.2);
+    anelEfeito(h.x, h.z, 1.4, tm.principal, 0.4, true);
+    discoEfeito(h.x, h.z, 1, tm.principal, 0.2);
+    emitir('faisca', h.x, 0.2, h.z, { n: 30, cor: tm.faisca, vel: 4, subida: 2, vida: 0.45, grav: 6 });
+    // rastro de luz entre os dois pontos
+    for (let i = 1; i < 10; i++) emitir('faisca', x0 + (h.x - x0) * i / 10, 1, z0 + (h.z - z0) * i / 10, { n: 2, cor: tm.principal, vel: 0.3, vida: 0.35 });
     h.anim.tocar('habilidade3');
   }
 
   const HABILIDADES = {
     soldado: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.45, aoAcertar: () => {
-        area(h.x + Math.sin(ang) * 1.3, h.z + Math.cos(ang) * 1.3, 1.6, h, e => causarDano(e, CLASSES.soldado.dano, h));
-        corteVisual(h, ang);
+        const tm = tema(h);
+        area(h.x + Math.sin(ang) * 1.3, h.z + Math.cos(ang) * 1.3, 1.6, h, e => {
+          causarDano(e, CLASSES.soldado.dano, h);
+          emitir('faisca', e.x, 1.1, e.z, { n: 10, cor: tm.faisca, vel: 3.5, subida: 2, grav: 9, vida: 0.4 });
+        });
+        corteVisual(h, ang, tm.principal);
+        emitir('faisca', h.x + Math.sin(ang) * 1.4, 1, h.z + Math.cos(ang) * 1.4, { n: 6, cor: tm.principal, vel: 1.5, dir: [Math.sin(ang), Math.cos(ang)], vida: 0.25 });
       } }),
       (h) => h.anim.tocar('habilidade1', { momento: 0.5, aoAcertar: () => {
-        anelEfeito(h.x, h.z, 3.2, 0xffd27a, 0.45, true);
+        const tm = tema(h);
+        anelEfeito(h.x, h.z, 3.2, tm.principal, 0.45, true);
+        // redemoinho: faíscas saindo girando + poeira
+        for (let i = 0; i < 28; i++) {
+          const a = i / 28 * Math.PI * 2;
+          emitir('faisca', h.x + Math.cos(a) * 1.2, 1, h.z + Math.sin(a) * 1.2, { n: 1, cor: tm.faisca, vel: 5, dir: [-Math.sin(a), Math.cos(a)], espalha: 0.2, vida: 0.4, arrasto: 3 });
+        }
+        particulas(h.x, h.z, { n: 8, cor: tm.poeira, tam: 0.9, cresce: 2, velH: 4, velV: 0.6, gravidade: 1, vida: 0.6, raio: 1.5, opacidade: 0.6 });
         area(h.x, h.z, 3.2, h, e => causarDano(e, CLASSES.soldado.dano * 1.4, h));
       } }),
       (h, ang) => {
@@ -1092,33 +1240,50 @@
     ],
     suporte: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () =>
-        atirar(h, h.rot, { vel: 18, restante: CLASSES.suporte.alcance, dano: CLASSES.suporte.dano, cor: 0xfff3b0, tamanho: 0.8 }) }),
+        atirar(h, h.rot, { vel: 18, restante: CLASSES.suporte.alcance, dano: CLASSES.suporte.dano, cor: tema(h).principal, tamanho: 0.8, rastro: tema(h).brilho, impacto: tema(h).brilho }) }),
       (h) => h.anim.tocar('habilidade1', { momento: 0.55, aoAcertar: () => {
-        anelEfeito(h.x, h.z, 7, 0x6dff9c, 0.8, true);
-        E.entidades.forEach(e => { if (!e.morto && aliado(e, h) && dist(e, h) < 7) { if (remoto(e)) gancho('apoioRemoto', e, 'cura'); else curar(e, e.vidaMax * 0.35); } });
+        const tm = tema(h);
+        anelEfeito(h.x, h.z, 7, tm.cura, 0.8, true);
+        E.entidades.forEach(e => { if (!e.morto && aliado(e, h) && dist(e, h) < 7 && e.tipo !== 'torre') {
+          if (remoto(e)) gancho('apoioRemoto', e, 'cura'); else curar(e, e.vidaMax * 0.35);
+          colunaLuz(e.x, e.z, tm.cura, 0.8, 0.6);
+          emitir('faisca', e.x, 0.3, e.z, { n: 16, cor: tm.cura, vel: 0.4, subida: 2.6, vida: 0.9, raio: 0.6 });
+        } });
       } }),
       (h) => h.anim.tocar('habilidade2', { momento: 0.3, aoAcertar: () => {
+        const tm = tema(h);
+        emitir('faisca', h.x, 1, h.z, { n: 30, cor: tm.brilho, vel: 4, subida: 1, vida: 0.5, arrasto: 4 });
         E.entidades.forEach(e => { if (!e.morto && aliado(e, h) && dist(e, h) < 6) { if (remoto(e)) { gancho('apoioRemoto', e, 'escudo'); e.escudo = 1; e.escudoAte = E.t + 4; bolha(e, 4); } else { e.escudo = e.vidaMax * 0.4; e.escudoAte = E.t + 4; bolha(e, 4); } } });
       } }),
       (h) => ultSuporte(h)
     ],
     mago: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () =>
-        atirar(h, h.rot, { vel: 15, restante: CLASSES.mago.alcance, dano: CLASSES.mago.dano, cor: 0xc58bff, tamanho: 0.9,
-          efeito: e => aplicarSlow(e, 0.3, 0.2) }) }),
+        atirar(h, h.rot, { vel: 15, restante: CLASSES.mago.alcance, dano: CLASSES.mago.dano, cor: tema(h).principal, tamanho: 0.9,
+          rastro: tema(h).brasa, impacto: tema(h).brasa, efeito: e => aplicarSlow(e, 0.3, 0.2) }) }),
       (h, ang, mira) => {
         const d = mira ? clamp(mira.dist, 2, 10) : 6;
         const x = h.x + Math.sin(ang) * d, z = h.z + Math.cos(ang) * d;
-        h.anim.tocar('habilidade1', { momento: 0.55, aoAcertar: () =>
-          discoEfeito(x, z, 3.2, 0x9b5cff, 2.5, { intervalo: 0.5, fn: () => area(x, z, 3.2, h, e => causarDano(e, CLASSES.mago.dano * 0.5, h, { semReacao: true })) }) });
+        const tm = tema(h);
+        h.anim.tocar('habilidade1', { momento: 0.55, aoAcertar: () => {
+          emitir('grande', x, 0.6, z, { n: 10, cor: tm.chama, vel: 2.5, subida: 1, vida: 0.5, raio: 1 });
+          discoEfeito(x, z, 3.2, tm.chama, 2.5, { intervalo: 0.5, fn: () => {
+            area(x, z, 3.2, h, e => causarDano(e, CLASSES.mago.dano * 0.5, h, { semReacao: true }));
+            emitir('media', x, 0.2, z, { n: 14, cor: tm.chama, vel: 0.3, subida: 2.4, vida: 0.7, raio: 3 });
+            emitir('faisca', x, 0.2, z, { n: 10, cor: tm.brasa, vel: 0.4, subida: 3.5, vida: 0.9, raio: 3 });
+          } });
+        } });
       },
       async (h, ang, mira, alvo) => {
         if (!mira && alvo) ang += Math.PI;          // sem mira: foge do inimigo mais perto
         h.anim.tocar('habilidade2');
+        fumaca(h.x, h.z, tema(h).fumaca, 12);
+        emitir('faisca', h.x, 1, h.z, { n: 20, cor: tema(h).brasa, vel: 3, vida: 0.4, arrasto: 4 });
         const clone = await criarClone(h, 4, true);
         h.invisAte = E.t + 4; h.invulAte = E.t + 4; h.ilusao = true;
         const nx = h.x + Math.sin(ang) * 6, nz = h.z + Math.cos(ang) * 6;
         h.x = clamp(nx, -E.def.tam[0] / 2, E.def.tam[0] / 2); h.z = clamp(nz, -E.def.tam[1] / 2, E.def.tam[1] / 2);
+        fumaca(h.x, h.z, tema(h).fumaca, 6);
         return clone;
       },
       (h, ang) => ultMago(h, ang)
@@ -1128,7 +1293,9 @@
       (h, ang) => {
         h.anim.tocar('ataque', { velocidade: velAtaque(h), momento: 0.45, aoAcertar: () => {
           const explode = h.explosivoAte > E.t;
-          atirar(h, h.rot, { vel: 24, restante: CLASSES.atirador.alcance, dano: CLASSES.atirador.dano, cor: explode ? 0xffb347 : 0x7fe0ff, tamanho: explode ? 1.15 : 0.95,
+          const tm = tema(h);
+          atirar(h, h.rot, { vel: 24, restante: CLASSES.atirador.alcance, dano: CLASSES.atirador.dano, cor: explode ? tm.explosivo : tm.principal, tamanho: explode ? 1.15 : 0.95,
+            rastro: explode ? tm.brasa : tm.faisca, impacto: explode ? tm.explosivo : tm.principal,
             efeito: explode ? a => explosaoEnergia(h, a.x, a.z) : null });
         } });
       },
@@ -1136,21 +1303,28 @@
       (h) => {
         h.anim.tocar('habilidade1');
         h.aceleradoAte = E.t + CONFIG.atirador.aceleracaoDur;
-        anelEfeito(h.x, h.z, 1.6, 0x7fe0ff, 0.6, true);
+        const tm = tema(h);
+        anelEfeito(h.x, h.z, 1.6, tm.principal, 0.6, true);
+        emitir('faisca', h.x, 0.5, h.z, { n: 30, cor: tm.principal, vel: 3, subida: 3, vida: 0.5 });
+        aura(h, tm.principal, CONFIG.atirador.aceleracaoDur, 22);
+        aura(h, tm.faisca, CONFIG.atirador.aceleracaoDur, 25, true);
       },
       // Explosão: as bolas que acertam explodem (dano dele + 5% de chance de crítico)
       (h) => {
         h.anim.tocar('habilidade2');
         h.explosivoAte = E.t + CONFIG.atirador.explosaoDur;
-        anelEfeito(h.x, h.z, 1.8, 0xffa23a, 0.6, true);
+        const tm = tema(h);
+        anelEfeito(h.x, h.z, 1.8, tm.explosivo, 0.6, true);
+        emitir('media', h.x, 1, h.z, { n: 20, cor: tm.explosivo, vel: 3, subida: 1, vida: 0.5, arrasto: 3 });
+        aura(h, tm.brasa, CONFIG.atirador.explosaoDur, 30, true);
       },
       // Salto: teleporta para onde mirou (2 pulos em até 15 s)
       (h, ang, mira) => ultAtirador(h, ang, mira)
     ]
   };
-  function corteVisual(h, ang) {
+  function corteVisual(h, ang, cor) {
     const m = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.9, 24, 1, -0.9, 1.8),
-      new THREE.MeshBasicMaterial({ color: 0xfff1c4, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      new THREE.MeshBasicMaterial({ color: cor || 0xfff1c4, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
     m.rotation.x = -Math.PI / 2; m.rotation.z = ang - Math.PI / 2;
     m.position.set(h.x + Math.sin(ang) * 0.6, 0.9, h.z + Math.cos(ang) * 0.6);
     E.mundo.add(m);
@@ -1225,17 +1399,94 @@
     }
     e.anim.mover(vel * lentidao(e));
   }
+  /* ---------- efeitos especiais ---------- */
+  // partículas soltas: poeira, gotas, faíscas (sprites que sobem, caem e somem)
+  function particulas(x, z, o) {
+    o = Object.assign({ n: 12, cor: 0xffffff, tam: 0.5, cresce: 1.5, velH: 3, velV: 3, gravidade: 8, vida: 0.8, y: 0.3, opacidade: 0.9, raio: 0 }, o);
+    for (let i = 0; i < o.n; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: R.texParticula, color: o.cor, transparent: true, depthWrite: false, opacity: o.opacidade }));
+      const ang = Math.random() * Math.PI * 2, rr = o.raio * Math.sqrt(Math.random());
+      const p = { x: x + Math.cos(ang) * rr, y: o.y, z: z + Math.sin(ang) * rr,
+        vx: Math.cos(ang) * o.velH * (0.5 + Math.random() * 0.7), vz: Math.sin(ang) * o.velH * (0.5 + Math.random() * 0.7),
+        vy: o.velV * (0.6 + Math.random() * 0.6), t: 0, vida: o.vida * (0.7 + Math.random() * 0.6) };
+      s.position.set(p.x, p.y, p.z); s.scale.setScalar(o.tam); s.renderOrder = 9; E.mundo.add(s);
+      E.efeitos.push({ atualizar(dt) {
+        p.t += dt; p.vy -= o.gravidade * dt;
+        p.x += p.vx * dt; p.y = Math.max(0.05, p.y + p.vy * dt); p.z += p.vz * dt;
+        const k = p.t / p.vida;
+        s.position.set(p.x, p.y, p.z); s.scale.setScalar(o.tam * (1 + (o.cresce - 1) * k));
+        s.material.opacity = o.opacidade * (1 - k);
+        if (k >= 1) { E.mundo.remove(s); return true; }
+      } });
+    }
+  }
+  // pedras que saltam do chão
+  function pedras(x, z, n, cor, forca) {
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.2), new THREE.MeshLambertMaterial({ color: cor }));
+      const ang = Math.random() * Math.PI * 2, v = forca * (0.6 + Math.random() * 0.6);
+      const p = { x, y: 0.2, z, vx: Math.cos(ang) * v * 0.6, vz: Math.sin(ang) * v * 0.6, vy: v * 1.4, t: 0, gx: Math.random() * 8, gz: Math.random() * 8 };
+      m.position.set(x, 0.2, z); m.scale.setScalar(0.6 + Math.random() * 0.9); E.mundo.add(m);
+      E.efeitos.push({ atualizar(dt) {
+        p.t += dt; p.vy -= 18 * dt; p.x += p.vx * dt; p.z += p.vz * dt; p.y += p.vy * dt;
+        if (p.y < 0.1) { p.y = 0.1; p.vy = 0; p.vx *= 0.6; p.vz *= 0.6; }
+        m.position.set(p.x, p.y, p.z); m.rotation.x += p.gx * dt; m.rotation.z += p.gz * dt;
+        if (p.t > 1.4) { m.scale.multiplyScalar(0.85); }
+        if (p.t > 1.8) { E.mundo.remove(m); return true; }
+      } });
+    }
+  }
+  function tremer(x, z, forca, dur) {
+    const h = E.heroi; if (!h) return;
+    const perto = clamp(1 - Math.hypot(h.x - x, h.z - z) / 22, 0, 1);
+    if (perto > 0) E.tremor = { forca: forca * perto, dur, ate: E.t + dur };
+  }
+  // círculo de aviso no chão antes do golpe (dá tempo de fugir)
+  function avisoChao(x, z, r, cor, dur) {
+    const m = camada(new THREE.RingGeometry(r * 0.94, r, 48), new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.6, depthWrite: false }), x, z, 0.09);
+    const dentro = camada(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.12, depthWrite: false }), x, z, 0.085);
+    m.renderOrder = dentro.renderOrder = 6;
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt; const k = Math.min(1, this.t / dur);
+      dentro.scale.setScalar(Math.max(0.01, k)); m.material.opacity = 0.35 + 0.35 * Math.abs(Math.sin(this.t * 10));
+      if (this.t >= dur) { E.mundo.remove(m); E.mundo.remove(dentro); return true; }
+    } });
+  }
+  function efeitoPisao(x, z, r) {
+    anelEfeito(x, z, r, 0xb9a27a, 0.55, true);
+    anelEfeito(x, z, r * 0.6, 0x7a6448, 0.4, true);
+    discoEfeito(x, z, r * 0.45, 0x5b4a36, 0.6);
+    particulas(x, z, { n: 18, cor: 0xb8a68a, tam: 1.1, cresce: 2.4, velH: r * 1.6, velV: 1.2, gravidade: 2, vida: 0.9, raio: 1, opacidade: 0.75 });
+    pedras(x, z, 9, 0x5d6168, 5);
+    tremer(x, z, 0.5, 0.45);
+  }
+  function efeitoGolpeAgua(x, z, r) {
+    anelEfeito(x, z, r, 0x5cc8e0, 0.6, true);
+    for (let i = 1; i <= 3; i++) agendar(i * 0.18, () => anelEfeito(x, z, r * (0.5 + i * 0.25), 0x9fe6ff, 0.55, true));
+    particulas(x, z, { n: 28, cor: 0x8fdcff, tam: 0.45, cresce: 1.2, velH: r * 0.9, velV: 8, gravidade: 14, vida: 1.0, raio: 1.4 });
+    particulas(x, z, { n: 10, cor: 0xffffff, tam: 1.2, cresce: 2.2, velH: 2, velV: 1.5, gravidade: 1, vida: 0.7, raio: 1.5, opacidade: 0.6 });
+    // poça que some devagar
+    const poca = camada(new THREE.CircleGeometry(r * 0.75, 40), new THREE.MeshBasicMaterial({ color: 0x3f8fbf, transparent: true, opacity: 0.4, depthWrite: false }), x, z, 0.07);
+    E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; poca.material.opacity = 0.4 * (1 - this.t / 2.2); if (this.t > 2.2) { E.mundo.remove(poca); return true; } } });
+    tremer(x, z, 0.7, 0.6);
+  }
+
   function atacarMob(e, alvo) {
     const c = e.cfg;
     e.prontoEm = E.t + c.intervalo;
     e.ataques++;
     const ang = Math.atan2(alvo.x - e.x, alvo.z - e.z);
     if (e.especie === 'golem') {
-      const agua = e.ataques % 3 === 0;
-      e.anim.tocar('ataque', { momento: 0.5, aoAcertar: () => {
-        const r = agua ? c.golpeAgua : c.pisao;
-        anelEfeito(e.x, e.z, r, agua ? 0x5cc8e0 : 0xc8b090, 0.5, true);
-        area(e.x, e.z, r, e, a => { causarDano(a, e.dano * (agua ? 1.2 : 1), e); if (agua) a.stunAte = E.t + c.stunAgua; });
+      // pisão (ataque) e, a cada 3 golpes, os dois punhos na terra soltando água (habilidade1)
+      const agua = e.ataques % 3 === 0 && e.anim.tem && (e.anim.tem('habilidade1') || !e.anim.tem('ataque'));
+      const r = agua ? c.golpeAgua : c.pisao;
+      const momento = agua ? 0.28 : 0.32;
+      const est = agua ? 'habilidade1' : 'ataque', cg = (Skins.CATALOGO.habilidades.golem || {})[est] || {};
+      const dur = (cg.duracao || Skins.CATALOGO.duracoes[est] || 1) * momento;
+      avisoChao(e.x, e.z, r, agua ? 0x5cc8e0 : 0xff6b4a, Math.max(0.25, dur));
+      e.anim.tocar(agua ? 'habilidade1' : 'ataque', { momento, aoAcertar: () => {
+        if (agua) efeitoGolpeAgua(e.x, e.z, r); else efeitoPisao(e.x, e.z, r);
+        area(e.x, e.z, r, e, a => { causarDano(a, e.dano * (agua ? 1.2 : 1), e); if (agua) controlar(a, { stun: c.stunAgua }); });
       } });
       return;
     }
@@ -1639,8 +1890,12 @@
         if (h.investida) {
           const iv = h.investida, v = 13 * dt;
           h.x += Math.sin(iv.ang) * v; h.z += Math.cos(iv.ang) * v; iv.resta -= dt;
+          const tmI = tema(h);
+          emitir('media', h.x - Math.sin(iv.ang) * 0.6, 0.3, h.z - Math.cos(iv.ang) * 0.6, { n: 2, cor: tmI.poeira, vel: 0.8, subida: 0.6, vida: 0.4 });
+          emitir('faisca', h.x, 0.9, h.z, { n: 2, cor: tmI.principal, vel: 3, dir: [-Math.sin(iv.ang), -Math.cos(iv.ang)], espalha: 0.3, vida: 0.25 });
           area(h.x, h.z, 1.4, h, e => {
             if (iv.atingidos.has(e)) return; iv.atingidos.add(e);
+            emitir('faisca', e.x, 1, e.z, { n: 16, cor: tmI.faisca, vel: 5, subida: 2.5, grav: 10, vida: 0.45 });
             causarDano(e, CLASSES.soldado.dano * 1.6, h);
             if (e.tipo !== 'torre') { e.x += Math.sin(iv.ang) * 3; e.z += Math.cos(iv.ang) * 3; }
           });
@@ -1669,6 +1924,13 @@
       else if (e.tipo === 'clone') iaClone(e, dt);
     }
     gancho('passo', dt);
+    atualizarFx(dt);
+    // estrelinhas girando em cima de quem está atordoado
+    if (Math.floor(E.t * 8) !== Math.floor((E.t - dt) * 8)) E.entidades.forEach(e => {
+      if (e.morto || !(e.stunAte > E.t) || (e.obj && e.obj.visible === false)) return;
+      const a = E.t * 7, hy = (e.altura || 1.8) * (e.obj && e.obj.scale ? e.obj.scale.y : 1) + 0.25;
+      for (let i = 0; i < 3; i++) emitir('faisca', e.x + Math.cos(a + i * 2.09) * 0.45, hy, e.z + Math.sin(a + i * 2.09) * 0.45, { n: 1, cor: 0xffe36b, vel: 0, vida: 0.2 });
+    });
     atualizarOndas(dt); atualizarBarcos(dt); atualizarArenas(); atualizarChuva(dt);
     atualizarProjeteis(dt);
     for (let i = E.efeitos.length - 1; i >= 0; i--) if (E.efeitos[i].atualizar(dt) === true) E.efeitos.splice(i, 1);
@@ -2012,6 +2274,11 @@
       alvoCam.set(h.x, 13, h.z + 11);
       R.camera.position.lerp(alvoCam, 1 - Math.pow(0.001, dt));
       R.camera.lookAt(h.x, 0.8, h.z);
+      // tremor da tela (pisão do golem, terremoto do soldado)
+      if (E.tremor && E.tremor.ate > E.t) {
+        const f = E.tremor.forca * (E.tremor.ate - E.t) / E.tremor.dur;
+        R.camera.position.x += (Math.random() - 0.5) * f; R.camera.position.y += (Math.random() - 0.5) * f * 0.6;
+      }
     }
     desenharMira(); hudQuadro();
     R.renderer.render(R.scene, R.camera);
@@ -2045,7 +2312,7 @@
     CONFIG, CLASSES, CORES, iniciar, rankingServidor: null, ajustes: null, ganchos: G, poderes: PODERES,
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
-      atirar, causarDano, bolha, anelEfeito, curar, controlar, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
+      atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
       telaHeroi, telaRanking, perfilPadrao, dist
     },
     // usado nos testes sem tela
