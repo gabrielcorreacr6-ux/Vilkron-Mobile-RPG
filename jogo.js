@@ -424,29 +424,98 @@
   function materialBorda(tex, cor, rep) {
     return new THREE.MeshLambertMaterial({ map: Skins.textura(tex, 1, 1), alphaMap: texBorda(), transparent: true, color: cor || 0xffffff, depthWrite: false, side: THREE.DoubleSide });
   }
-  function caminhoSuave(c, aguaBase) {
-    // um pouco mais largo que o caminho de regra: as beiradas somem na grama
-    const geo = fita(c.pts, c.largura * 1.35, c.largura * 1.35);
-    const m = camada(geo, materialBorda('caminho_terra', aguaBase ? 0xb9a27a : 0xd8c8a8), 0, 0, 0.02);
-    return m;
+  // o caminho em trechos: terra (fita + pontas redondas) e água (ponte)
+  function molhadoCaminho(d, x, z) {
+    if (d.aguaBase) return !(d.ilhas || []).some(i => Math.hypot(x - i.x, z - i.z) < i.r + 1.6);
+    return (d.rios || []).some(r => distLinha(x, z, r.pts) < r.largura / 2 + 1.2) ||
+      (d.lagos || []).some(l => Math.hypot(x - l.x, z - l.z) < l.r + 1);
+  }
+  function trechosCaminho(d, c) {
+    // amostra a cada 0,5 m guardando em que segmento está
+    const am = [];
+    for (let i = 0; i < c.pts.length - 1; i++) {
+      const [ax, az] = c.pts[i], [bx, bz] = c.pts[i + 1], L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 0.5));
+      for (let k = (i ? 1 : 0); k <= n; k++) { const t = k / n; am.push({ x: ax + (bx - ax) * t, z: az + (bz - az) * t, seg: i }); }
+    }
+    am.forEach(a => { a.agua = molhadoCaminho(d, a.x, a.z); });
+    const terra = [], agua = [];
+    let ini = 0;
+    for (let i = 1; i <= am.length; i++) {
+      if (i < am.length && am[i].agua === am[ini].agua) continue;
+      const run = am.slice(ini, i);
+      if (run[0].agua) agua.push({ run, antes: am[ini - 1], depois: am[i] });
+      else terra.push(run);
+      ini = i;
+    }
+    return { terra, agua, am };
+  }
+  // ponta redonda: o caminho "nasce" ali, com a mesma beirada irregular da fita
+  function texPonta() {
+    if (R.texPonta) return R.texPonta;
+    R.texPonta = canvasTex(128, 128, g => {
+      const img = g.createImageData(128, 128), rnd = semeado(91), ruido = []; for (let i = 0; i < 48; i++) ruido.push(rnd());
+      for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
+        const dx = (x - 63.5) / 63.5, dy = (y - 63.5) / 63.5, r = Math.hypot(dx, dy), ang = (Math.atan2(dy, dx) / 6.2832 + 0.5) * 48;
+        const i0 = Math.floor(ang) % 48, f = ang - Math.floor(ang), bord = 0.72 + 0.14 * (ruido[i0] * (1 - f) + ruido[(i0 + 1) % 48] * f);
+        const a = Math.max(0, Math.min(1, (1 - r) / (1 - bord)));
+        const k = (y * 128 + x) * 4; img.data[k] = img.data[k + 1] = img.data[k + 2] = 255 * a; img.data[k + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+    });
+    R.texPonta.encoding = THREE.LinearEncoding || R.texPonta.encoding;
+    return R.texPonta;
+  }
+  function pontaCaminho(x, z, raio, cor) {
+    const mat = new THREE.MeshLambertMaterial({ map: Skins.textura('caminho_terra', 1, 1), alphaMap: texPonta(), transparent: true, color: cor, depthWrite: false });
+    return camada(uvRep(new THREE.CircleGeometry(raio, 40), raio * 2 / 6, raio * 2 / 6), mat, x, z, 0.021);
+  }
+  function caminhoSuave(c, d) {
+    const cor = 0xd8c8a8, larg = c.largura * 1.35;
+    const { terra } = trechosCaminho(d, c);
+    terra.forEach(run => {
+      if (run.length < 2) return;
+      // poucos pontos (a cada ~1 m) bastam para a fita
+      const pts = run.filter((a, i) => i % 2 === 0 || i === run.length - 1).map(a => [a.x, a.z]);
+      if (pts.length < 2) return;
+      camada(fita(pts, larg, larg), materialBorda('caminho_terra', cor), 0, 0, 0.02);
+      // pontas redondas (fora das praças, que cobrem de qualquer jeito)
+      [pts[0], pts[pts.length - 1]].forEach(p => {
+        const naPraca = (d.pracas || []).some(q => Math.hypot(p[0] - q.x, p[1] - q.z) < Math.max(q.w, q.h) / 2);
+        if (!naPraca) pontaCaminho(p[0], p[1], larg * 0.56, cor);
+      });
+    });
   }
   // ---------- pontes onde o caminho cruza um rio ----------
   function acharPontes(d) {
     const pontes = [];
-    if (d.aguaBase) return pontes;
-    (d.caminhos || []).forEach(c => (d.rios || []).forEach(r => {
-      let ini = -1;
-      const dentro = i => distLinha(c.pts[i][0], c.pts[i][1], r.pts) < r.largura / 2 + 1.6;
-      for (let i = 0; i <= c.pts.length; i++) {
-        const nd = i < c.pts.length && dentro(i);
-        if (nd && ini < 0) ini = i;
-        if (!nd && ini >= 0) {
-          const a = c.pts[Math.max(0, ini - 1)], b = c.pts[Math.min(c.pts.length - 1, i)];
-          pontes.push({ ax: a[0], az: a[1], bx: b[0], bz: b[1], larg: Math.max(3.2, c.largura * 0.95) });
-          ini = -1;
+    (d.caminhos || []).forEach(c => {
+      const { agua } = trechosCaminho(d, c);
+      agua.forEach(w => {
+        if (!w.antes || !w.depois) return;           // caminho que começa/termina na água: sem ponte
+        // pontes retas: uma só enquanto o caminho for quase reto; curva forte vira mais de uma
+        const pts = [w.antes].concat(w.run, [w.depois]), trechos = [];
+        let i0 = 0;
+        while (i0 < pts.length - 1) {
+          let j = i0 + 1;
+          while (j + 1 < pts.length) {
+            const a = pts[i0], b = pts[j + 1];
+            let reto = true;
+            for (let k = i0 + 1; k <= j; k++) if (distSeg(pts[k].x, pts[k].z, a.x, a.z, b.x, b.z) > 0.5) { reto = false; break; }
+            if (!reto) break;
+            j++;
+          }
+          trechos.push([pts[i0], pts[j]]); i0 = j;
         }
-      }
-    }));
+        trechos.forEach(([p, q], k) => {
+          let ax = p.x, az = p.z, bx = q.x, bz = q.z;
+          const L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L;
+          // entra 1,5 m na terra dos dois lados
+          if (k === 0) { ax -= ux * 1.5; az -= uz * 1.5; }
+          if (k === trechos.length - 1) { bx += ux * 1.5; bz += uz * 1.5; }
+          pontes.push({ ax, az, bx, bz, larg: Math.max(3.2, c.largura * 0.95) });
+        });
+      });
+    });
     return pontes;
   }
   function naPonte(x, z) {
@@ -627,7 +696,7 @@
   function naAgua(x, z) {
     const d = E.def;
     if (!d) return false;
-    if (d.aguaBase) return !naIlha(x, z) && !noCaminho(x, z);
+    if (d.aguaBase) return !naIlha(x, z) && !noCaminho(x, z) && !naPonte(x, z);
     if (E.pontes && E.pontes.length && naPonte(x, z)) return false;
     return (d.rios || []).some(r => distLinha(x, z, r.pts) < r.largura / 2) ||
       (d.lagos || []).some(l => Math.hypot(x - l.x, z - l.z) < l.r);
@@ -777,8 +846,22 @@
 
     // chão
     if (d.aguaBase) {
-      camada(uvRep(new THREE.PlaneGeometry(W + 60, H + 60), (W + 60) / 8, (H + 60) / 8), new THREE.MeshLambertMaterial({ map: Skins.textura('rio', 1, 1) }), 0, 0, 0);
-      d.ilhas.forEach(i => { disco(i.r + 2.5, 'margem_areia', (i.r + 2.5) / 3, i.x, i.z, 0.01); disco(i.r, d.chao.tex, i.r / rep, i.x, i.z, 0.02, d.chao.tint); });
+      // mar: fundo escuro ondulando; em volta de cada ilha um anel de água rasa com espuma
+      const raso = 0x3f9a92, fundo = 0x0a3346, MW = W + 160, MH = H + 160;
+      const mar = R.Fx && R.Fx.agua && R.Fx.agua(raso, fundo, { mar: true });
+      camada(uvRep(new THREE.PlaneGeometry(MW, MH), MW / 8, MH / 8), new THREE.MeshLambertMaterial({ map: Skins.textura('rio', 1, 1), color: 0x2d6f86 }), 0, 0, 0);
+      if (mar) {
+        camada(new THREE.PlaneGeometry(MW, MH), mar, 0, 0, 0.004);
+        d.ilhas.forEach(i => {
+          const fora = i.r + 14;
+          camada(new THREE.PlaneGeometry(fora * 2, fora * 2), R.Fx.agua(raso, fundo, { anel: (i.r + 2.2) / fora }), i.x, i.z, 0.006);
+        });
+      }
+      // transparentes: entram na mesma fila da água (shader) e são desenhadas depois dela
+      d.ilhas.forEach(i => {
+        disco(i.r + 2.5, 'margem_areia', (i.r + 2.5) / 3, i.x, i.z, 0.01).material.transparent = true;
+        disco(i.r, d.chao.tex, i.r / rep, i.x, i.z, 0.02, d.chao.tint).material.transparent = true;
+      });
     } else {
       const GW = W + 120, GH = H + 120;     // o chão vai além da borda, por baixo da floresta
       camada(uvRep(new THREE.PlaneGeometry(GW, GH), GW / rep, GH / rep),
@@ -787,7 +870,7 @@
     }
     // ordem: caminhos, margens, água (por cima do caminho), pontes, praça
     E.pontes = acharPontes(d);
-    (d.caminhos || []).forEach(c => caminhoSuave(c, d.aguaBase));
+    (d.caminhos || []).forEach(c => caminhoSuave(c, d));
     const margem = 0x9c8a66;
     (d.rios || []).forEach(r => camada(fita(r.pts, r.largura + 5, 5), materialBorda('margem_areia', margem, 0.3), 0, 0, 0.012));
     (d.lagos || []).forEach(l => disco(l.r + 2.2, 'margem_areia', 3, l.x, l.z, 0.012, margem));
@@ -834,7 +917,7 @@
       if ((d.pracas || []).some(p => Math.abs(x - p.x) < p.w / 2 + 4 && Math.abs(z - p.z) < p.h / 2 + 4)) return false;
       if (Math.hypot(x - d.aeroporto.x, z - d.aeroporto.z) < 15) return false;
       if ((d.decor || []).some(o => Math.hypot(x - o.x, z - o.z) < 5)) return false;
-      if (mobs.some(m => Math.hypot(x - m.x, z - m.z) < 7)) return false;
+      if (mobs.some(m => Math.hypot(x - m.x, z - m.z) < (m.tipo === 'golem' ? 13 : 9))) return false;   // clareira em volta dos mobs
       if ((d.arenas || []).some(a => dentroArena(a, x, z, 7))) return false;
       if (d.eventoRank && Math.hypot(x - d.eventoRank.x, z - d.eventoRank.z) < d.eventoRank.r + 4) return false;
       if (d.podio && Math.hypot(x - d.podio.x, z - d.podio.z) < d.podio.zonaSegura) return false;
@@ -2814,20 +2897,153 @@
   }
 
   /* ---------- serpente (Ascensão) ---------- */
+  // escamas: dorso escuro com placas, barriga clara (u = volta do corpo, v = ao longo)
+  function texEscamas() {
+    if (R.texEscamas) return R.texEscamas;
+    R.texEscamas = canvasTex(256, 256, g => {
+      const grad = g.createLinearGradient(0, 0, 256, 0);
+      // u 0 e 1 = dorso, 0.5 = barriga
+      grad.addColorStop(0, '#0c3b3a'); grad.addColorStop(0.3, '#17675d'); grad.addColorStop(0.45, '#c9c79a');
+      grad.addColorStop(0.55, '#c9c79a'); grad.addColorStop(0.7, '#17675d'); grad.addColorStop(1, '#0c3b3a');
+      g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+      for (let y = -16; y < 272; y += 16) for (let x = 0; x < 256; x += 16) {
+        const xx = x + ((y / 16) % 2 ? 8 : 0), barriga = Math.abs(xx / 256 - 0.5) < 0.09;
+        g.beginPath(); g.ellipse(xx, y, 8, 9, 0, 0, Math.PI);
+        g.strokeStyle = barriga ? 'rgba(90,80,50,0.45)' : 'rgba(0,20,18,0.55)'; g.lineWidth = 2; g.stroke();
+        if (!barriga) { g.fillStyle = 'rgba(120,255,220,0.07)'; g.fill(); }
+      }
+      // faixas de manchas no dorso
+      g.fillStyle = 'rgba(4,22,24,0.55)';
+      for (let y = 8; y < 256; y += 32) { g.beginPath(); g.ellipse(0, y, 22, 9, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(256, y, 22, 9, 0, 0, 7); g.fill(); }
+    });
+    if (R.texEscamas.wrapS !== undefined) R.texEscamas.wrapS = R.texEscamas.wrapT = THREE.RepeatWrapping;
+    return R.texEscamas;
+  }
+  const SERP = { anel: 44, lados: 12, passo: 0.32 };
+  function raioSerpente(s) {   // s = 0 cabeça ... 1 cauda
+    if (s < 0.06) return 0.42 + s / 0.06 * 0.2;
+    return 0.62 * Math.pow(1 - (s - 0.06) / 0.94, 0.8) + 0.05;
+  }
   function corpoSerpente() {
-    const g = new THREE.Group(), partes = [];
-    const mat = new THREE.MeshStandardMaterial({ color: 0x148f77, roughness: 0.5 });
-    const fin = new THREE.MeshStandardMaterial({ color: 0x5ff0e8, emissive: 0x1aa0a0, emissiveIntensity: 0.6 });
-    for (let i = 0; i < 10; i++) {
-      const r = 0.55 - i * 0.035;
-      const s = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), i === 0 ? mat : mat);
-      const f = new THREE.Mesh(new THREE.ConeGeometry(r * 0.35, r * 0.9, 6), fin); f.position.y = r * 0.9; s.add(f);
-      g.add(s); partes.push(s);
+    const g = new THREE.Group();
+    const N = SERP.anel, M = SERP.lados, pos = new Float32Array(N * (M + 1) * 3), uv = [], idx = [];
+    for (let i = 0; i < N; i++) for (let j = 0; j <= M; j++) {
+      uv.push(j / M, i / N * 5);
+      if (i < N - 1 && j < M) { const a = i * (M + 1) + j, b = a + M + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
     }
-    const olhoM = new THREE.MeshBasicMaterial({ color: 0xffff88 });
-    [-1, 1].forEach(l => { const o = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), olhoM); o.position.set(0.25 * l, 0.25, 0.4); partes[0].add(o); });
-    g.userData.partes = partes;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    if (geo.setIndex) geo.setIndex(idx);
+    const corpo = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: texEscamas(), roughness: 0.38, metalness: 0.15, side: THREE.DoubleSide }));
+    corpo.frustumCulled = false; g.add(corpo);
+    // cabeça: crânio alongado, focinho, mandíbula com presas, olhos que brilham, chifres e crista
+    const cab = new THREE.Group();
+    const pele = new THREE.MeshStandardMaterial({ color: 0x125249, roughness: 0.4, metalness: 0.15 });
+    const escuro = new THREE.MeshStandardMaterial({ color: 0x0b3330, roughness: 0.5 });
+    const osso = new THREE.MeshStandardMaterial({ color: 0xf2ecd6, roughness: 0.35 });
+    const cranio = new THREE.Mesh(new THREE.SphereGeometry(0.5, 18, 14), pele); cranio.scale.set(1, 0.72, 1.25); cab.add(cranio);
+    const focinho = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 12), pele); focinho.scale.set(0.95, 0.55, 1.5); focinho.position.set(0, 0.02, 0.62); cab.add(focinho);
+    const mand = new THREE.Group(); mand.position.set(0, -0.14, 0.15); cab.add(mand);
+    const queixo = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), escuro); queixo.scale.set(0.9, 0.35, 1.7); queixo.position.set(0, -0.05, 0.42); mand.add(queixo);
+    [-1, 1].forEach(l => {
+      [0.62, 0.86].forEach((z, k) => {
+        const pr = new THREE.Mesh(new THREE.ConeGeometry(0.045, k ? 0.2 : 0.28, 6), osso);
+        pr.position.set(l * (k ? 0.13 : 0.2), -0.18, z); pr.rotation.x = Math.PI; cab.add(pr);
+      });
+      const olho = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff26a }));
+      olho.position.set(l * 0.3, 0.17, 0.42); olho.scale.set(0.8, 1, 1.3); cab.add(olho);
+      const pupila = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.13, 0.04), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+      pupila.position.set(l * 0.37, 0.17, 0.46); cab.add(pupila);
+      const brilho = new THREE.Sprite(new THREE.SpriteMaterial({ map: R.brilhoTex, color: 0xfff27a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+      brilho.scale.set(0.45, 0.45, 1); brilho.position.copy(olho.position); cab.add(brilho);
+      const chifre = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.75, 7), osso);
+      chifre.position.set(l * 0.26, 0.3, -0.35); chifre.rotation.set(-1.95, 0, l * 0.25); cab.add(chifre);
+      // barbatana lateral (orelha)
+      const orelha = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.6, 3), new THREE.MeshStandardMaterial({ color: 0x46e0c8, emissive: 0x0f7f73, emissiveIntensity: 0.6, transparent: true, opacity: 0.9 }));
+      orelha.scale.set(1, 1, 0.25); orelha.position.set(l * 0.45, 0.05, -0.15); orelha.rotation.set(-1.6, 0, l * 1.1); cab.add(orelha);
+    });
+    const finM = new THREE.MeshStandardMaterial({ color: 0x5ff0e8, emissive: 0x139a92, emissiveIntensity: 0.7, transparent: true, opacity: 0.88, side: THREE.DoubleSide });
+    for (let k = 0; k < 4; k++) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.55 - k * 0.08, 3), finM); f.scale.set(1, 1, 0.3);
+      f.position.set(0, 0.38, 0.1 - k * 0.22); f.rotation.x = -0.6; cab.add(f);
+    }
+    g.add(cab);
+    // barbatanas do dorso (acompanham o corpo)
+    const fins = [];
+    for (let k = 0; k < 9; k++) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.7 - k * 0.05, 3), finM); f.scale.set(1, 1, 0.22);
+      g.add(f); fins.push(f);
+    }
+    // ondulação da água onde o corpo cruza a superfície
+    const ondas = [];
+    for (let k = 0; k < 5; k++) {
+      const o = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 24), new THREE.MeshBasicMaterial({ color: 0xe8fbff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+      o.rotation.x = -Math.PI / 2; g.add(o); ondas.push(o);
+    }
+    g.userData = { corpo, cab, mand, fins, ondas, espinha: [] };
     return g;
+  }
+  // monta o corpo a partir da espinha (pontos do rastro), saindo da água
+  function moverSerpente(e) {
+    const u = e.obj.userData, N = SERP.anel, M = SERP.lados, t = E.t;
+    // rastro por distância (parado, o corpo continua estendido)
+    const r = e.rastro;
+    if (!r.length) for (let i = 0; i < N; i++) r.push({ x: e.x - Math.sin(e.rot) * i * SERP.passo, z: e.z - Math.cos(e.rot) * i * SERP.passo });
+    if (Math.hypot(e.x - r[0].x, e.z - r[0].z) > SERP.passo) { r.unshift({ x: e.x, z: e.z }); if (r.length > N) r.length = N; }
+    const esp = [];
+    for (let i = 0; i < N; i++) {
+      const p = i === 0 ? e : r[Math.min(r.length - 1, i)], s = i / (N - 1);
+      // pescoço erguido + corcovas que furam a água
+      const pesc = s < 0.3 ? 2.7 * Math.cos(s / 0.3 * Math.PI / 2) : 0;
+      const corc = s >= 0.22 ? (0.55 * Math.sin(s * 20 - t * 3.2) - 0.15) * (1 - s * 0.6) : 0;
+      const alto = e.subida * (pesc + corc + Math.sin(t * 2.4 + i * 0.3) * 0.08) + (1 - e.subida) * -1.6;
+      esp.push(new THREE.Vector3(p.x - e.x, alto, p.z - e.z));
+    }
+    const pos = u.corpo.geometry.attributes.position, a = pos.array;
+    const fr = new THREE.Vector3(), lado = new THREE.Vector3(), cima = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < N; i++) {
+      const p0 = esp[Math.max(0, i - 1)], p1 = esp[Math.min(N - 1, i + 1)];
+      fr.subVectors(p0, p1); if (fr.lengthSq() < 1e-6) fr.set(Math.sin(e.rot), 0, Math.cos(e.rot)); fr.normalize();
+      lado.crossVectors(up, fr); if (lado.lengthSq() < 1e-6) lado.set(1, 0, 0); lado.normalize();
+      cima.crossVectors(fr, lado).normalize();
+      const rr = raioSerpente(i / (N - 1));
+      for (let j = 0; j <= M; j++) {
+        const ang = j / M * Math.PI * 2, c = Math.cos(ang), sn = Math.sin(ang), k = (i * (M + 1) + j) * 3;
+        // corte meio achatado (mais largo que alto)
+        a[k] = esp[i].x + (cima.x * c * 0.9 + lado.x * sn * 1.1) * rr;
+        a[k + 1] = esp[i].y + (cima.y * c * 0.9 + lado.y * sn * 1.1) * rr;
+        a[k + 2] = esp[i].z + (cima.z * c * 0.9 + lado.z * sn * 1.1) * rr;
+      }
+    }
+    pos.needsUpdate = true;
+    if (u.corpo.geometry.computeVertexNormals) u.corpo.geometry.computeVertexNormals();
+    // cabeça na ponta, olhando para frente e um pouco para baixo; mandíbula abre na mordida
+    const h0 = esp[0], h1 = esp[2];
+    u.cab.position.copy(h0);
+    u.cab.rotation.set(0, 0, 0);
+    u.cab.rotation.y = Math.atan2(h0.x - h1.x, h0.z - h1.z);
+    u.cab.rotation.x = 0.35 * e.subida - Math.atan2(h0.y - h1.y, Math.hypot(h0.x - h1.x, h0.z - h1.z)) * 0.3;
+    u.cab.rotation.order = 'YXZ';
+    const mord = clamp(1 - (t - (e.mordeuEm || -9)) / 0.45, 0, 1);
+    u.mand.rotation.x = 0.12 + Math.sin(t * 3) * 0.04 + (e.subida > 0.6 ? 0.18 : 0) + Math.sin(mord * Math.PI) * 0.7;
+    // barbatanas no dorso
+    u.fins.forEach((f, k) => {
+      const i = 4 + k * 4; if (i >= N - 1) { f.visible = false; return; }
+      const p = esp[i], q = esp[i + 1], rr = raioSerpente(i / (N - 1));
+      f.visible = true; f.position.set(p.x, p.y + rr * 0.85, p.z);
+      f.rotation.set(0, Math.atan2(p.x - q.x, p.z - q.z), 0, 'YXZ'); f.rotation.x = -0.7;
+    });
+    // espuma onde o corpo cruza a água
+    let o = 0;
+    for (let i = 1; i < N && o < u.ondas.length; i++) {
+      if ((esp[i - 1].y > 0) !== (esp[i].y > 0) && e.subida > 0.15) {
+        const w = u.ondas[o++], fase = (t * 1.4 + o * 0.37) % 1;
+        w.position.set(esp[i].x, 0.08, esp[i].z); w.scale.setScalar(raioSerpente(i / (N - 1)) * 1.4 + fase * 1.6);
+        w.material.opacity = 0.65 * (1 - fase) * e.subida;
+      }
+    }
+    for (; o < u.ondas.length; o++) u.ondas[o].material.opacity = 0;
   }
   async function criarSerpente(cfgMapa) {
     const n = Math.max(1, Math.ceil(1 / cfgMapa.porJogadores));
@@ -2853,7 +3069,6 @@
     return null;
   }
   function iaSerpente(e, dt) {
-    const partes = e.obj.userData.partes;
     if (e.morto) {
       e.obj.visible = false; e.emerso = false;
       if (E.t >= e.renasceEm) { e.morto = false; e.vida = e.vidaMax; e.obj.visible = true; }
@@ -2872,20 +3087,50 @@
       const perto = dist(h, e) < e.cfg.alcance + 2;
       e.subida = clamp(e.subida + (perto ? dt * 2 : -dt * 1.5), 0, 1);
       if (perto && e.subida > 0.8 && E.t >= e.prontoEm) {
-        e.prontoEm = E.t + e.cfg.intervalo;
+        e.prontoEm = E.t + e.cfg.intervalo; e.mordeuEm = E.t;
         anelEfeito(h.x, h.z, 1.2, 0x5ff0e8, 0.3, true);
         if (dist(h, e) < e.cfg.alcance + 0.5) causarDano(h, e.dano, e);
       }
     } else e.subida = clamp(e.subida - dt, 0, 1);
     e.emerso = e.subida > 0.3;
-    // corpo ondulando, saindo da água
-    e.rastro.unshift({ x: e.x, z: e.z }); if (e.rastro.length > 60) e.rastro.pop();
-    partes.forEach((s, i) => {
-      const r = e.rastro[Math.min(e.rastro.length - 1, i * 4)] || e;
-      const alt = e.subida * (2.2 - i * 0.2) + Math.sin(E.t * 4 + i) * 0.15 - 0.6;
-      s.position.set(r.x - e.x, alt, r.z - e.z);
-    });
+    moverSerpente(e);
     e.obj.position.set(e.x, 0, e.z);
+  }
+
+  /* ======================= FOTO DO MAPA (minimapa panorâmico) ======================= */
+  // tira uma foto de cima do mapa de verdade (sem personagens), para o minimapa
+  function fotoMapa(larg) {
+    if (!R.renderer || !R.renderer.readRenderTargetPixels || !E.def || typeof document === 'undefined') return null;
+    const d = E.def, [W, H] = d.tam, lw = larg || 512, lh = Math.round(lw * H / W);
+    const cam = new THREE.OrthographicCamera(-W / 2, W / 2, H / 2, -H / 2, 1, 400);
+    cam.position.set(0, 200, 0); cam.up.set(0, 0, -1); cam.lookAt(0, 0, 0); cam.updateProjectionMatrix();
+    const escondidos = [];
+    const esconder = o => { if (o && o.isObject3D && o.visible) { o.visible = false; escondidos.push(o); } };
+    E.entidades.forEach(e => [e.obj, e.barra, e.sombra, e.seloSprite, e.marcaAlvo].forEach(esconder));
+    (E.barcos || []).forEach(b => esconder(b.obj));
+    if (E.chuva && E.chuva.obj) esconder(E.chuva.obj);
+    const nevoa = R.scene.fog, lin = R.Fx && R.Fx.linear ? R.Fx.linear.value : 0;
+    R.scene.fog = null; if (R.Fx && R.Fx.linear) R.Fx.linear.value = 1;
+    const alvo = new THREE.WebGLRenderTarget(lw, lh);
+    let tela = null;
+    try {
+      R.renderer.setRenderTarget(alvo); R.renderer.clear(); R.renderer.render(R.scene, cam);
+      const px = new Uint8Array(lw * lh * 4);
+      R.renderer.readRenderTargetPixels(alvo, 0, 0, lw, lh, px);
+      tela = document.createElement('canvas'); tela.width = lw; tela.height = lh;
+      const g = tela.getContext('2d'), img = g.createImageData(lw, lh);
+      // a foto sai linear: corrige o gama e vira de cabeça para cima (o WebGL lê de baixo)
+      const gama = new Uint8Array(256); for (let i = 0; i < 256; i++) gama[i] = Math.round(255 * Math.pow(i / 255, 1 / 2.2));
+      for (let y = 0; y < lh; y++) for (let x = 0; x < lw; x++) {
+        const o = ((lh - 1 - y) * lw + x) * 4, k = (y * lw + x) * 4;
+        img.data[k] = gama[px[o]]; img.data[k + 1] = gama[px[o + 1]]; img.data[k + 2] = gama[px[o + 2]]; img.data[k + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+    } catch (err) { tela = null; }
+    R.renderer.setRenderTarget(null); alvo.dispose();
+    R.scene.fog = nevoa; if (R.Fx && R.Fx.linear) R.Fx.linear.value = lin;
+    escondidos.forEach(o => { o.visible = true; });
+    return tela;
   }
 
   /* ======================= MINIONS E BARCOS ======================= */
@@ -3805,7 +4050,7 @@
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
       atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
-      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, xpProximaEstrela, temporadaAtual, aplicarTemporada
+      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
     _t: { CONFIG, E, P, R, MIRA_AUX, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }

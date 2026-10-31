@@ -145,10 +145,12 @@
     }`;
   // ---- água: rasa e clara nas margens, funda e escura no meio, ondulando, com brilho e espuma
   const FRAG_AGUA = RUIDO + `
-    uniform vec3 raso; uniform vec3 fundo; uniform float t; uniform float luz; uniform float fluxo; uniform float radial; uniform float linear;
+    uniform vec3 raso; uniform vec3 fundo; uniform float t; uniform float luz; uniform float fluxo; uniform float radial; uniform float linear; uniform float mar; uniform float anel;
     varying vec2 vUv; varying vec3 vMundo;
     void main() {
       float prof = radial > 0.5 ? 1.0 - length(vUv * 2.0 - 1.0) : 1.0 - abs(vUv.y * 2.0 - 1.0);
+      if (mar > 0.5) prof = 1.0;                                          // mar aberto: fundo em tudo
+      if (anel > 0.0) prof = (length(vUv * 2.0 - 1.0) - anel) / (1.0 - anel);  // raso na ilha, fundo para fora
       prof = clamp(prof, 0.0, 1.0);
       vec2 q = fluxo > 0.5 ? vec2(vUv.x * 0.35 - t * 0.45, vUv.y * 2.2) : vMundo.xz * 0.35 + vec2(t * 0.05, t * 0.03);
       float n1 = fbm(q + vec2(0.0, t * 0.08));
@@ -162,7 +164,8 @@
       col += vec3(0.75, 0.9, 1.0) * ondas * 0.28 * (0.4 + 0.6 * fundura);
       col += raso * linhas * 0.18 * (1.0 - fundura * 0.5);
       col = mix(col, vec3(0.92, 0.96, 1.0), clamp(espuma, 0.0, 1.0) * 0.55);
-      float a = smoothstep(0.0, 0.07, prof);
+      float a = mar > 0.5 ? 1.0 : smoothstep(0.0, 0.07, prof);
+      if (anel > 0.0) a = 1.0 - smoothstep(0.7, 1.0, prof);              // some dentro do mar
       col *= luz;
       if (linear > 0.5) col = pow(max(col, vec3(0.0)), vec3(2.2));   // com o brilho ligado a tela corrige o gama depois
       gl_FragColor = vec4(col, a);
@@ -172,7 +175,7 @@
     opc = opc || {};
     return new THREE.ShaderMaterial({
       vertexShader: VERT_MUNDO, fragmentShader: FRAG_AGUA, transparent: true, depthWrite: false, side: THREE.DoubleSide,
-      uniforms: { t: tempo, raso: corU(raso), fundo: corU(fundo), luz: Efeitos.luzAgua, linear: Efeitos.linear, fluxo: { value: opc.rio ? 1 : 0 }, radial: { value: opc.radial ? 1 : 0 } }
+      uniforms: { t: tempo, raso: corU(raso), fundo: corU(fundo), luz: Efeitos.luzAgua, linear: Efeitos.linear, fluxo: { value: opc.rio ? 1 : 0 }, radial: { value: opc.radial ? 1 : 0 }, mar: { value: opc.mar ? 1 : 0 }, anel: { value: opc.anel || 0 } }
     });
   };
   Efeitos.luzAgua = { value: 1 };   // escurece a água à noite

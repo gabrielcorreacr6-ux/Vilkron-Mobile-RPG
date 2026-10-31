@@ -954,6 +954,7 @@
     c.addEventListener('dblclick', e => e.preventDefault());
 
     let fundo = null, fundoMapa = null;
+    const ICONES_MOB = { golem: '🗿', dragao: '🐉', aranha: '🕷', barao: '🎩', maestro: '🎻', veterano: '🪖', serpente: '🐍' };
     function desenharFundo(def, w, h) {
       const f = doc.createElement('canvas'); f.width = w; f.height = h;
       const g = f.getContext('2d'), [W, H] = def.tam, sx = w / W, sz = h / H;
@@ -976,9 +977,15 @@
       const A = global.Jogo.api, E = A.E, def = E.def, h = E.heroi;
       if (!def || !h) { c.hidden = true; return; }
       c.hidden = false;
-      const lado = grande ? 150 : 64, dpr = Math.min(2, global.devicePixelRatio || 1);
+      const lado = grande ? 230 : 64, dpr = Math.min(2, global.devicePixelRatio || 1);
       if (c.width !== lado * dpr) { c.width = c.height = lado * dpr; c.style.width = c.style.height = lado + 'px'; }
-      if (fundoMapa !== E.mapa) { fundo = desenharFundo(def, 512, Math.round(512 * def.tam[1] / def.tam[0])); fundoMapa = E.mapa; }
+      if (fundoMapa !== E.mapa) {
+        fundo = desenharFundo(def, 512, Math.round(512 * def.tam[1] / def.tam[0])); fundoMapa = E.mapa;
+        // foto de verdade do mapa, vista de cima (espera as texturas carregarem; tira de novo depois)
+        clearTimeout(desenhar.foto1); clearTimeout(desenhar.foto2);
+        const tirar = () => { if (fundoMapa !== E.mapa || !A.fotoMapa) return; const f = A.fotoMapa(640); if (f) fundo = f; };
+        desenhar.foto1 = setTimeout(tirar, 2500); desenhar.foto2 = setTimeout(tirar, 9000);
+      }
       const g = c.getContext('2d'), [W, H] = def.tam;
       g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, lado, lado);
       // pequeno: segue você (60 m em volta). Grande: o mapa inteiro.
@@ -992,6 +999,7 @@
       const amigos = [];
       if (Rede && Rede.remotos) Rede.remotos.forEach((r, uid) => { if (r.ent && (Rede.amigos.has(uid) || Rede.aliado(uid)) && !r.ent.morto) amigos.push(r.ent); });
       const olhos = [h].concat(amigos);
+      const mobs = [];
       const ponto = (x, z, cor, r) => { g.fillStyle = cor; g.beginPath(); g.arc(tx(x), tz(z), r, 0, 7); g.fill(); g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 1; g.stroke(); };
       // inimigos (outros jogadores, mobs e minions vermelhos) só com visão
       E.entidades.forEach(e => {
@@ -1003,8 +1011,19 @@
           if (!olhos.some(o => Math.hypot(o.x - e.x, o.z - e.z) < VISAO)) return;
           ponto(e.x, e.z, '#ef4444', grande ? 3.4 : 3);
         } else if (e.tipo === 'mob' || e.tipo === 'serpente' && e.emerso) {
-          if (olhos.some(o => Math.hypot(o.x - e.x, o.z - e.z) < VISAO)) ponto(e.x, e.z, '#f59e0b', grande ? 2.4 : 2);
+          // mobs sempre aparecem no mapa, com o ícone de cada um
+          mobs.push(e);
         }
+      });
+      mobs.forEach(e => {
+        const ic = ICONES_MOB[e.especie || e.tipo] || '★', chefe = e.especie === 'golem' || e.tipo === 'serpente' || e.especie === 'dragao';
+        const r = grande ? (chefe ? 8 : 6.5) : (chefe ? 5 : 3.6);
+        g.fillStyle = chefe ? 'rgba(127,29,29,0.85)' : 'rgba(120,53,15,0.8)';
+        g.beginPath(); g.arc(tx(e.x), tz(e.z), r, 0, 7); g.fill();
+        g.strokeStyle = chefe ? '#fca5a5' : '#fbbf24'; g.lineWidth = 1.2; g.stroke();
+        if (grande || chefe) { g.font = Math.round(r * 1.35) + 'px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ic, tx(e.x), tz(e.z) + 0.5); }
+        // barrinha de vida no mapa grande
+        if (grande) { const v = Math.max(0, e.vida / e.vidaMax); g.fillStyle = '#111'; g.fillRect(tx(e.x) - 7, tz(e.z) + r + 1, 14, 2.5); g.fillStyle = '#ef4444'; g.fillRect(tx(e.x) - 7, tz(e.z) + r + 1, 14 * v, 2.5); }
       });
       amigos.forEach(e => ponto(e.x, e.z, '#5aa9ff', grande ? 3.6 : 3.2));
       // você: triângulo na direção que olha
