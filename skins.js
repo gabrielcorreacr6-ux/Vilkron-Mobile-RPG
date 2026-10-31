@@ -53,7 +53,8 @@
     },
     generos: { m: 'Homem', f: 'Mulher' },
     // realce das skins (cores mais vivas): metal máximo e quanto a textura acende sozinha
-    realceSkins: { metal: 0.3, brilho: 0.4, noite: 0.18 },
+    // realce: cada textura é ajustada sozinha (escura sobe, clara fica como está); o brilho próprio é pequeno para o branco não estourar
+    realceSkins: { metal: 0.3, brilho: 0.12, noite: 0.08, brilhoCor: 0.75, alvoLuz: 0.3, alvoCor: 0.4, maxGanho: 1.5, maxCor: 1.7, contraste: 1.15 },
 
     mapas: {
       mapa1:    { escalaMob: 1.0,  variante: 'default' },
@@ -995,6 +996,64 @@
 
   // Skins do Meshy vêm com muito "metal" e o jogo não tem reflexo de ambiente: o metal fica quase preto.
   // Aqui o metal é reduzido e a própria textura acende um pouco, para as cores aparecerem vivas.
+  // Deixa a textura viva na medida certa: mede o brilho (mediana) e a cor (saturação) da própria textura
+  // e só corrige o que falta. Curva de gama: o branco continua branco (não estoura), o escuro sobe.
+  const texAvivadas = new WeakMap();
+  const suave = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // devolve a textura de brilho próprio (só as partes muito coloridas e claras: lava, neon, runas)
+  function avivarTextura(t) {
+    const img = t && t.image;
+    if (!t) return null;
+    if (texAvivadas.has(t)) return texAvivadas.get(t);
+    texAvivadas.set(t, null);
+    if (!img || typeof document === 'undefined' || !img.width) return null;
+    try {
+      const w = img.width, h = img.height, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0);
+      const dados = g.getImageData(0, 0, w, h), px = dados.data, cfg = CATALOGO.realceSkins;
+      const hist = new Uint32Array(256); let somaS = 0, n = 0;
+      const passo = Math.max(1, Math.floor(px.length / 4 / 40000)) * 4;
+      for (let i = 0; i < px.length; i += passo) {
+        if (px[i + 3] < 20) continue;
+        const r = px[i], gg = px[i + 1], b = px[i + 2], mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+        hist[Math.round(0.2126 * r + 0.7152 * gg + 0.0722 * b)]++; somaS += mx ? (mx - mn) / mx : 0; n++;
+      }
+      if (!n) return null;
+      let acum = 0, med = 0; for (; med < 255; med++) { acum += hist[med]; if (acum >= n / 2) break; }
+      const mediana = Math.max(0.04, med / 255), sat = somaS / n;
+      // exposição: multiplica (o preto continua preto, o contraste fica), com ombro suave para o claro não estourar
+      const ganho = Math.min(cfg.maxGanho, Math.max(1, cfg.alvoLuz / mediana));
+      const kCor = sat < 0.06 ? 1 : Math.min(cfg.maxCor, Math.max(1, cfg.alvoCor / sat));
+      const ombro = x => x < 0.72 ? x : 0.72 + 0.28 * (1 - Math.exp(-(x - 0.72) / 0.28));
+      const lut = new Uint8ClampedArray(256 * 4);   // índice = valor * ganho (até 4x)
+      for (let i = 0; i < lut.length; i++) lut[i] = 255 * ombro(i / 255);
+      const cvB = document.createElement('canvas'); cvB.width = w; cvB.height = h;
+      const gB = cvB.getContext('2d'), brilho = gB.createImageData(w, h), pb = brilho.data;
+      let algumBrilho = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        let r = px[i] * ganho, gg = px[i + 1] * ganho, b = px[i + 2] * ganho;
+        // contraste: escuro mais fundo, claro mais forte (tira a cara de "lavado")
+        r = 102 + (r - 102) * cfg.contraste; gg = 102 + (gg - 102) * cfg.contraste; b = 102 + (b - 102) * cfg.contraste;
+        if (kCor > 1) { const L = 0.2126 * r + 0.7152 * gg + 0.0722 * b; r = Math.max(0, L + (r - L) * kCor); gg = Math.max(0, L + (gg - L) * kCor); b = Math.max(0, L + (b - L) * kCor); }
+        r = lut[Math.min(1023, r | 0)]; gg = lut[Math.min(1023, gg | 0)]; b = lut[Math.min(1023, b | 0)];
+        px[i] = r; px[i + 1] = gg; px[i + 2] = b;
+        const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), sv = mx ? (mx - mn) / mx : 0;
+        const m = suave(0.55, 0.85, sv) * suave(0.62, 0.92, mx / 255);
+        pb[i] = r * m; pb[i + 1] = gg * m; pb[i + 2] = b * m; pb[i + 3] = 255; algumBrilho += m;
+      }
+      g.putImageData(dados, 0, 0);
+      t.image = cv; t.needsUpdate = true;
+      // só detalhes brilham (rachaduras de lava, neon, runas); se a cor forte cobre a roupa toda, não é detalhe
+      const cobre = algumBrilho / (px.length / 4);
+      if (cobre < 0.002 || cobre > 0.06) return null;
+      gB.putImageData(brilho, 0, 0);
+      const tb = new THREE.CanvasTexture(cvB);
+      tb.flipY = t.flipY; tb.encoding = t.encoding; tb.wrapS = t.wrapS; tb.wrapT = t.wrapT;
+      if (t.repeat && tb.repeat) tb.repeat.copy(t.repeat);
+      texAvivadas.set(t, tb);
+      return tb;
+    } catch (e) { return null; /* imagem de outro domínio ou sem canvas: fica como veio */ }
+  }
   function realcarCores(obj) {
     obj.traverse(n => {
       if (!n.isMesh) return;
@@ -1004,8 +1063,14 @@
         if (m.metalness !== undefined) m.metalness = Math.min(m.metalness, CATALOGO.realceSkins.metal);
         if (m.roughness !== undefined) m.roughness = Math.max(m.roughness, 0.45);
         // no gráfico alto o mapa é noite: o herói acende um pouco mais para não sumir no escuro
-        const k = CATALOGO.realceSkins.brilho + (global.Efeitos && global.Efeitos.qualidade === 'alta' ? CATALOGO.realceSkins.noite : 0);
-        if (m.map && m.emissive) { m.emissiveMap = m.map; m.emissive.setScalar(k); }
+        const brilhoProprio = m.map ? avivarTextura(m.map) : null;
+        const alta = global.Efeitos && global.Efeitos.qualidade === 'alta';
+        const k = CATALOGO.realceSkins.brilho + (alta ? CATALOGO.realceSkins.noite : 0);
+        // partes muito coloridas (lava, neon) brilham de verdade; o resto só um fio, para o branco não estourar
+        if (m.map && m.emissive) {
+          if (brilhoProprio) { m.emissiveMap = brilhoProprio; m.emissive.setScalar(CATALOGO.realceSkins.brilhoCor + (alta ? 0.15 : 0)); }
+          else { m.emissiveMap = m.map; m.emissive.setScalar(k); }
+        }
         m.needsUpdate = true;
       });
     });
