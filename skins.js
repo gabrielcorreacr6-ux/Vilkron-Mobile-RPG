@@ -646,7 +646,7 @@
       }
 
       if (this.tipo === 'aranha') this._aranha(p);
-      else if (!temClipe) this._generico(p);
+      else if (!temClipe) { this._generico(p); if (this.tipo === 'quadrupede') this._dragao(p); }
       else this._restaurarPose();
 
       // giro do corpo inteiro por código (ex.: giro do Soldado)
@@ -676,6 +676,39 @@
         });
         this._piscando = this.flash > 0;
       }
+    }
+
+    // Dragão: esqueleto simples (dr_*) criado para a malha parada do Meshy, animado aqui
+    _dragao(p) {
+      if (this._dr === undefined) {
+        const o = n => this.corpo.getObjectByName('dr_' + n);
+        this._dr = o('corpo') ? { pescoco: o('pescoco'), cabeca: o('cabeca'), cauda1: o('cauda1'), cauda2: o('cauda2'),
+          asaE: o('asaE'), asaD: o('asaD'), FE: o('perna_FE'), FD: o('perna_FD'), TE: o('perna_TE'), TD: o('perna_TD') } : null;
+      }
+      const b = this._dr; if (!b) return;
+      const t = this.t, est = this.estado, k = Math.sin(Math.PI * p);
+      const anda = est === 'andar' || est === 'correr', f = est === 'correr' ? 13 : 9, fase = t * f;
+      const r = (o, x, y, z) => { if (o) o.rotation.set(x || 0, y || 0, z || 0); };
+      // pernas em pares cruzados, como um lagarto
+      const passo = anda ? Math.sin(fase) * 0.55 : 0;
+      r(b.FE, passo); r(b.TD, passo); r(b.FD, -passo); r(b.TE, -passo);
+      // asas: respiram paradas, batem andando, abrem no ataque, caem na morte
+      let asa = 0.1 * Math.sin(t * 2.1);
+      if (anda) asa = 0.35 * Math.sin(fase * 0.5) - 0.1;
+      if (est === 'ataque') asa = -0.55 * k;
+      if (est === 'habilidade1' || est === 'habilidade2') asa = -0.7 * Math.abs(Math.sin(t * 14));
+      if (est === 'morte') asa = 0.7 * Math.min(1, p * 1.5);
+      r(b.asaE, 0, 0, asa); r(b.asaD, 0, 0, -asa);
+      // pescoço e cabeça: puxa para trás e dá o bote no ataque (o fogo sai no meio)
+      let pesc = 0.06 * Math.sin(t * 1.3), cab = 0;
+      if (anda) pesc = 0.08 * Math.sin(fase * 2);
+      if (est === 'ataque') { pesc = p < 0.4 ? -0.45 * (p / 0.4) : -0.45 + 0.9 * Math.min(1, (p - 0.4) / 0.25); cab = -pesc * 0.4; }
+      if (est === 'dano') pesc = -0.35 * k;
+      if (est === 'morte') pesc = 0.5 * Math.min(1, p * 1.4);
+      r(b.pescoco, pesc); r(b.cabeca, cab, 0.12 * Math.sin(t * 0.7));
+      // cauda balançando
+      const cauda = (anda ? 0.3 : 0.18) * Math.sin(t * (anda ? f * 0.5 : 2));
+      r(b.cauda1, 0, cauda); r(b.cauda2, 0, cauda * 1.3);
     }
 
     _generico(p) {
