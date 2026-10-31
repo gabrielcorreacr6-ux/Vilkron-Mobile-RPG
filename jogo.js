@@ -1748,6 +1748,9 @@
   // Mira auxiliar (menu ⋮): o alvo escolhido fica preso até morrer, sumir ou ficar longe;
   // arrastar o ataque para outro inimigo troca o alvo. Desligada, o alvo só é preferido por 2,5 s.
   const MIRA_AUX = { ligada: true, longe: 20 };
+  // distância da câmera: 1 = como era antes; o padrão agora fica um pouco mais perto
+  const CAMERA = { zoom: 0.88, min: 0.72, max: 1.15 };
+  try { const z = parseFloat(global.localStorage && global.localStorage.getItem('vilkron_zoom')); if (z >= CAMERA.min && z <= CAMERA.max) CAMERA.zoom = z; } catch (e) {}
   try { const v = global.localStorage.getItem('vilkron_mira_aux'); if (v !== null) MIRA_AUX.ligada = v === '1'; } catch (e) {}
   function alvoPreso(h) {
     const a = h.alvoPreso;
@@ -3841,6 +3844,23 @@
     });
     $('modalFechar').hidden = false;
   }
+  function telaCamera() {
+    abrirModal('Distância da câmera', `
+      <p class="nota">Arraste para aproximar ou afastar a câmera do seu herói.</p>
+      <div style="display:flex;align-items:center;gap:10px;margin:14px 0">
+        <span>Longe</span><input id="zoomCam" type="range" min="0" max="100" step="1" style="flex:1"><span>Perto</span>
+      </div>
+      <div class="botoes"><button class="acao" data-zoom="padrao" type="button">Voltar ao padrão</button></div>`, el => {
+      const r = el.querySelector('#zoomCam');
+      // 0 = mais longe (max) ... 100 = mais perto (min)
+      const deZoom = z => Math.round((CAMERA.max - z) / (CAMERA.max - CAMERA.min) * 100), paraZoom = v => CAMERA.max - v / 100 * (CAMERA.max - CAMERA.min);
+      r.value = deZoom(CAMERA.zoom);
+      const salvar = () => { try { global.localStorage.setItem('vilkron_zoom', String(CAMERA.zoom)); } catch (e) {} };
+      r.addEventListener('input', () => { CAMERA.zoom = paraZoom(Number(r.value)); salvar(); });
+      el.querySelector('[data-zoom]').addEventListener('click', () => { CAMERA.zoom = 0.88; r.value = deZoom(0.88); salvar(); });
+    });
+    $('modalFechar').hidden = false;
+  }
   function telaInstrucoes() {
     abrirModal('Como jogar', `
       <p>O objetivo é jogar junto com os amigos, ficar mais forte e se divertir.</p>
@@ -4086,6 +4106,7 @@
       else if (q === 'heroi') telaHeroi(false);
       else if (q === 'instrucoes') telaInstrucoes();
       else if (q === 'graficos') telaGraficos();
+      else if (q === 'camera') telaCamera();
       else if (q === 'mira') {
         MIRA_AUX.ligada = !MIRA_AUX.ligada;
         try { global.localStorage.setItem('vilkron_mira_aux', MIRA_AUX.ligada ? '1' : '0'); } catch (e) {}
@@ -4119,7 +4140,7 @@
     passo(dt);
     const h = E.heroi;
     if (h) {
-      alvoCam.set(h.x, 13, h.z + 11);
+      alvoCam.set(h.x, 0.8 + 12.2 * CAMERA.zoom, h.z + 11 * CAMERA.zoom);
       R.camera.position.lerp(alvoCam, 1 - Math.pow(0.001, dt));
       R.camera.lookAt(h.x, 0.8, h.z);
       // tremor da tela (pisão do golem, terremoto do soldado)
@@ -4172,7 +4193,7 @@
       telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
-    _t: { CONFIG, E, P, R, MIRA_AUX, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
+    _t: { CONFIG, E, P, R, MIRA_AUX, CAMERA, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
   };
   if (temDOM && !global.ESPERAR_LOGIN) global.addEventListener('load', () => Jogo.iniciar().catch(err => {
     const el = $('carregando'); if (el) el.innerHTML = '<div>NÃO FOI POSSÍVEL INICIAR<p>' + (err && err.message || err) + '</p></div>';
