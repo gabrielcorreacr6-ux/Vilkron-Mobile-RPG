@@ -68,8 +68,8 @@
     mapa2: {
       nome: 'Vale da Chuva', tam: [220, 160], ceu: '#7f98a6', nevoa: [32, 80],
       chao: { tex: 'grama_mapa2', reserva: 'grama_mapa1', tint: '#7fa08a', metrosPorRepeticao: 6 },
-      entrada: [88, -6],
-      pracas: [{ x: 88, z: 0, w: 22, h: 22 }],
+      entrada: [88, 6],
+      pracas: [{ x: 88, z: 0, w: 24, h: 24 }],
       caminhos: [{ largura: 4.5, pts: [[77, 0], [62, 8], [48, 24], [30, 38], [8, 42], [-14, 34], [-26, 14], [-20, -8], [-2, -22], [18, -34], [32, -52], [12, -64], [-20, -62], [-44, -48], [-58, -24], [-62, 0], [-74, 22], [-90, 38]] }],
       rios: [{ largura: 9, pts: [[66, -84], [60, -50], [55, -18], [56, 20], [62, 50], [68, 84]] }],
       lagos: [{ x: 45, z: 60, r: 11 }, { x: -76, z: -46, r: 10 }],
@@ -98,7 +98,7 @@
       nome: 'Vale Ranqueado', tam: [280, 180], ceu: '#b3d4e0', nevoa: [50, 110],
       chao: { tex: 'grama_mapa3', reserva: 'grama_mapa1', tint: '#d6d08a', metrosPorRepeticao: 6 },
       entrada: [-118, 6],
-      pracas: [{ x: -118, z: 0, w: 22, h: 22 }],
+      pracas: [{ x: -118, z: 0, w: 24, h: 24 }],
       caminhos: [{ largura: 5, pts: [[-106, 0], [-88, -14], [-66, -24], [-44, -18], [-26, -4], [0, 0], [26, 4], [44, 18], [66, 24], [88, 10], [100, -14], [112, -36], [122, -48]] }],
       rios: [{ largura: 8, pts: [[-104, 40], [-90, 30], [-70, 36], [-48, 52], [-20, 62], [10, 74], [30, 94]] }],
       lagos: [{ x: 42, z: -52, r: 13 }, { x: 72, z: 62, r: 10 }],
@@ -128,7 +128,7 @@
       nome: 'Campo das Arenas', tam: [320, 200], ceu: '#a6cbe0', nevoa: [55, 120],
       chao: { tex: 'grama_mapa1', tint: '#cfe3b0', metrosPorRepeticao: 6 },
       entrada: [-140, 46],
-      pracas: [{ x: -140, z: 40, w: 22, h: 22 }],
+      pracas: [{ x: -140, z: 40, w: 24, h: 24 }],
       caminhos: [{ largura: 5, pts: [[-128, 40], [-100, 30], [-70, 6], [-30, 2], [0, 12], [30, 2], [70, 6], [100, 30], [134, 40]] }],
       rios: [],
       lagos: [{ x: -110, z: 74, r: 9 }, { x: 116, z: 76, r: 9 }],
@@ -161,7 +161,7 @@
         { x: 36, z: -38, r: 15 }, { x: 40, z: 40, r: 14 }, { x: 92, z: 4, r: 21 }
       ],
       entrada: [-98, 4],
-      pracas: [{ x: -98, z: -2, w: 16, h: 16 }],
+      pracas: [{ x: -98, z: -2, w: 24, h: 24 }],
       caminhos: [
         { largura: 3.5, pts: [[-82, -6], [-52, -36], [-5, 0], [36, -38], [78, -2]] },
         { largura: 3.5, pts: [[-5, 0], [-40, 40]] }, { largura: 3.5, pts: [[-5, 0], [40, 40]] }
@@ -188,7 +188,7 @@
       nome: 'Jardim do Repouso', tam: [180, 140], ceu: '#c7dfee', nevoa: [50, 100],
       chao: { tex: 'grama_repouso', reserva: 'grama_mapa1', tint: '#d8f0c0', metrosPorRepeticao: 6 },
       entrada: [-76, 6],
-      pracas: [{ x: -76, z: 0, w: 18, h: 18 }, { x: 0, z: -24, w: 34, h: 18 }],
+      pracas: [{ x: -76, z: 0, w: 24, h: 24 }, { x: 0, z: -24, w: 34, h: 18 }],
       caminhos: [{ largura: 4.5, pts: [[-66, 0], [-40, -6], [-18, -14], [0, -14], [22, -14], [44, -6], [62, -18], [78, -30]] }],
       rios: [{ largura: 7, pts: [[-44, 72], [-30, 44], [-34, 24]] }],
       lagos: [{ x: -36, z: 14, r: 9 }, { x: 42, z: 32, r: 12 }],
@@ -210,7 +210,7 @@
       nome: 'Labirinto', evento: true, tam: [150, 210], ceu: '#c3d1d8', nevoa: [90, 210],
       chao: { tex: 'grama_mapa1', tint: '#a3c28e', metrosPorRepeticao: 6 },
       entrada: [0, 94],
-      pracas: [{ x: 0, z: 88, w: 20, h: 20 }],
+      pracas: [{ x: 0, z: 88, w: 24, h: 24 }],
       caminhos: [{ largura: 4.5, pts: [[0, 77], [-2, 58], [2, 36], [0, 13]] }],
       rios: [], lagos: [],
       aeroporto: { x: 0, z: 140 }, semAeroporto: true, semNoite: true,   // sempre de dia: as paredes precisam aparecer
