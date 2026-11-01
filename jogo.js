@@ -664,7 +664,9 @@
   }
   function peca(nome, altura, x, z, opc) {
     opc = opc || {};
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ alphaTest: 0.35, color: opc.tint || 0xffffff }));
+    // desenhado depois de todas as camadas do chão (praça, caminho, margens): o chão nunca "engole" a base
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ alphaTest: 0.35, color: opc.tint || 0xffffff, transparent: true }));
+    s.renderOrder = 600;
     s.center.set(0.5, MAPAS.ANCORAS[nome] !== undefined ? MAPAS.ANCORAS[nome] : 0.03);
     s.position.set(x, 0, z);
     s.scale.set(altura, altura, 1);
