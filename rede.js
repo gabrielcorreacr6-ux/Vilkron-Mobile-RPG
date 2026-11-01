@@ -227,12 +227,6 @@
     Rede.remotos.forEach((r, uid) => {
       if (!r.ent) return;
       r.ent.time = Rede.aliado(uid) ? 'jogador' : 'r_' + uid;
-      const cor = Rede.aliado(uid) ? 'equipe' : 'outro';
-      if (r.corRotulo !== cor && r.rotulo && r.rotulo.parent) {
-        r.rotulo.parent.remove(r.rotulo);
-        r.rotulo = J.api.textoSprite(r.p.n, 2.2, Rede.aliado(uid) ? '#9fd8ff' : '#ffb4a8'); r.rotulo.renderOrder = 11; J.api.E.mundo.add(r.rotulo);
-      }
-      r.corRotulo = cor;
     });
   }
   let convitesVistos = new Set();
@@ -355,6 +349,7 @@
     mandar('pos', p);
   }
 
+  Rede._receberPos = p => receberPos(p);   // usado nos testes
   async function receberPos(p) {
     if (!p || !p.u || p.u === Rede.eu.id) return;
     let r = Rede.remotos.get(p.u);
@@ -373,14 +368,42 @@
           obj, anim: global.Skins.animador(obj), x: p.x, z: p.z, rot: p.r, vida: p.v, vidaMax: p.vm, raio: 0.6
         });
         r.visual = visual; r.cor = p.k;
-        r.rotulo = A.textoSprite(p.n, 2.2, Rede.aliado(p.u) ? '#9fd8ff' : '#ffb4a8'); r.corRotulo = Rede.aliado(p.u) ? 'equipe' : 'outro';
-        r.rotulo.renderOrder = 11; A.E.mundo.add(r.rotulo);
+        r.rotulo = rotuloDom(p.u, p.n, true);
       } catch (e) { console.warn('jogador remoto', e); }
       finally { r.criando = false; }
     }
     if (r.ent && r.cor !== p.k) { global.Skins.trocarCor(r.ent.obj, p.k); r.cor = p.k; }
   }
 
+  // nome em cima de cada jogador (HTML por cima do jogo): sempre visível e com o ▾ para adicionar, chamar e convidar
+  function caixaRotulos() {
+    let c = document.getElementById('rotulos');
+    if (!c) { c = document.createElement('div'); c.id = 'rotulos'; document.body.appendChild(c); }
+    return c;
+  }
+  function rotuloDom(uid, nick, comMenu) {
+    if (typeof document === 'undefined') return null;
+    const d = document.createElement('div'); d.className = 'rotJ'; d.dataset.uid = uid;
+    const n = document.createElement('span'); n.textContent = nick; d.appendChild(n);
+    if (comMenu) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'tri'; b.setAttribute('aria-label', 'Opções do jogador ' + nick); b.textContent = '▾';
+      b.addEventListener('pointerdown', ev => ev.stopPropagation());
+      b.addEventListener('click', ev => { ev.stopPropagation(); if (Rede.aoMenuJogador) Rede.aoMenuJogador(uid, n.textContent, Number(d.dataset.num) || null); });
+      d.appendChild(b);
+    }
+    caixaRotulos().appendChild(d);
+    return d;
+  }
+  let _v3 = null;
+  function posRotulo(el, e, ver) {
+    const A = J.api, cam = A.R && A.R.camera;
+    if (!ver || !cam || !e.barra) { if (!el.hidden) el.hidden = true; return; }
+    _v3 = _v3 || new THREE.Vector3();
+    _v3.set(e.x, e.barra.position.y + 0.62, e.z).project(cam);
+    if (_v3.z > 1 || Math.abs(_v3.x) > 1.1 || Math.abs(_v3.y) > 1.1) { if (!el.hidden) el.hidden = true; return; }
+    if (el.hidden) el.hidden = false;
+    el.style.transform = `translate(${((_v3.x + 1) / 2 * innerWidth).toFixed(1)}px, ${((1 - _v3.y) / 2 * innerHeight).toFixed(1)}px) translate(-50%, -100%)`;
+  }
   function tirarEntidade(e) {
     const A = J.api, E = A.E;
     global.Skins.remover(e.obj);
@@ -391,13 +414,21 @@
   function removerRemoto(uid) {
     const r = Rede.remotos.get(uid); if (!r) return;
     if (r.ent) tirarEntidade(r.ent);
-    if (r.rotulo && r.rotulo.parent) r.rotulo.parent.remove(r.rotulo);
+    if (r.rotulo) r.rotulo.remove();
     Rede.remotos.delete(uid);
   }
 
+  let meuRotulo = null;
   function passo(dt) {
     const A = J.api, E = A.E, agora = performance.now();
     enviarPos(E.t);
+    // o seu nome também aparece em cima do seu herói
+    const h = E.heroi;
+    if (h && Rede.eu && typeof document !== 'undefined') {
+      if (!meuRotulo || !meuRotulo.isConnected) { meuRotulo = rotuloDom(Rede.eu.id, Rede.eu.nick, false); meuRotulo.className = 'rotJ eu'; }
+      if (meuRotulo.firstChild.textContent !== Rede.eu.nick) meuRotulo.firstChild.textContent = Rede.eu.nick;
+      posRotulo(meuRotulo, h, !h.morto && h.obj.visible !== false);
+    }
     const souAdmin = Rede.eu.papel === 'admin';
     Rede.remotos.forEach((r, uid) => {
       if (agora - (r.visto || 0) > 8000) { removerRemoto(uid); return; }   // sumiu sem avisar
@@ -418,7 +449,13 @@
       const ver = (!p.i || souAdmin) && (!p.b || amigo);
       e.obj.visible = ver;
       if (e.obj.visible && p.i && souAdmin && !e._fantasma) { e._fantasma = true; e.obj.traverse(n => { if (n.isMesh && n.material) [].concat(n.material).forEach(m => { m.transparent = true; m.opacity = 0.4; }); }); }
-      if (r.rotulo) { r.rotulo.visible = ver && !e.morto; r.rotulo.position.set(e.x, 3.3 - (e.afundado || 0), e.z); }
+      if (r.rotulo) {
+        const cls = Rede.aliado(uid) ? 'equipe' : amigo ? 'amigo' : 'outro';
+        if (r.rotulo.dataset.cls !== cls) { r.rotulo.dataset.cls = cls; r.rotulo.className = 'rotJ ' + cls; }
+        if (r.rotulo.firstChild.textContent !== p.n) r.rotulo.firstChild.textContent = p.n;
+        r.rotulo.dataset.num = p.num || '';
+        posRotulo(r.rotulo, e, ver && !e.morto);
+      }
       // rank: amigos e equipe veem elo + estrelas; os outros só o elo
       if (p.st !== undefined && J.api.selo) J.api.selo(e, p.st, amigo);
     });
@@ -630,6 +667,24 @@
     J.api.P.ouro = r.ouro; base = r.ouro;
     receberPerfil(r);
     return r;
+  };
+  // clã: o meu (com membros) e os convites que recebi
+  Rede.cla = null;
+  Rede.carregarCla = async () => {
+    const eu = Rede.eu.id;
+    const { data: m } = await sb.from('cla_membros').select('cla').eq('jogador', eu).maybeSingle();
+    let cla = null, membros = [], convites = [];
+    if (m && m.cla) {
+      const r1 = await sb.from('clas').select('*').eq('id', m.cla).maybeSingle(); cla = r1.data;
+      const r2 = await sb.from('cla_membros').select('jogador, entrou_em').eq('cla', m.cla); membros = r2.data || [];
+    } else {
+      const r3 = await sb.from('convites_cla').select('cla, de, clas(nome)').eq('para', eu);
+      convites = (r3.data || []).map(c => ({ cla: c.cla, de: c.de, nome: (c.clas && c.clas.nome) || '?' }));
+    }
+    Rede.cla = cla;
+    const ids = Array.from(new Set(membros.map(x => x.jogador).concat(convites.map(c => c.de))));
+    const nicks = ids.length ? await Rede.nicks(ids) : {};
+    return { cla, membros, convites, nicks };
   };
   Rede.depoisDeGastarNoServidor = row => { if (row) { J.api.P.ouro = row.ouro; base = row.ouro; receberPerfil(row); } };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1166,7 +1166,8 @@
     const t = c ? new THREE.CanvasTexture(c) : new THREE.Texture();
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, transparent: true }));
     s.scale.set(Math.max(1.2, e.raio * 2.2), 0.18, 1);
-    s.renderOrder = 10;
+    // bem acima de qualquer camada do chão (praças e aeroporto eram desenhados por cima e escondiam a barra)
+    s.renderOrder = 1000;
     s.userData = { c, t, ultimo: -1 };
     E.mundo.add(s);
     return s;
@@ -1187,7 +1188,7 @@
       const c = document.createElement('canvas'); c.width = 256; c.height = 48;
       const t = new THREE.CanvasTexture(c);
       e.seloSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
-      e.seloSprite.scale.set(1.9, 1.9 * 48 / 256, 1); e.seloSprite.renderOrder = 10;
+      e.seloSprite.scale.set(1.9, 1.9 * 48 / 256, 1); e.seloSprite.renderOrder = 1001;
       e.seloSprite.userData = { c, t };
       E.mundo.add(e.seloSprite);
     }
@@ -1250,7 +1251,7 @@
     linhas.forEach((l, i) => g.fillText(l, c.width / 2, 3 + 13 + 16 + i * 32));
     const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
     const mat = new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, depthTest: false });
-    const s = new THREE.Sprite(mat); const k = 0.0072; s.scale.set(c.width * k, c.height * k, 1); s.renderOrder = 20;
+    const s = new THREE.Sprite(mat); const k = 0.0072; s.scale.set(c.width * k, c.height * k, 1); s.renderOrder = 1010;
     if (s.center) s.center.set(0.5, 0);
     E.mundo.add(s); e.balao = s;
     const dur = Math.min(9, 3.5 + String(texto).length * 0.06);

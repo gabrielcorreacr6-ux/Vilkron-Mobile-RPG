@@ -162,6 +162,7 @@
       instalarMenus(eu);
       Rede.aoBanido = r => { telaBanido(r); };
       Rede.aoMensagens = mostrarMensagens;
+      Rede.aoMenuJogador = menuJogador;
       Rede.aoConviteEquipe = c => conviteEquipe(c);
       Rede.aoMudarPerfil = r => { atualizarMenus(r); };
       Rede.prepararJogo();                    // perfil do servidor antes de montar o mapa
@@ -182,7 +183,7 @@
   function instalarMenus(eu) {
     const menu = $('menu');
     const itens = [
-      ['conversas', 'Conversas'], ['equipe', 'Equipe'], ['skins_loja', 'Loja de skins'], ['skins_minhas', 'Minhas skins'], ['amigos', 'Amigos'],
+      ['conversas', 'Conversas'], ['equipe', 'Equipe'], ['cla', 'Clã'], ['skins_loja', 'Loja'], ['skins_minhas', 'Minhas skins'], ['amigos', 'Amigos'],
       ['mensagens', 'Mensagens'], ['moderacao', 'Moderação'], ['meuid', 'Meu ID'], ['sair', 'Sair da conta']
     ];
     const primeiro = menu.querySelector('[data-menu]');
@@ -212,7 +213,7 @@
 
     global.Jogo.ganchos.menu = q => {
       const f = {
-        conversas: () => telaChat(), equipe: telaEquipe, skins_loja: telaLojaSkins, skins_minhas: telaMinhasSkins, amigos: telaAmigos, mensagens: telaMensagens,
+        conversas: () => telaChat(), equipe: telaEquipe, cla: telaCla, skins_loja: telaLojaSkins, skins_minhas: telaMinhasSkins, amigos: telaAmigos, mensagens: telaMensagens,
         moderacao: telaModeracao, meuid: telaMeuId, sair: () => global.Rede.sair()
       }[q];
       if (f) { f(); return true; }
@@ -263,8 +264,17 @@
         <div class="dir"><span class="preco">${l.preco} ouro</span>
         <button class="acao" type="button" data-comprar="${l.id}" ${tem || esgotada ? 'disabled' : ''}>${tem ? 'Você tem' : esgotada ? 'Esgotada' : 'Comprar'}</button></div></div>`;
     }).join('');
-    modal('Loja de skins', `<p class="nota">Seu ouro: <b>${Math.floor(P.ouro)}</b>. Todas as skins são limitadas. Cada skin serve só para a classe dela.</p>
+    const pr = precos();
+    modal('Loja', `<p class="nota">Seu ouro: <b>${Math.floor(P.ouro)}</b>.</p>
+      <h3 class="sub">Serviços</h3>
+      <div class="linha"><div><b>Criar um clã</b><small>Você vira o líder e chama quem quiser (até 30 membros).</small></div>
+        <div class="dir"><span class="preco">${pr.cla} ouro</span><button class="acao" type="button" id="lCla">${Rede.cla ? 'Você já tem clã' : 'Criar'}</button></div></div>
+      <div class="linha"><div><b>Trocar de nick</b><small>Seu nick hoje: ${esc(Rede.eu.nick)}</small></div>
+        <div class="dir"><span class="preco">${pr.nick} ouro</span><button class="acao" type="button" id="lNick">Trocar</button></div></div>
+      <h3 class="sub">Skins</h3><p class="nota">Todas as skins são limitadas. Cada skin serve só para a classe dela.</p>
       ${linhas || '<p class="nota">Nenhuma skin na loja agora. Volte depois!</p>'}`, el => {
+      el.querySelector('#lCla').addEventListener('click', () => telaCla());
+      el.querySelector('#lNick').addEventListener('click', () => telaTrocarNick());
       el.querySelectorAll('[data-comprar]').forEach(b => b.addEventListener('click', async () => {
         b.disabled = true;
         const r = await tentar(() => Rede.comprarSkin(Number(b.dataset.comprar)), 'Skin comprada! Equipe em Minhas skins');
@@ -273,6 +283,87 @@
     });
   }
 
+  // preços dos serviços (o administrador muda na aba Preços)
+  function precos() {
+    const p = (global.Jogo.ajustes && global.Jogo.ajustes.precos) || {};
+    return { cla: p.cla !== undefined ? Number(p.cla) : 5000, nick: p.nick !== undefined ? Number(p.nick) : 2000 };
+  }
+  function telaTrocarNick() {
+    const Rede = global.Rede, pr = precos();
+    modal('Trocar de nick', `<p class="nota">Custa <b>${pr.nick} ouro</b>. Seu ouro: <b>${Math.floor(J().P.ouro)}</b>. De 3 a 16 letras, números ou _.</p>
+      <div class="form"><input id="nNick" class="campo" maxlength="16" autocomplete="off" placeholder="Novo nick" value="${esc(Rede.eu.nick)}">
+      <button class="acao forte" id="nTrocar" type="button">Trocar por ${pr.nick} ouro</button></div>`, el => {
+      el.querySelector('#nTrocar').addEventListener('click', async () => {
+        const nick = el.querySelector('#nNick').value.trim();
+        if (!/^[A-Za-z0-9_]{3,16}$/.test(nick)) return aviso('O nick precisa ter de 3 a 16 letras, números ou _');
+        await Rede.sincronizar(true);
+        const r = await tentar(() => Rede.rpc('trocar_nick', { p_nick: nick }));
+        if (r) { Rede.depoisDeGastarNoServidor(r); aviso('Agora você é ' + r.nick); J().fecharModal(); }
+      });
+    });
+  }
+  // ---- clã ----
+  async function telaCla() {
+    const Rede = global.Rede, pr = precos();
+    const d = await tentar(() => Rede.carregarCla()); if (!d) return;
+    const eu = Rede.eu.id, souLider = d.cla && d.cla.lider === eu;
+    const nome = id => d.nicks[id] ? esc(d.nicks[id].nick) + ' <small class="inline">#' + d.nicks[id].num + '</small>' : '?';
+    let html;
+    if (d.cla) {
+      const membros = d.membros.slice().sort((a, b) => (a.jogador === d.cla.lider ? -1 : b.jogador === d.cla.lider ? 1 : 0));
+      html = `<h3 class="sub">🏰 ${esc(d.cla.nome)} <small class="inline">${membros.length}/30</small></h3>
+        <p class="nota">Os pontos do ranking de clãs vêm dos eventos ranqueados de cada membro.</p>
+        ${membros.map(m => `<div class="linha"><span>${m.jogador === d.cla.lider ? '👑 ' : ''}${m.jogador === eu ? '<b>Você</b>' : nome(m.jogador)}${m.jogador !== eu && Rede.remotos.has(m.jogador) ? ' <small class="inline online">neste mapa</small>' : ''}</span>
+          ${souLider && m.jogador !== eu ? `<button class="acao fina" type="button" data-expulsar="${m.jogador}">Expulsar</button>` : ''}</div>`).join('')}
+        <h3 class="sub">Chamar para o clã</h3>
+        <div class="linha"><input id="cNum" class="campo" inputmode="numeric" placeholder="ID do jogador"><button class="acao" id="cChamar" type="button">Chamar</button></div>
+        <p class="nota">Também dá para chamar tocando no ▾ ao lado do nome de quem está no mapa.</p>
+        <button class="acao" id="cSair" type="button">Sair do clã</button>`;
+    } else {
+      html = `${d.convites.length ? '<h3 class="sub">Convites para você</h3>' + d.convites.map(c => `<div class="linha"><span>🏰 ${esc(c.nome)} <small class="inline">por ${nome(c.de)}</small></span><div class="botoes">
+          <button class="acao fina forte" type="button" data-aceitar="${c.cla}">Entrar</button><button class="acao fina" type="button" data-recusar="${c.cla}">Recusar</button></div></div>`).join('') : ''}
+        <h3 class="sub">Criar um clã</h3>
+        <p class="nota">Custa <b>${pr.cla} ouro</b> (seu ouro: <b>${Math.floor(J().P.ouro)}</b>). Você vira o líder.</p>
+        <div class="form"><input id="cNome" class="campo" maxlength="20" placeholder="Nome do clã (3 a 20 letras)"><button class="acao forte" id="cCriar" type="button">Criar por ${pr.cla} ouro</button></div>`;
+    }
+    modal('Clã', html, el => {
+      const depois = r => { if (r !== undefined) telaCla(); };
+      const q = id => el.querySelector(id);
+      if (q('#cCriar')) q('#cCriar').addEventListener('click', async () => {
+        const nomeCla = q('#cNome').value.trim();
+        if (nomeCla.length < 3) return aviso('O nome do clã precisa de pelo menos 3 letras');
+        await Rede.sincronizar(true);
+        const r = await tentar(() => Rede.rpc('criar_cla', { p_nome: nomeCla }));
+        if (r) { Rede.depoisDeGastarNoServidor(r); aviso('Clã criado!'); telaCla(); }
+      });
+      if (q('#cChamar')) q('#cChamar').addEventListener('click', async () => depois(await tentar(() => Rede.rpc('convidar_cla', { p_num: Number(q('#cNum').value) }), r => r)));
+      if (q('#cSair')) q('#cSair').addEventListener('click', async () => { await Rede.sincronizar(true); depois(await tentar(() => Rede.rpc('sair_cla'), r => r)); });
+      el.querySelectorAll('[data-expulsar]').forEach(b => b.addEventListener('click', async () => depois(await tentar(() => Rede.rpc('expulsar_cla', { p_jogador: b.dataset.expulsar }), r => r))));
+      el.querySelectorAll('[data-aceitar]').forEach(b => b.addEventListener('click', async () => { await Rede.sincronizar(true); depois(await tentar(() => Rede.rpc('responder_convite_cla', { p_cla: Number(b.dataset.aceitar), p_aceitar: true }), r => r)); }));
+      el.querySelectorAll('[data-recusar]').forEach(b => b.addEventListener('click', async () => depois(await tentar(() => Rede.rpc('responder_convite_cla', { p_cla: Number(b.dataset.recusar), p_aceitar: false }), r => r))));
+    });
+  }
+  // ---- ▾ ao lado do nome de outro jogador ----
+  function menuJogador(uid, nick, num) {
+    const Rede = global.Rede, amigo = Rede.amigos.has(uid), naEquipe = Rede.aliado(uid);
+    modal(nick, `<p class="nota">${num ? 'ID #' + num : ''}${amigo ? ' · seu amigo' : ''}${naEquipe ? ' · na sua equipe' : ''}</p>
+      <div class="botoes coluna">
+        <button class="acao" type="button" data-j="amigo" ${amigo ? 'disabled' : ''}>${amigo ? 'Já é seu amigo' : '➕ Adicionar amigo'}</button>
+        <button class="acao" type="button" data-j="equipe" ${naEquipe ? 'disabled' : ''}>${naEquipe ? 'Já está na sua equipe' : '⚔️ Chamar para a equipe'}</button>
+        <button class="acao" type="button" data-j="cla">🏰 Convidar para o clã</button>
+        <button class="acao" type="button" data-j="conversa">💬 Conversa privada</button>
+      </div>
+      ${!amigo && !naEquipe ? '<p class="nota">Para a equipe, vocês precisam ser amigos antes.</p>' : ''}`, el => {
+      el.querySelectorAll('[data-j]').forEach(b => b.addEventListener('click', async () => {
+        const o = b.dataset.j;
+        if (o === 'conversa') return telaChat('privado', uid);
+        if (!num) return aviso('Esse jogador ainda não carregou');
+        const rpc = { amigo: 'pedir_amizade', equipe: 'convidar_equipe', cla: 'convidar_cla' }[o];
+        const r = await tentar(() => Rede.rpc(rpc, { p_num: num }), x => x);
+        if (r !== undefined) { if (o === 'equipe') Rede.carregarEquipe(); J().fecharModal(); }
+      }));
+    });
+  }
   function telaMinhasSkins() {
     const Rede = global.Rede, P = J().P;
     P.skinEquipada = P.skinEquipada || {};
@@ -540,8 +631,8 @@
   let jogadorSel = null;
   function telaAdmin(aba) {
     if (typeof aba !== 'string') aba = 'jogadores';
-    const abas = { jogadores: 'Jogadores', banimentos: 'Banimentos', recompensas: 'Recompensas', premios: 'Prêmios dos mobs', balanco: 'Dano e defesa', loja: 'Loja de skins', evento: 'Evento da arena', labirinto: 'Labirinto', cinematicas: 'Cinemáticas', moderadores: 'Moderadores', poderes: 'Meus poderes' };
-    const f = { jogadores: admJogadores, banimentos: admBanimentos, recompensas: admRecompensas, premios: admPremios, balanco: admBalanco, loja: admLoja, evento: admEvento, labirinto: admLabirinto, cinematicas: admCinematicas, moderadores: admModeradores, poderes: admPoderes }[aba];
+    const abas = { jogadores: 'Jogadores', banimentos: 'Banimentos', recompensas: 'Recompensas', premios: 'Prêmios dos mobs', balanco: 'Dano e defesa', loja: 'Loja de skins', evento: 'Evento da arena', labirinto: 'Labirinto', precos: 'Preços', cinematicas: 'Cinemáticas', moderadores: 'Moderadores', poderes: 'Meus poderes' };
+    const f = { jogadores: admJogadores, banimentos: admBanimentos, recompensas: admRecompensas, premios: admPremios, balanco: admBalanco, loja: admLoja, evento: admEvento, labirinto: admLabirinto, precos: admPrecos, cinematicas: admCinematicas, moderadores: admModeradores, poderes: admPoderes }[aba];
     f(abasHtml(abas, aba), el => ligarAbas(el, telaAdmin));
   }
   const adm = (topo, html, ligar, montarAbas) => modal('Administrador', topo + html, el => { montarAbas(el); if (ligar) ligar(el); });
@@ -809,6 +900,23 @@
         const valor = { id: nome + '|' + ini.toISOString() + '|' + fim.toISOString(), nome, ativo: el.querySelector('#eAtivo').checked,
           inicio: ini.toISOString(), fim: fim.toISOString(), metas };
         if (await tentar(() => global.Rede.rpc('salvar_config', { p_chave: 'arena_evento', p_valor: valor }), 'Evento salvo') !== undefined) telaAdmin('evento');
+      });
+    }, abas);
+  }
+
+  // ---- preços dos serviços da loja ----
+  async function admPrecos(topo, abas) {
+    await global.Rede.carregarAjustes();
+    const pr = precos();
+    const html = `<p class="nota">Valores em ouro cobrados na Loja (⋮ › Loja).</p>
+      <div class="form">
+        <label class="rotulo">Criar um clã<input id="pCla" class="campo" type="number" min="0" value="${pr.cla}"></label>
+        <label class="rotulo">Trocar de nick<input id="pNick" class="campo" type="number" min="0" value="${pr.nick}"></label>
+        <button class="acao forte" id="pSalvar" type="button">Salvar preços</button></div>`;
+    adm(topo, html, el => {
+      el.querySelector('#pSalvar').addEventListener('click', async () => {
+        const valor = { cla: Math.max(0, Number(el.querySelector('#pCla').value) || 0), nick: Math.max(0, Number(el.querySelector('#pNick').value) || 0) };
+        if (await tentar(() => global.Rede.rpc('salvar_config', { p_chave: 'precos', p_valor: valor }), 'Preços salvos') !== undefined) { global.Jogo.ajustes.precos = valor; telaAdmin('precos'); }
       });
     }, abas);
   }

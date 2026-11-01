@@ -74,7 +74,7 @@
       rios: [{ largura: 9, pts: [[66, -84], [60, -50], [55, -18], [56, 20], [62, 50], [68, 84]] }],
       lagos: [{ x: 45, z: 60, r: 11 }, { x: -76, z: -46, r: 10 }],
       aeroporto: { x: -98, z: 46 },
-      decor: praca(88, 0, false).concat([
+      decor: praca(88, 0, true).concat([
         { img: 'caverna_iso', h: 6, x: -90, z: 30 }, { img: 'cais_iso', h: 1.8, x: 49, z: 20 }
       ]),
       floresta: { qtd: 160, semente: 23, tint: '#8fb0a8' },
@@ -105,7 +105,7 @@
       aeroporto: { x: 128, z: -56 },
       eventoRank: { x: 0, z: 0, r: 24 },
       cachoeira: { x: -104, z: 44 },
-      decor: praca(-118, 0, false).concat([
+      decor: praca(-118, 0, true).concat([
         { img: 'caverna_iso', h: 6, x: 118, z: -18 }, { img: 'caverna_frente', h: 6.5, x: -104, z: 44 }
       ]),
       floresta: { qtd: 230, semente: 37, tint: '#e8d890' },
@@ -134,7 +134,7 @@
       lagos: [{ x: -110, z: 74, r: 9 }, { x: 116, z: 76, r: 9 }],
       aeroporto: { x: 146, z: 48 },
       arenas: [{ x: -70, z: -48, w: 110, h: 46 }, { x: 70, z: -48, w: 110, h: 46 }],
-      decor: praca(-140, 40, false).concat([
+      decor: praca(-140, 40, true).concat([
         { img: 'caverna_iso', h: 6, x: -134, z: 4 }, { img: 'caverna_iso', h: 6, x: 134, z: 4 },
         { img: 'caverna_frente', h: 5.5, x: -134, z: -26 }, { img: 'caverna_frente', h: 5.5, x: 134, z: -26 }
       ]),
@@ -169,7 +169,7 @@
       rios: [], lagos: [],
       aeroporto: { x: 100, z: -6 },
       serpente: { vida: 2500, dano: 70, alcance: 10, porJogadores: 4 },
-      decor: praca(-98, -2, false).concat([{ img: 'caverna_iso', h: 6, x: 96, z: 18 }]),
+      decor: praca(-98, -2, true).concat([{ img: 'caverna_iso', h: 6, x: 96, z: 18 }]),
       floresta: { qtd: 110, semente: 61, tint: '#9fe0c8', soIlhas: true },
       moitas: [[-60, -30], [-46, 44], [0, 8], [30, -32], [46, 36]],
       mobs: [
@@ -194,7 +194,7 @@
       lagos: [{ x: -36, z: 14, r: 9 }, { x: 42, z: 32, r: 12 }],
       aeroporto: { x: 82, z: -36 },
       podio: { x: 0, z: -26, zonaSegura: 20 },
-      decor: praca(-76, 0, false),
+      decor: praca(-76, 0, true),
       floresta: { qtd: 120, semente: 71, tint: '#ffd6e0' },
       moitas: [[-50, 20], [20, 40], [56, 10], [-10, 30]],
       mobs: [], minions: [],
@@ -209,16 +209,14 @@
     labirinto: {
       nome: 'Labirinto', evento: true, tam: [150, 210], ceu: '#c3d1d8', nevoa: [90, 210],
       chao: { tex: 'grama_mapa1', tint: '#a3c28e', metrosPorRepeticao: 6 },
-      entrada: [0, 92],
-      pracas: [{ x: 0, z: 88, w: 14, h: 14 }],
-      caminhos: [{ largura: 4.5, pts: [[0, 80], [-2, 58], [2, 36], [0, 13]] }],
+      entrada: [0, 94],
+      pracas: [{ x: 0, z: 88, w: 20, h: 20 }],
+      caminhos: [{ largura: 4.5, pts: [[0, 77], [-2, 58], [2, 36], [0, 13]] }],
       rios: [], lagos: [],
       aeroporto: { x: 0, z: 140 }, semAeroporto: true, semNoite: true,   // sempre de dia: as paredes precisam aparecer
-      decor: [
-        { img: 'poste_simples', h: 3.6, x: -8, z: 80 }, { img: 'poste_simples', h: 3.6, x: 8, z: 80 },
-        { img: 'banco_1', h: 1.3, x: -6, z: 94 }, { img: 'banco_2', h: 1.3, x: 6, z: 94 },
+      decor: praca(0, 88, true).concat([
         { img: 'poste_duplo', h: 4, x: -7, z: 16 }, { img: 'poste_duplo', h: 4, x: 7, z: 16 }
-      ],
+      ]),
       floresta: { qtd: 70, semente: 97, tint: '#d2e8b8' },
       moitas: [[-14, 60], [14, 44], [-12, 30]],
       mobs: [], minions: [], copiasMob: 0,
