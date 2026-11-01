@@ -5,5 +5,6 @@ self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => {
   const r = e.request;
   if (r.mode === 'navigate' || r.method !== 'GET' || new URL(r.url).origin !== self.location.origin) return;
+  if (r.destination === 'audio' || r.headers.has('range')) return;      // música e falas: direto do navegador
   e.respondWith(fetch(r).catch(() => Response.error()));
 });

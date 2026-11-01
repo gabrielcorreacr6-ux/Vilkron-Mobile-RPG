@@ -2688,7 +2688,7 @@
     intervalo: 7,                     // segundos mínimos entre uma fala e outra do mesmo herói
     chance: { ataque: 0.07, habilidade: 0.4, ult: 0.85, abate: 0.9, abateMob: 0.3, entrar: 1 }
   };
-  const SOM = { falas: true, volume: 0.9 };
+  const SOM = { falas: true, volume: 0.9, musica: true, volMusica: 0.3 };
   try { const v = JSON.parse(global.localStorage.getItem('vilkron_som') || 'null'); if (v) Object.assign(SOM, v); } catch (e) {}
   function pastaVoz(classe, genero, skin) {
     const a = classe + '_' + (skin && skin !== 'default' && skin !== 'padrao' ? skin + '_' : '') + genero, b = classe + '_' + genero;
@@ -2702,6 +2702,39 @@
     let a = _audios[url];
     if (!a) { a = _audios[url] = new Audio(url); a.preload = 'auto'; }
     try { a.pause(); a.currentTime = 0; a.volume = clamp((vol === undefined ? 1 : vol) * SOM.volume, 0, 1); const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+    abaixarMusica(isFinite(a.duration) && a.duration > 0 ? a.duration : 2.5);
+  }
+
+  // ===== música tema: toca baixinho e em loop; abaixa sozinha quando alguém fala =====
+  const MUSICA = { url: 'assets/musica/tema.mp3?v=1', abaixa: 0.35, velocidade: 0.6 };
+  let _mus = null, _musVol = 0, _musAbaixaAte = 0, _musFator = 1, _musTimer = null;
+  // efeitos especiais futuros também podem chamar: abaixarMusica(segundos, fator)
+  function abaixarMusica(seg, fator) {
+    const agora = Date.now(), f = fator === undefined ? MUSICA.abaixa : fator;
+    _musFator = agora < _musAbaixaAte ? Math.min(_musFator, f) : f;
+    _musAbaixaAte = Math.max(_musAbaixaAte, agora + (seg + 0.35) * 1000);
+  }
+  function musicaAtualizar() {
+    if (!_mus) return;
+    const agora = Date.now(), abaixada = agora < _musAbaixaAte;
+    if (!abaixada) _musFator = 1;
+    const alvo = SOM.musica && !document.hidden ? clamp(SOM.volMusica, 0, 1) * (abaixada ? _musFator : 1) : 0;
+    const passo = MUSICA.velocidade * 0.1;
+    _musVol += clamp(alvo - _musVol, -passo, passo * 0.5);
+    try { _mus.volume = clamp(_musVol, 0, 1); } catch (e) {}
+    if (alvo === 0 && _musVol <= 0.001 && !_mus.paused) _mus.pause();
+    else if (alvo > 0 && _mus.paused) { const p = _mus.play(); if (p && p.catch) p.catch(() => {}); }
+  }
+  function musicaTocar() {
+    if (!temDOM || !global.Audio) return;
+    if (!_mus) { _mus = new Audio(MUSICA.url); _mus.loop = true; _mus.preload = 'auto'; _mus.volume = 0; }
+    if (!_musTimer) _musTimer = setInterval(musicaAtualizar, 100);
+    if (SOM.musica && _mus.paused) { const p = _mus.play(); if (p && p.catch) p.catch(() => {}); }
+  }
+  // o navegador só deixa tocar som depois do primeiro toque na tela
+  if (temDOM) {
+    const primeiro = () => { musicaTocar(); ['pointerdown', 'keydown', 'touchend'].forEach(t => global.removeEventListener(t, primeiro, true)); };
+    ['pointerdown', 'keydown', 'touchend'].forEach(t => global.addEventListener(t, primeiro, true));
   }
   // o meu herói fala (às vezes); quem estiver perto ouve a mesma fala
   function falar(h, momento, slot) {
@@ -4689,12 +4722,16 @@
   }
   function telaSom() {
     abrirModal('Som', `
+      <label class="rotulo"><input id="somMusica" type="checkbox" ${SOM.musica ? 'checked' : ''}> Música tema</label>
+      <div style="display:flex;align-items:center;gap:10px;margin:10px 0 18px"><span>Volume da música</span><input id="somVolMus" type="range" min="0" max="100" step="5" style="flex:1" value="${Math.round(SOM.volMusica * 100)}"></div>
       <label class="rotulo"><input id="somFalas" type="checkbox" ${SOM.falas ? 'checked' : ''}> Falas dos heróis</label>
-      <div style="display:flex;align-items:center;gap:10px;margin:14px 0"><span>Volume</span><input id="somVol" type="range" min="0" max="100" step="5" style="flex:1" value="${Math.round(SOM.volume * 100)}"></div>
+      <div style="display:flex;align-items:center;gap:10px;margin:14px 0"><span>Volume das falas</span><input id="somVol" type="range" min="0" max="100" step="5" style="flex:1" value="${Math.round(SOM.volume * 100)}"></div>
       <button class="acao" id="somTeste" type="button">Ouvir uma fala</button>
-      <p class="nota">As falas tocam de vez em quando ao atacar, usar habilidades e derrotar inimigos. Jogadores perto de você também ouvem.</p>`, el => {
+      <p class="nota">A música abaixa sozinha quando um herói fala. As falas tocam de vez em quando ao atacar, usar habilidades e derrotar inimigos. Jogadores perto de você também ouvem.</p>`, el => {
       const salvarSom = () => { try { global.localStorage.setItem('vilkron_som', JSON.stringify(SOM)); } catch (e) {} };
       el.querySelector('#somFalas').addEventListener('change', e => { SOM.falas = e.target.checked; salvarSom(); });
+      el.querySelector('#somMusica').addEventListener('change', e => { SOM.musica = e.target.checked; salvarSom(); musicaTocar(); });
+      el.querySelector('#somVolMus').addEventListener('input', e => { SOM.volMusica = Number(e.target.value) / 100; salvarSom(); musicaTocar(); });
       el.querySelector('#somVol').addEventListener('input', e => { SOM.volume = Number(e.target.value) / 100; salvarSom(); });
       el.querySelector('#somTeste').addEventListener('click', () => {
         const h = E.heroi, pasta = h && pastaVoz(h.classe, P.genero, (P.skinEquipada || {})[h.classe]);
@@ -4938,7 +4975,7 @@
     bA.addEventListener('pointermove', e => {
       if (e.pointerId !== idA) return;
       const dx = e.clientX - axc, dy = e.clientY - ayc, d = Math.hypot(dx, dy);
-      if (d > 16) { Entrada.miraAtaque = Math.atan2(dx, dy); miraEl.hidden = false; miraEl.dataset.ang = Entrada.miraAtaque; miraEl.dataset.dist = 1; }
+      if (d > 16) { Entrada.miraAtaque = Math.atan2(dx, dy); miraEl.hidden = false; miraEl.dataset.ang = Entrada.miraAtaque; miraEl.dataset.dist = 1; miraEl.dataset.slot = '0'; }
       else { Entrada.miraAtaque = null; miraEl.hidden = true; }
     });
     const soltarA = e => { if (e.pointerId !== idA) return; idA = null; Entrada.atacando = false; Entrada.miraAtaque = null; miraEl.hidden = true; bA.classList.remove('ativo'); };
@@ -4946,7 +4983,7 @@
 
     // habilidades e relógio: toque mira sozinho, arrastar escolhe direção
     const mira = $('mira');
-    function botaoMira(el, aoSoltar) {
+    function botaoMira(el, aoSoltar, slot) {
       let id = null, cx = 0, cy = 0, dx = 0, dy = 0;
       el.addEventListener('pointerdown', e => {
         e.preventDefault(); id = e.pointerId; const r = el.getBoundingClientRect();
@@ -4957,7 +4994,7 @@
         if (e.pointerId !== id) return;
         dx = e.clientX - cx; dy = e.clientY - cy;
         const d = Math.hypot(dx, dy);
-        if (d > 12) { mira.hidden = false; mira.dataset.ang = Math.atan2(dx, dy); mira.dataset.dist = Math.min(1, d / 90); }
+        if (d > 12) { mira.hidden = false; mira.dataset.ang = Math.atan2(dx, dy); mira.dataset.dist = Math.min(1, d / 90); mira.dataset.slot = slot; }
         else mira.hidden = true;
       });
       const fim = e => {
@@ -4968,12 +5005,12 @@
       };
       el.addEventListener('pointerup', fim); el.addEventListener('pointercancel', fim);
     }
-    botaoMira($('bHab1'), m => usar(1, m));
-    botaoMira($('bHab2'), m => usar(2, m));
-    botaoMira($('bHab3'), m => usar(3, m));
+    botaoMira($('bHab1'), m => usar(1, m), '1');
+    botaoMira($('bHab2'), m => usar(2, m), '2');
+    botaoMira($('bHab3'), m => usar(3, m), '3');
     Object.keys(CONFIG.loja).forEach(k => {
       const b = $('item_' + k);
-      if (k === 'relogio') botaoMira(b, m => { if (!usarItem(k, m)) aviso('Sem relógio no inventário'); });
+      if (k === 'relogio') botaoMira(b, m => { if (!usarItem(k, m)) aviso('Sem relógio no inventário'); }, 'relogio');
       else b.addEventListener('click', () => { if (!usarItem(k)) aviso('Compre na lojinha da praça do mapa 1'); });
     });
 
@@ -5014,19 +5051,132 @@
       else telaRanking(q);
     }));
   }
+  // ===== indicador de mira: mostra no chão o formato exato da área de acerto =====
+  // formas em coordenadas locais (frente = +Z); o grupo gira com o ângulo da mira
+  const COR_MIRA = { dano: 0xffb347, apoio: 0x6dffb0, item: 0x8fd0ff };
+  function poligonoForma(f) {
+    const pts = [];
+    if (f.tipo === 'circulo') { const n = 40; for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; pts.push([Math.sin(a) * f.r, Math.cos(a) * f.r]); } }
+    else if (f.tipo === 'cone') {
+      pts.push([0, 0]); const n = 24;
+      for (let i = 0; i <= n; i++) { const a = -f.ab + 2 * f.ab * i / n; pts.push([Math.sin(a) * f.r, Math.cos(a) * f.r]); }
+    } else if (f.tipo === 'faixa') {
+      // corredor com a ponta arredondada (como a área real do golpe)
+      const w = f.larg / 2, n = 12;
+      pts.push([w, f.ini || 0]);
+      for (let i = 0; i <= n; i++) { const a = Math.PI / 2 - Math.PI * i / n; pts.push([Math.sin(a) * w, f.comp + Math.cos(a) * w * (f.ponta || 0)]); }
+      pts.push([-w, f.ini || 0]);
+      pts.reverse();
+    } else if (f.tipo === 'triangulo') pts.push([0, f.ini], [-f.base / 2, f.comp], [f.base / 2, f.comp]);
+    return pts;
+  }
+  function geoForma(f, so) {
+    // so = 'borda' | 'preench'
+    let pts = poligonoForma(f);
+    // garante sentido anti-horário (para as normais da borda apontarem para dentro)
+    let area2 = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; area2 += p[0] * q[1] - q[0] * p[1]; }
+    if (area2 < 0) pts = pts.slice().reverse();
+    const pos = [];
+    if (so === 'preench') {
+      let cx = 0, cz = 0; pts.forEach(p => { cx += p[0]; cz += p[1]; }); cx /= pts.length; cz /= pts.length;
+      for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; pos.push(cx, 0, cz, q[0], 0, q[1], p[0], 0, p[1]); }
+    } else {
+      const w = f.borda || 0.09, n = pts.length, dentro = [];
+      for (let i = 0; i < n; i++) {
+        const a = pts[(i - 1 + n) % n], p = pts[i], b = pts[(i + 1) % n];
+        const n1 = norm2([-(p[1] - a[1]), p[0] - a[0]]), n2 = norm2([-(b[1] - p[1]), b[0] - p[0]]);
+        let m = norm2([n1[0] + n2[0], n1[1] + n2[1]]); const c = Math.max(0.35, m[0] * n1[0] + m[1] * n1[1]);
+        dentro.push([p[0] + m[0] * w / c, p[1] + m[1] * w / c]);
+      }
+      for (let i = 0; i < n; i++) {
+        const p = pts[i], q = pts[(i + 1) % n], pi = dentro[i], qi = dentro[(i + 1) % n];
+        pos.push(p[0], 0, p[1], pi[0], 0, pi[1], q[0], 0, q[1], q[0], 0, q[1], pi[0], 0, pi[1], qi[0], 0, qi[1]);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    return g;
+  }
+  function norm2(v) { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; }
+  // o que cada herói mostra em cada botão; dist = 0..10 (como a mira chega na habilidade)
+  function formasMira(h, slot, dist) {
+    const cls = CLASSES[h.classe] || {}, c = h.classe, F = [];
+    const longe = (min, max) => clamp(dist, min, max);
+    const ponto = (d, r, cor, alcance) => {
+      if (alcance) F.push({ tipo: 'circulo', r: alcance, cor, fraco: true, so: 'borda', borda: 0.06 });
+      F.push({ tipo: 'faixa', larg: 0.12, comp: Math.max(0, d - r), cor, fraco: true, so: 'preench' });
+      F.push({ tipo: 'circulo', r, cor, frente: d });
+    };
+    const projetil = () => F.push({ tipo: 'faixa', larg: 1.6, comp: cls.alcance + 1.5, ponta: 1, cor: COR_MIRA.dano });
+    const jinCone = modo => {
+      const cj = CONFIG.jin, mult = modo === 'socos' ? cj.socos.alcance : modo === 'capoeira' ? cj.capoeira.alcance : 1;
+      F.push({ tipo: 'cone', r: cls.alcance * mult + (modo === 'socos' ? 0 : 0.4), ab: modo === 'capoeira' ? 1.3 : 0.9, cor: COR_MIRA.dano });
+    };
+    if (slot === 'relogio') { ponto(longe(3, 12), 5, COR_MIRA.item, 12); return F; }
+    slot = Number(slot);
+    if (c === 'soldado') {
+      if (slot === 0) F.push({ tipo: 'cone', r: 3.0, ab: 1.2, cor: COR_MIRA.dano });
+      else if (slot === 1) F.push({ tipo: 'circulo', r: 3.2, cor: COR_MIRA.dano });
+      else if (slot === 2) F.push({ tipo: 'faixa', larg: 2.8, comp: 13 * 0.55, ponta: 1, cor: COR_MIRA.dano });
+      else { const u = CONFIG.ultimate.soldado; F.push({ tipo: 'faixa', larg: u.largura * 2, comp: u.alcance, ponta: 1, cor: COR_MIRA.dano }); }
+    } else if (c === 'mago') {
+      if (slot === 0) projetil();
+      else if (slot === 1) ponto(longe(2, 10), CONFIG.circuloMago.raio, COR_MIRA.dano, 10);
+      else if (slot === 2) ponto(6, 0.9, COR_MIRA.apoio);
+      else { const u = CONFIG.ultimate.mago; F.push({ tipo: 'triangulo', ini: 0.6, comp: u.comprimento, base: u.base, cor: COR_MIRA.dano }); }
+    } else if (c === 'atirador') {
+      const ca = CONFIG.atirador;
+      if (slot === 0) projetil();
+      else if (slot === 1) { F.push({ tipo: 'circulo', r: 1.6, cor: COR_MIRA.apoio }); projetil(); F[F.length - 1].fraco = true; }
+      else if (slot === 2) { projetil(); F[F.length - 1].fraco = true; F.push({ tipo: 'circulo', r: ca.explosaoRaio, cor: COR_MIRA.dano, frente: cls.alcance + 1.5 }); }
+      else ponto(longe(2, ca.distSalto), 1.2, COR_MIRA.apoio, ca.distSalto);
+    } else if (c === 'suporte') {
+      if (slot === 0) projetil();
+      else if (slot === 1) F.push({ tipo: 'circulo', r: 7, cor: COR_MIRA.apoio });
+      else if (slot === 2) F.push({ tipo: 'circulo', r: 6, cor: COR_MIRA.apoio });
+      else F.push({ tipo: 'circulo', r: CONFIG.ultimate.suporte.raio, cor: COR_MIRA.dano });
+    } else if (c === 'jin') {
+      if (slot === 0) jinCone(jinModo(h));
+      else if (slot === 1) jinCone('socos');
+      else if (slot === 2) jinCone('capoeira');
+      else { const k = CONFIG.jin.kungfu; ponto(longe(1.8, k.avanco), k.raio, COR_MIRA.dano, k.avanco); }
+    }
+    return F;
+  }
+  function chaveForma(f) { return [f.tipo, f.r, f.ab, f.larg, f.comp, f.ini, f.base, f.ponta, f.so, f.borda].join('|'); }
   function desenharMira() {
     const mira = $('mira'), h = E.heroi;
-    if (!mira || mira.hidden || !h) { if (E.marcaMira) E.marcaMira.visible = false; return; }
-    if (!E.marcaMira) {
-      E.marcaMira = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 1), new THREE.MeshBasicMaterial({ color: 0xffe9b0, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }));
-      E.marcaMira.rotation.x = -Math.PI / 2; E.marcaMira.renderOrder = 7;
+    const g0 = E.marcaMira;
+    if (!mira || mira.hidden || !h || !THREE.BufferGeometry) { if (g0) g0.visible = false; return; }
+    if (!g0 || !g0.userData.formas) {
+      E.marcaMira = new THREE.Group(); E.marcaMira.userData.formas = {}; E.marcaMira.userData.usadas = [];
     }
-    if (E.marcaMira.parent !== E.mundo) E.mundo.add(E.marcaMira);
-    const ang = Number(mira.dataset.ang), d = 2 + Number(mira.dataset.dist) * 8;
-    E.marcaMira.visible = true;
-    E.marcaMira.scale.set(1, d, 1);
-    E.marcaMira.position.set(h.x + Math.sin(ang) * d / 2, 0.15, h.z + Math.cos(ang) * d / 2);
-    E.marcaMira.rotation.z = ang + Math.PI;
+    const G = E.marcaMira;
+    if (G.parent !== E.mundo) E.mundo.add(G);
+    const ang = Number(mira.dataset.ang) || 0, dist = (Number(mira.dataset.dist) || 0) * 10, slot = mira.dataset.slot || '0';
+    const formas = formasMira(h, slot, dist);
+    G.visible = true;
+    G.position.set(h.x, 0.13, h.z);
+    G.rotation.y = ang;
+    G.userData.usadas.forEach(m => { m.visible = false; });
+    G.userData.usadas = [];
+    const pulso = 0.85 + Math.sin(E.t * 6) * 0.15;
+    formas.forEach((f, i) => {
+      ['preench', 'borda'].forEach(parte => {
+        if (f.so && f.so !== parte) return;
+        const k = chaveForma(f) + '#' + parte + '#' + i;
+        let m = G.userData.formas[k];
+        if (!m) {
+          m = new THREE.Mesh(geoForma(f, parte), new THREE.MeshBasicMaterial({ color: f.cor, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: parte === 'borda' ? THREE.NormalBlending : THREE.AdditiveBlending }));
+          m.renderOrder = parte === 'borda' ? 9 : 8; G.userData.formas[k] = m; G.add(m);
+        }
+        m.material.color.setHex(f.cor);
+        const base = parte === 'borda' ? (f.fraco ? 0.3 : 0.8) : (f.fraco ? 0.1 : 0.16);
+        m.material.opacity = base * (parte === 'borda' ? pulso : 1);
+        m.position.set(0, parte === 'borda' ? 0.005 : 0, f.frente || 0);
+        m.visible = true; G.userData.usadas.push(m);
+      });
+    });
   }
 
   /* ======================= INÍCIO ======================= */
@@ -5089,7 +5239,7 @@
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
       atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
-      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, tocarFala, pastaVoz, nomeHeroi, SOM, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
+      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, tocarFala, pastaVoz, nomeHeroi, SOM, abaixarMusica, musicaTocar, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
     _t: { CONFIG, E, P, R, MIRA_AUX, CAMERA, heroiLiberado, jinModo, labRelogio, labPadrao, labEntrar, labSair, labRota, labAbrirBau, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
