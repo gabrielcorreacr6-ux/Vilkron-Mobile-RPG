@@ -58,7 +58,8 @@
     },
     generos: { m: 'Homem', f: 'Mulher' },
     // estados que todas as skins de uma classe pegam da animação nova (arquivos em assets/anims/<classe>_<skin>/)
-    herdarSkins: { soldado: ['habilidade2'] },
+    // (o parado da Vilkronomita das Sombras vale para todo o Soldado e todo o Jin)
+    herdarSkins: { soldado: ['habilidade2', 'parado'], jin: ['parado', 'Punch_Combo_2'] },
     // realce das skins (cores mais vivas): metal máximo e quanto a textura acende sozinha
     // realce: cada textura é ajustada sozinha (escura sobe, clara fica como está); o brilho próprio é pequeno para o branco não estourar
     realceSkins: { metal: 0.3, brilho: 0.12, noite: 0.08, brilhoCor: 0.75, alvoLuz: 0.3, alvoCor: 0.4, maxGanho: 1.5, maxCor: 1.7, contraste: 1.15 },
@@ -156,13 +157,11 @@
             { clipe: 'Punch_Combo_1', de: 0.33, ate: 0.5, golpe: 0.3, tipo: 'soco', duracao: 0.5 },
             { clipe: 'Rising_Flying_Kick', golpe: 0.62, tipo: 'chute', duracao: 0.95 }
           ],
+          // Socos: as três sequências de socos inteiras, uma depois da outra (cada uma acerta 3 vezes)
           socos: [
-            { clipe: 'Punch_Combo', de: 0.0, ate: 0.32, golpe: 0.7, tipo: 'soco', duracao: 0.45 },
-            { clipe: 'Punch_Combo', de: 0.32, ate: 0.55, golpe: 0.4, tipo: 'soco', duracao: 0.4 },
-            { clipe: 'Punch_Combo', de: 0.55, ate: 0.85, golpe: 0.47, tipo: 'soco', duracao: 0.45 },
-            { clipe: 'Punch_Combo_1', de: 0.1, ate: 0.33, golpe: 0.7, tipo: 'soco', duracao: 0.45 },
-            { clipe: 'Punch_Combo_1', de: 0.33, ate: 0.5, golpe: 0.3, tipo: 'soco', duracao: 0.4 },
-            { clipe: 'Punch_Combo_1', de: 0.5, ate: 0.75, golpe: 0.36, tipo: 'soco', duracao: 0.45 }
+            { clipe: 'Punch_Combo', de: 0.05, ate: 0.8, golpe: 0.24, golpes: [0.24, 0.48, 0.85], tipo: 'soco', duracao: 1.1 },
+            { clipe: 'Punch_Combo_1', de: 0.15, ate: 0.68, golpe: 0.21, golpes: [0.21, 0.43, 0.85], tipo: 'soco', duracao: 1.0 },
+            { clipe: 'Punch_Combo_2', de: 0.05, ate: 0.5, golpe: 0.16, golpes: [0.16, 0.48, 0.84], tipo: 'soco', duracao: 1.1 }
           ],
           capoeira: [
             { clipe: 'Sweeping_Kick', de: 0.2, ate: 0.75, golpe: 0.42, tipo: 'capoeira', duracao: 0.9 },
@@ -607,7 +606,7 @@
       noLugar(c);
       const acao = this.mixer.clipAction(c);
       acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true;
-      this.varAtaque.push({ acao, escala: c.duration > 0 ? c.duration / (v.duracao || CATALOGO.duracoes.ataque) : 1, golpe: v.golpe, tipo: v.tipo, dur: v.duracao || CATALOGO.duracoes.ataque });
+      this.varAtaque.push({ acao, escala: c.duration > 0 ? c.duration / (v.duracao || CATALOGO.duracoes.ataque) : 1, golpe: v.golpe, golpes: v.golpes, tipo: v.tipo, clipe: v.clipe, dur: v.duracao || CATALOGO.duracoes.ataque });
       this.iVar = -1;
       return true;
     }
@@ -685,6 +684,11 @@
     mover(velocidade) {
       this.velMov = velocidade;
       this.base = velocidade < 0.05 ? 'parado' : (velocidade >= this.limiarCorrer ? 'correr' : 'andar');
+      // terminou o golpe do combo e começou a andar: solta a guarda e anda normal (antes deslizava na pose do golpe)
+      if (velocidade >= 0.3 && this.comboAtivo && this.estado !== 'ataque' && !this.morto && this.acaoAtual === this.comboAtivo.acao) {
+        this.comboAtivo.ate = 0; this.comboAtivo = null; this.estado = null;
+        this.tocar(this.base, { fade: 0.15 }); return;
+      }
       if (!this.morto && !UMA_VEZ[this.estado] && this.estado !== this.base) this.tocar(this.base);
     }
 
@@ -990,7 +994,21 @@
     for (const estado of estados) {
       const r = await carregarArquivo(pasta + estado + '.glb');
       const clip = r && r.animations && r.animations[0];
-      if (clip && anim) anim.adicionarClipe(estado, clip);
+      if (!clip || !anim) continue;
+      // golpe que faltava num conjunto do ataque básico (ex.: 3ª sequência de socos nas skins do Jin)
+      const cfgA = anim.config && anim.config.ataque;
+      if (cfgA && cfgA.conjuntos && anim.conjuntos && ESTADOS.indexOf(estado) < 0) {
+        const antes = anim.varAtaque;
+        Object.keys(cfgA.conjuntos).forEach(nome => cfgA.conjuntos[nome].forEach(v => {
+          const lista = anim.conjuntos[nome] || (anim.conjuntos[nome] = []);
+          if (v.clipe !== estado || lista.some(x => x.clipe === estado)) return;
+          anim.varAtaque = lista; anim.adicionarVariacaoAtaque(clip, v);
+        }));
+        anim.varAtaque = antes;
+        if (anim.conjunto) anim.usarConjunto(anim.conjunto);
+        continue;
+      }
+      anim.adicionarClipe(estado, clip);
     }
   }
   const ESTADOS = ['parado', 'andar', 'correr', 'ataque', 'habilidade1', 'habilidade2', 'habilidade3', 'dano', 'morte'];
@@ -1202,7 +1220,7 @@
     const armas = skin.armas || CATALOGO.armasDaClasse[o.classe];
     if (gltf && armas && !o.semArmas) carregarArmas(raiz.userData.animador, armas);   // em segundo plano
     // animações novas da classe que as skins herdam (arquivo pequeno, já ajustado ao esqueleto da skin)
-    const herdadas = gltf && skin.id !== 'default' && CATALOGO.herdarSkins[o.classe];
+    const herdadas = gltf && CATALOGO.herdarSkins[o.classe];
     if (herdadas) herdarAnimacoes(raiz.userData.animador, `${BASE}anims/${o.classe}_${genArq === 'f' ? 'f_' : ''}${skin.id}/`, herdadas);
     return raiz;
   }

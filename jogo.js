@@ -65,8 +65,8 @@
       sequencia: [0.2, 0.6, 1.2], esqueceSequencia: 4 },
     // Jin: soco dá lentidão curta; chute voador atordoa; Socos (hab. 1) e Capoeira (hab. 2) trocam os golpes do ataque básico
     jin: { soco: { dano: 1.0, slow: [0.35, 0.2] }, chute: { dano: 1.35, stun: 1.2 },
-      socos: { dur: 6, dano: 1.05, slow: [0.35, 2], alcance: 1.15 },
-      capoeira: { dur: 6, dano: 1.15, stun: 0.35, empurra: 1.6, alcance: 1.15 },
+      socos: { dur: 6, dano: 1.05, slow: [0.35, 2], alcance: 1.25 },
+      capoeira: { dur: 6, dano: 1.15, stun: 0.35, empurra: 1.6, alcance: 1.25 },
       kungfu: { alcance: 3.2, avanco: 8, dano: 3.6, raio: 2.8, arremesso: 9 } },
     arena: { inscricao: 150, minionsCada: 30, respawnBase: 30, respawnPasso: 20, respawnMax: 120 },
     loja: {
@@ -1728,7 +1728,7 @@
   }
   function limparFx() { Object.keys(FX).forEach(n => { const f = FX[n]; f.vivos.fill(null); f.geo.attributes.position.array.fill(-999); f.sujo = true; }); }
   // brilho em volta do herói enquanto um efeito dura (aceleração, tiros explosivos...)
-  function aura(e, cor, dur, densidade, naMao) {
+  function aura(e, cor, dur, densidade, naMao, enquanto) {
     let acc = 0;
     E.efeitos.push({ t: 0, atualizar(dt) {
       this.t += dt; acc += dt * (densidade || 20);
@@ -1737,7 +1737,7 @@
         if (naMao && e.obj && Skins.posicaoOsso && Skins.posicaoOsso(e.obj, 'righthand', _vfx)) emitir('faisca', _vfx.x, _vfx.y, _vfx.z, { n: 1, cor, vel: 0.4, subida: 0.8, vida: 0.35 });
         else emitir('faisca', e.x, 0.2, e.z, { n: 1, cor, vel: 0.3, subida: 2.4, vida: 0.6, raio: 0.7, alturaVar: 1.2 });
       }
-      if (this.t >= dur || e.morto) return true;
+      if (this.t >= dur || e.morto || (enquanto && !enquanto())) return true;
     } });
   }
   const _vfx = THREE.Vector3 ? new THREE.Vector3() : null;
@@ -2613,6 +2613,27 @@
     h.anim.tocar('habilidade3');
   }
 
+  // um golpe do Jin (soco, chute ou capoeira) com o efeito de cada modo; nas sequências de socos cada acerto vale metade
+  function golpeJin(h, g, modo) {
+    const c = CONFIG.jin, tipo = (g && g.tipo) || 'soco', tm = tema(h), parte = g && g.golpes && g.golpes.length > 1 ? 0.5 : 1;
+    const alc = CLASSES.jin.alcance * (modo === 'socos' ? c.socos.alcance : modo === 'capoeira' ? c.capoeira.alcance : 1) + (tipo === 'soco' ? 0 : 0.4);
+    const frente = [h.x + Math.sin(h.rot) * 1.1, h.z + Math.cos(h.rot) * 1.1];
+    let acertou = 0;
+    cone(h, h.rot, alc, tipo === 'capoeira' ? 1.3 : 0.9, e => {
+      acertou++;
+      if (modo === 'socos') { causarDano(e, CLASSES.jin.dano * c.socos.dano * parte, h); controlar(e, { slow: c.socos.slow }); }
+      else if (modo === 'capoeira') {
+        causarDano(e, CLASSES.jin.dano * c.capoeira.dano, h);
+        const a = Math.atan2(e.x - h.x, e.z - h.z);
+        controlar(e, { stun: c.capoeira.stun, empurrar: [Math.sin(a) * c.capoeira.empurra, Math.cos(a) * c.capoeira.empurra] });
+      } else if (tipo === 'chute') { causarDano(e, CLASSES.jin.dano * c.chute.dano, h); controlar(e, { stun: c.chute.stun }); }
+      else { causarDano(e, CLASSES.jin.dano * c.soco.dano, h); controlar(e, { slow: c.soco.slow }); }
+      emitir('faisca', e.x, 1.1, e.z, { n: tipo === 'soco' ? 8 : 14, cor: modo === 'socos' ? tm.socos : modo === 'capoeira' ? tm.capoeira : tm.faisca, vel: 3.5, subida: 2, grav: 9, vida: 0.35 });
+    });
+    // impacto no ar mesmo sem acertar: um "pof" curto na frente
+    emitir('media', frente[0], tipo === 'soco' ? 1.2 : 0.9, frente[1], { n: acertou ? 6 : 3, cor: modo === 'socos' ? tm.socos : modo === 'capoeira' ? tm.capoeira : tm.principal, vel: 1.4, vida: 0.22 });
+    if (tipo !== 'soco') anelEfeito(frente[0], frente[1], modo === 'capoeira' ? 1.6 : 1.1, modo === 'capoeira' ? tm.capoeira : tm.principal, 0.3, true);
+  }
   const HABILIDADES = {
     soldado: [
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.45, aoAcertar: () => {
@@ -2740,32 +2761,20 @@
     // Jin: socos e chute voador; Socos e Capoeira trocam o estilo do básico; Kung Fu arremessa
     jin: [
       (h, ang) => {
-        const modo = jinModo(h), c = CONFIG.jin;
-        h.anim.tocar('ataque', { velocidade: bonus().velAtaque, aoAcertar: () => {
-          const g = h.anim.golpeAtual ? h.anim.golpeAtual() : null, tipo = (g && g.tipo) || 'soco', tm = tema(h);
-          const alc = CLASSES.jin.alcance * (modo === 'socos' ? c.socos.alcance : modo === 'capoeira' ? c.capoeira.alcance : 1) + (tipo === 'soco' ? 0 : 0.4);
-          const frente = [h.x + Math.sin(h.rot) * 1.1, h.z + Math.cos(h.rot) * 1.1];
-          let acertou = 0;
-          cone(h, h.rot, alc, tipo === 'capoeira' ? 1.3 : 0.9, e => {
-            acertou++;
-            if (modo === 'socos') { causarDano(e, CLASSES.jin.dano * c.socos.dano, h); controlar(e, { slow: c.socos.slow }); }
-            else if (modo === 'capoeira') {
-              causarDano(e, CLASSES.jin.dano * c.capoeira.dano, h);
-              const a = Math.atan2(e.x - h.x, e.z - h.z);
-              controlar(e, { stun: c.capoeira.stun, empurrar: [Math.sin(a) * c.capoeira.empurra, Math.cos(a) * c.capoeira.empurra] });
-            } else if (tipo === 'chute') { causarDano(e, CLASSES.jin.dano * c.chute.dano, h); controlar(e, { stun: c.chute.stun }); }
-            else { causarDano(e, CLASSES.jin.dano * c.soco.dano, h); controlar(e, { slow: c.soco.slow }); }
-            emitir('faisca', e.x, 1.1, e.z, { n: tipo === 'soco' ? 8 : 14, cor: modo === 'socos' ? tm.socos : modo === 'capoeira' ? tm.capoeira : tm.faisca, vel: 3.5, subida: 2, grav: 9, vida: 0.35 });
-          });
-          // impacto no ar mesmo sem acertar: um "pof" curto na frente
-          emitir('media', frente[0], tipo === 'soco' ? 1.2 : 0.9, frente[1], { n: acertou ? 6 : 3, cor: modo === 'socos' ? tm.socos : modo === 'capoeira' ? tm.capoeira : tm.principal, vel: 1.4, vida: 0.22 });
-          if (tipo !== 'soco') anelEfeito(frente[0], frente[1], modo === 'capoeira' ? 1.6 : 1.1, modo === 'capoeira' ? tm.capoeira : tm.principal, 0.3, true);
+        const modo = jinModo(h), vel = bonus().velAtaque;
+        h.anim.tocar('ataque', { velocidade: vel, aoAcertar: () => {
+          const g = h.anim.golpeAtual ? h.anim.golpeAtual() : null;
+          golpeJin(h, g, modo);
+          // sequência de socos: os outros golpes da mesma animação também acertam
+          if (g && g.golpes && g.golpes.length > 1) g.golpes.slice(1).forEach(f => agendar((f - g.golpes[0]) * g.dur / vel, () => {
+            if (!h.morto && h.anim.estado === 'ataque' && h.anim.golpeAtual() === g) golpeJin(h, g, modo);
+          }));
         } });
         // cada golpe tem o seu tempo: o próximo só sai quando este termina
         const g = h.anim.golpeAtual ? h.anim.golpeAtual() : null;
         if (g && g.dur) h.cds[0] = E.t + Math.max(CLASSES.jin.cd[0], g.dur * 0.92) / velAtaque(h);
       },
-      // Socos: 6 s só de socos rápidos; cada soco deixa lento por 2 s
+      // Socos: 6 s das três sequências de socos; cada soco deixa lento por 2 s
       (h) => jinTrocarModo(h, 'socos', CONFIG.jin.socos.dur),
       // Capoeira: 6 s de gingados; cada golpe atordoa um pouco e empurra para frente
       (h) => jinTrocarModo(h, 'capoeira', CONFIG.jin.capoeira.dur),
@@ -2809,12 +2818,13 @@
   }
   function jinTrocarModo(h, nome, dur) {
     const tm = tema(h), cor = nome === 'socos' ? tm.socos : tm.capoeira;
-    h.jinModo = { nome, ate: E.t + dur };
+    // um modo cancela o outro: ligar Capoeira desliga Socos (e vice-versa)
+    const modo = h.jinModo = { nome, ate: E.t + dur };
     if (h.anim.usarConjunto) h.anim.usarConjunto(nome);
     h.cds[0] = E.t + 0.1;
     anelEfeito(h.x, h.z, 1.8, cor, 0.5, true);
     emitir('media', h.x, 1, h.z, { n: 24, cor, vel: 3, subida: 1.5, vida: 0.5, arrasto: 3 });
-    aura(h, cor, dur, 22, true);
+    aura(h, cor, dur, 22, true, () => h.jinModo === modo);
   }
   function corteVisual(h, ang, cor) {
     // marca do golpe: só aparece para quem ataca (não vai para a rede), fina, no chão e bem apagada
