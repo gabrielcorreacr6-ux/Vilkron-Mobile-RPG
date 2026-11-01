@@ -200,6 +200,31 @@
       mobs: [], minions: [],
       pvpLivre: true,
       passe: { nivel: 5, preco: { simples: 80, ferias: 140, cidadania: 1000 } }
+    },
+
+    /* ---------------- EVENTO: LABIRINTO ----------------
+       Só abre em eventos especiais (o administrador liga). Entrada pelas cavernas dos minions.
+       Na frente: clareira com árvores e a placa; depois, o labirinto (11 x 11 salas de 9 m)
+       com uma única porta. O fim fica no fundo, no túnel das aranhas, ao lado do baú. */
+    labirinto: {
+      nome: 'Labirinto', evento: true, tam: [150, 210], ceu: '#aebcc4', nevoa: [55, 130],
+      chao: { tex: 'grama_mapa1', tint: '#a3c28e', metrosPorRepeticao: 6 },
+      entrada: [0, 92],
+      pracas: [{ x: 0, z: 88, w: 14, h: 14 }],
+      caminhos: [{ largura: 4.5, pts: [[0, 80], [-2, 58], [2, 36], [0, 13]] }],
+      rios: [], lagos: [],
+      aeroporto: { x: 0, z: 140 }, semAeroporto: true,
+      decor: [
+        { img: 'poste_simples', h: 3.6, x: -8, z: 80 }, { img: 'poste_simples', h: 3.6, x: 8, z: 80 },
+        { img: 'banco_1', h: 1.3, x: -6, z: 94 }, { img: 'banco_2', h: 1.3, x: 6, z: 94 },
+        { img: 'poste_duplo', h: 4, x: -7, z: 16 }, { img: 'poste_duplo', h: 4, x: 7, z: 16 }
+      ],
+      floresta: { qtd: 70, semente: 97, tint: '#d2e8b8' },
+      moitas: [[-14, 60], [14, 44], [-12, 30]],
+      mobs: [], minions: [], copiasMob: 0,
+      labirinto: { x: 0, z: -40, celulas: 11, tam: 9, alt: 3.4, placa: [7, 74], aranhas: 8 },
+      pvpLivre: false,
+      passe: { nivel: 0, preco: { simples: 0, ferias: 0, cidadania: 0 } }
     }
   };
 
@@ -229,6 +254,7 @@
   global.MAPAS = {
     ANCORAS, suavizar,
     ordem: ['mapa1', 'mapa2', 'mapa3', 'arenas', 'ascensao', 'repouso'],
+    eventos: ['labirinto'],       // mapas que só abrem em evento (fora do aeroporto)
     lista
   };
 })(typeof window !== 'undefined' ? window : globalThis);

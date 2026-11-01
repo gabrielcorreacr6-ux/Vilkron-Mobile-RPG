@@ -166,7 +166,7 @@
 
   function aplicarPoderes(r) {
     const p = global.Jogo.poderes;
-    p.imortal = r.papel === 'admin' && !!r.imortal;
+    p.imortal = (r.papel === 'admin' || r.papel === 'moderador') && !!r.imortal;
     p.invisivel = (r.papel === 'admin' || r.papel === 'moderador') && !!r.invisivel;
     p.semVantagem = p.invisivel;          // invisível não ataca jogadores nem ganha PvP
   }
@@ -427,10 +427,14 @@
   function receberAcao(a) {
     const r = Rede.remotos.get(a.u); if (!r || !r.ent || r.ent.morto) return;
     const e = r.ent; e.rot = a.a; r.p.r = a.a;
-    e.anim.tocar(a.s === 0 ? 'ataque' : 'habilidade' + a.s);
+    if (e.classe === 'jin') {
+      // Jin: Socos e Capoeira só trocam os golpes (sem animação própria)
+      if (e.anim.usarConjunto && a.s === 0 && (e.anim.conjunto || 'normal') !== (a.m || 'normal')) e.anim.usarConjunto(a.m || 'normal');
+      if (a.s === 0 || a.s === 3) e.anim.tocar(a.s === 0 ? 'ataque' : 'habilidade3');
+    } else e.anim.tocar(a.s === 0 ? 'ataque' : 'habilidade' + a.s);
     // só o desenho: o dano chega separado, mandado por quem atirou. As cores seguem a skin dele.
     const tm = J.api.tema(e);
-    if (a.s === 0 && e.classe !== 'soldado') {
+    if (a.s === 0 && e.classe !== 'soldado' && e.classe !== 'jin') {
       const cls = global.Jogo.CLASSES[e.classe];
       setTimeout(() => { if (e.obj.parent) J.api.atirar(e, a.a, { soVisual: true, dano: 0, vel: e.classe === 'atirador' ? 24 : 16, restante: cls.alcance, cor: tm.principal, rastro: tm.brasa || tm.faisca || tm.principal, tamanho: 0.9 }); }, 250);
     }
@@ -462,7 +466,8 @@
     const r = Rede.remotos.get(a.de); if (!r) return;
     const h = J.api.E.heroi; if (!h || h.morto) return;
     if (J.api.zonaSegura(h.x, h.z) || global.Jogo.poderes.imortal) return;
-    J.api.controlar(h, { stun: Math.min(5, a.stun || 0), slow: a.slow, antiCura: a.antiCura });
+    const emp = Array.isArray(a.empurrar) ? [Math.max(-10, Math.min(10, +a.empurrar[0] || 0)), Math.max(-10, Math.min(10, +a.empurrar[1] || 0))] : null;
+    J.api.controlar(h, { stun: Math.min(5, a.stun || 0), slow: a.slow, antiCura: a.antiCura, empurrar: emp, empurrarT: Math.min(1, +a.empurrarT || 0.35) });
   }
 
   // dano de outro jogador numa torre de arena: todos veem a mesma torre perdendo vida
@@ -506,7 +511,25 @@
         (ev.metas || []).map(m => `${m.vitorias} vitórias seguidas: ${premioTexto(m)}`).join('<br>') +
         `<br><small>Sua sequência agora: ${seq}</small></div>`;
     };
-    G.acao = (slot, ang) => mandar('acao', { u: Rede.eu.id, s: slot, a: +ang.toFixed(2) });
+    G.acao = (slot, ang) => {
+      const h = J.api.E.heroi, m = h && h.classe === 'jin' && h.jinModo ? h.jinModo.nome : undefined;
+      mandar('acao', { u: Rede.eu.id, s: slot, a: +ang.toFixed(2), m });
+    };
+    // baú do labirinto: o servidor confere o evento e entrega ouro/skin; XP e estrelas o jogo aplica
+    G.premioLabirinto = async ciclo => {
+      await sincronizar(true);
+      const r = await rpc('premio_labirinto', { p_ciclo: ciclo });
+      if (r && !r.repetido && r.ouro) { const P = J.api.P; P.ouro += r.ouro; P.ouroTotal += r.ouro; base += r.ouro; }
+      if (r && r.skin && r.skin.id) sincronizar(true);
+      return r;
+    };
+    // heróis de evento (Jin): liberados quando ganhos (guardados junto das skins) ou para o administrador
+    G.temHeroi = k => {
+      if (!Rede.eu) return false;
+      if (Rede.eu.papel === 'admin') return true;
+      const s = (Rede.eu.skins || {})[k];
+      return !!(s && Object.prototype.hasOwnProperty.call(s, 'default') && (!s.default || new Date(s.default) > new Date()));
+    };
     G.danoRemoto = (alvo, v, opc) => mandar('dano', { de: Rede.eu.id, para: alvo.uid, v: Math.round(v), vd: opc && opc.verdadeiro ? 1 : 0 });
     G.apoioRemoto = (alvo, tipo) => mandar('apoio', { de: Rede.eu.id, para: alvo.uid, t: tipo });
     G.efeitoRemoto = (alvo, ef) => { if (!global.Jogo.poderes.semVantagem) mandar('efeito', Object.assign({ de: Rede.eu.id, para: alvo.uid }, ef)); };

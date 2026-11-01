@@ -28,7 +28,7 @@
     porEstrela: { poder: 0.005, velAtaque: 0.002 },          // 0,5% de poder e 0,2% de vel. de ataque por estrela
     porEstrelaEpico: { critico: 0.001, rouboVida: 0.002 },   // do Epic para cima: 0,1% crítico e 0,2% roubo de vida
     vitoriasProtecao: 5,
-    escalaMapa: { mapa1: 1, mapa2: 1.6, mapa3: 2.4, arenas: 2.4, ascensao: 3.5, repouso: 1 },
+    escalaMapa: { mapa1: 1, mapa2: 1.6, mapa3: 2.4, arenas: 2.4, ascensao: 3.5, repouso: 1, labirinto: 2 },
     raioZonaAeroporto: 10,
     raioMoita: 1.7,
     afundarAgua: 0.55,       // quanto o corpo afunda no rio/lago (metros, para um herói de 1,8 m)
@@ -38,6 +38,7 @@
       veterano: { vida: 500, dano: 45, alcance: 10, intervalo: 2.0, vel: 2.4, projetil: 'bala', slow: [0.10, 1.0], xp: 45, ouro: 30 },
       dragao:   { vida: 800, dano: 30, alcance: 7,  intervalo: 1.6, vel: 2.8, projetil: 'fogo', slow: [0.10, 1.0], verdadeiro: true, xp: 60, ouro: 40 },
       barao:    { vida: 700, dano: 30, alcance: 8,  intervalo: 1.5, vel: 2.4, projetil: 'moeda', criticoQuinto: 0.10, xp: 55, ouro: 60 },
+      aranha_robo: { vida: 700, dano: 42, alcance: 1.9, intervalo: 1.2, vel: 4.4, xp: 70, ouro: 40 },
       aranha:   { vida: 650, dano: 40, alcance: 7,  intervalo: 1.6, vel: 3.2, projetil: 'teia', stunTeia: 0.1, slowTeia: [0.3, 0.2], corpoACorpo: 1.8, xp: 50, ouro: 30 },
       golem:    { vida: 3000, dano: 80, alcance: 4, intervalo: 2.2, vel: 2.0, xp: 200, ouro: 150, pisao: 4, golpeAgua: 6, stunAgua: 0.2 },
       serpente: { vida: 2500, dano: 70, alcance: 3.5, intervalo: 1.6, vel: 7, xp: 300, ouro: 200 }
@@ -62,6 +63,11 @@
       limitePorJogador: 0.10, janelaLimite: 10,
       // sem minions por perto, a torre mata o herói em 3 disparos: 20%, 60% e 120% da vida dele (ignora escudo e cura)
       sequencia: [0.2, 0.6, 1.2], esqueceSequencia: 4 },
+    // Jin: soco dá lentidão curta; chute voador atordoa; Socos (hab. 1) e Capoeira (hab. 2) trocam os golpes do ataque básico
+    jin: { soco: { dano: 1.0, slow: [0.35, 0.2] }, chute: { dano: 1.35, stun: 1.2 },
+      socos: { dur: 6, dano: 1.05, slow: [0.35, 2], alcance: 1.15 },
+      capoeira: { dur: 6, dano: 1.15, stun: 0.35, empurra: 1.6, alcance: 1.15 },
+      kungfu: { alcance: 3.2, dano: 3.6, raio: 2.6, arremesso: 9 } },
     arena: { inscricao: 150, minionsCada: 30, respawnBase: 30, respawnPasso: 20, respawnMax: 120 },
     loja: {
       cura:   { nome: 'Frasco de cura', preco: 30, desc: 'Recupera toda a vida.' },
@@ -77,7 +83,9 @@
     soldado:  { nome: 'Soldado',  vida: 1300, dano: 70, alcance: 2.8, cd: [0.9, 6, 9, 30],    habs: ['Giro', 'Investida', 'Terremoto'] },
     suporte:  { nome: 'Suporte',  vida: 950,  dano: 45, alcance: 11,  cd: [1.0, 8, 12, 40],   habs: ['Cura', 'Escudo', 'Selo'] },
     mago:     { nome: 'Mago',     vida: 850,  dano: 62, alcance: 9.5, cd: [1.0, 7, 12, 35],   habs: ['Chamas', 'Ilusão', 'Fogo Roxo'] },
-    atirador: { nome: 'Atirador', vida: 900,  dano: 58, alcance: 12,  cd: [0.85, 12, 14, 20], habs: ['Aceleração', 'Explosão', 'Salto'] }
+    atirador: { nome: 'Atirador', vida: 900,  dano: 58, alcance: 12,  cd: [0.85, 12, 14, 20], habs: ['Aceleração', 'Explosão', 'Salto'] },
+    // Jin: segundo herói do Soldado, liberado por evento (o administrador já tem)
+    jin:      { nome: 'Jin', grupo: 'soldado', evento: true, vida: 1250, dano: 58, alcance: 2.5, cd: [0.6, 12, 14, 16], habs: ['Socos', 'Capoeira', 'Kung Fu'] }
   };
   const CORES = ['#9aa3a8', '#c0392b', '#2e86de', '#27ae60', '#8e44ad', '#e67e22', '#f1c40f', '#ecf0f1'];
 
@@ -718,6 +726,7 @@
       if (d < 1e-3) { e.z = s.z + min; continue; }
       e.x = s.x + dx / d * min; e.z = s.z + dz / d * min;
     }
+    if (E.lab) labColidir(e);
   }
   // moitas sempre na beira do caminho (nunca em cima): boas para emboscadas
   function pontoNoCaminho(x, z) {
@@ -830,7 +839,7 @@
     E.mundo = new THREE.Group(); R.scene.add(E.mundo);
     E.entidades = []; E.projeteis = []; E.efeitos = []; E.interacoes = []; E.moitas = [];
     E.ondas = []; E.barcos = []; E.arenas = []; E.chuva = null; E.serpentes = [];
-    E.buffDano = 0; ordemChao = -20; E.agenda = [];
+    E.buffDano = 0; ordemChao = -20; E.agenda = []; E.lab = null;
   }
   // agenda no tempo do jogo (não no relógio real)
   function agendar(daqui, fn) { (E.agenda = E.agenda || []).push({ em: E.t + daqui, fn }); }
@@ -883,11 +892,15 @@
       peca(o.img, o.h, o.x, o.z);
       if (o.interacao) E.interacoes.push({ tipo: o.interacao, x: o.x, z: o.z + 2.5, raio: 4.5 });
     });
+    // cavernas dos minions: quando o evento do labirinto está aberto, a entrada é por elas
+    (d.decor || []).forEach(o => { if (/^caverna/.test(o.img)) E.interacoes.push({ tipo: 'caverna_lab', x: o.x, z: o.z + 3, raio: 5 }); });
+    if (!d.semAeroporto) {
     peca('aeroporto_iso', 8, d.aeroporto.x, d.aeroporto.z);
     E.interacoes.push({ tipo: 'aeroporto', x: d.aeroporto.x, z: d.aeroporto.z + 3, raio: 8 });
     const anel = camada(new THREE.RingGeometry(CONFIG.raioZonaAeroporto - 0.3, CONFIG.raioZonaAeroporto, 64),
       new THREE.MeshBasicMaterial({ color: 0x5cc8e0, transparent: true, opacity: 0.45 }), d.aeroporto.x, d.aeroporto.z, 0.05);
     anel.renderOrder = 5;
+    }
 
     // moitas
     montarSolidos(d);
@@ -919,6 +932,7 @@
       if ((d.decor || []).some(o => Math.hypot(x - o.x, z - o.z) < 5)) return false;
       if (mobs.some(m => Math.hypot(x - m.x, z - m.z) < (m.tipo === 'golem' ? 13 : 9))) return false;   // clareira em volta dos mobs
       if ((d.arenas || []).some(a => dentroArena(a, x, z, 7))) return false;
+      if (d.labirinto) { const l = d.labirinto, m = l.celulas * l.tam / 2 + 7; if (Math.abs(x - l.x) < m && Math.abs(z - l.z) < m) return false; }
       if (d.eventoRank && Math.hypot(x - d.eventoRank.x, z - d.eventoRank.z) < d.eventoRank.r + 4) return false;
       if (d.podio && Math.hypot(x - d.podio.x, z - d.podio.z) < d.podio.zonaSegura) return false;
       if (Math.hypot(x - d.entrada[0], z - d.entrada[1]) < 8) return false;
@@ -973,6 +987,7 @@
     for (const m of mobs) await criarMob(m);
     (d.minions || []).forEach((def, i) => E.ondas.push({ def, proxima: 4 + i * 6 }));
     if (d.serpente) await criarSerpente(d.serpente);
+    if (d.labirinto) await montarLabirinto(d);
 
     // herói
     if (E.heroi) {
@@ -1252,6 +1267,7 @@
     if (!MAPAS.lista[mapa]) return 'Mapa desconhecido';
     if (E.heroi && E.heroi.arena) return 'Saia da arena primeiro';
     P.viagem = null; P.retorno = null;
+    if (mapa === 'labirinto' && E.mapa !== 'labirinto') P.labOrigem = E.mapa;
     await carregarMapa(mapa);
     aviso('Teleporte: ' + MAPAS.lista[mapa].nome);
     return null;
@@ -1298,6 +1314,20 @@
     if (ef.stun) e.stunAte = Math.max(e.stunAte || 0, E.t + ef.stun);
     if (ef.slow) aplicarSlow(e, ef.slow[0], ef.slow[1]);
     if (ef.antiCura) { e.antiCura = ef.antiCura[0]; e.antiCuraAte = E.t + ef.antiCura[1]; }
+    // empurrão: [dx, dz] em metros, feito em ~0,35 s (torres e serpente não se mexem)
+    if (ef.empurrar && e.tipo !== 'torre' && e.tipo !== 'serpente') {
+      const [dx, dz] = ef.empurrar, T = ef.empurrarT || 0.35;
+      e.empurrao = { vx: dx / T * 2, vz: dz / T * 2, ate: E.t + T, T };
+    }
+  }
+  // empurrão desacelerando até parar; respeita paredes e construções
+  function moverEmpurrao(e, dt) {
+    const p = e.empurrao; if (!p) return;
+    if (E.t >= p.ate || e.morto) { e.empurrao = null; return; }
+    const k = Math.max(0, (p.ate - E.t) / p.T);
+    e.x += p.vx * k * dt; e.z += p.vz * k * dt;
+    if (E.def) { e.x = clamp(e.x, -E.def.tam[0] / 2, E.def.tam[0] / 2); e.z = clamp(e.z, -E.def.tam[1] / 2, E.def.tam[1] / 2); }
+    empurrarSolidos(e);
   }
   function aplicarSlow(e, pct, dur) { if (pct > 0 && dur > 0) e.slows.push({ pct, ate: E.t + dur }); }
   function preso(e) { return e.stunAte > E.t || e.congeladoAte > E.t; }
@@ -1387,7 +1417,8 @@
     const deHeroi = origem && (origem.tipo === 'heroi' || origem.donoHeroi);
     const esc = CONFIG.escalaMapa[E.mapa] || 1;
     if (e.tipo === 'mob' || e.tipo === 'serpente') {
-      e.renasceEm = E.t + CONFIG.respawnMob;
+      e.renasceEm = e.labA ? Infinity : E.t + CONFIG.respawnMob;
+      if (e.labA) labAranhaMorreu(e);
       if (deHeroi) {
         const rc = recompensaMob(e.especie, e.cfg, esc);
         ganhar(rc.xp, rc.ouro, true);
@@ -1409,6 +1440,15 @@
       if (arena) {
         const min = (E.t - arena.inicio) / 60;
         espera = Math.min(CONFIG.arena.respawnMax, CONFIG.arena.respawnBase + CONFIG.arena.respawnPasso * Math.floor(min / 5));
+      } else if (E.def.labirinto) {
+        // labirinto: lá dentro custa 3 estrelas; a saída do mapa é automática
+        const dentro = E.lab && E.lab.dentro(e.x, e.z);
+        for (let i = 0; i < (dentro ? 3 : 1); i++) perderEstrela();
+        if (dentro) aviso('Você caiu dentro do labirinto: -3 estrelas');
+        e.renasceEm = Infinity;
+        setTimeout(() => labSair('morte'), 3500);
+        if (remoto(origem)) gancho('mortoPorJogador', origem);
+        return;
       } else if (!E.def.pvpLivre) perderEstrela();
       e.renasceEm = E.t + espera;
       aviso('Você caiu. Volta em ' + Math.round(espera) + ' s');
@@ -1612,6 +1652,7 @@
                 vilkronomita: { principal: 0x4fb8ff, faisca: 0xcfeeff, poeira: 0x2a3440, brasa: 0x2a7bff },
                 viking: { principal: 0x39ff14, faisca: 0xb6ffb0, poeira: 0x2e3326, brasa: 0x1a9a20 },
                 samurai: { principal: 0xff5a1a, faisca: 0xffa040, poeira: 0x1a1a1a, brasa: 0xff3d00 } },
+    jin:      { padrao: { principal: 0xffb347, faisca: 0xffe6b0, poeira: 0xcbb38f, brasa: 0xff7a1a, socos: 0xff4d4d, capoeira: 0x4dd2ff } },
     suporte:  { padrao: { principal: 0xfff3b0, cura: 0x6dff9c, brilho: 0xffe08a, selo: 0xfff3b0, controle: 0xff6b6b },
                 ciber: { principal: 0x39ff88, cura: 0x39ff88, brilho: 0xa6ffcf, selo: 0x39ff88, controle: 0x39ff88 },
                 medicina: { principal: 0xff2a2a, cura: 0xff3b3b, brilho: 0xff8080, selo: 0xff2a2a, controle: 0xff2a2a } },
@@ -2687,8 +2728,77 @@
       },
       // Salto: teleporta para onde mirou (2 pulos em até 15 s)
       (h, ang, mira) => ultAtirador(h, ang, mira)
+    ],
+    // Jin: socos e chute voador; Socos e Capoeira trocam o estilo do básico; Kung Fu arremessa
+    jin: [
+      (h, ang) => {
+        const modo = jinModo(h), c = CONFIG.jin;
+        h.anim.tocar('ataque', { velocidade: bonus().velAtaque, aoAcertar: () => {
+          const g = h.anim.golpeAtual ? h.anim.golpeAtual() : null, tipo = (g && g.tipo) || 'soco', tm = tema(h);
+          const alc = CLASSES.jin.alcance * (modo === 'socos' ? c.socos.alcance : modo === 'capoeira' ? c.capoeira.alcance : 1) + (tipo === 'soco' ? 0 : 0.4);
+          const frente = [h.x + Math.sin(h.rot) * 1.1, h.z + Math.cos(h.rot) * 1.1];
+          let acertou = 0;
+          cone(h, h.rot, alc, tipo === 'capoeira' ? 1.3 : 0.9, e => {
+            acertou++;
+            if (modo === 'socos') { causarDano(e, CLASSES.jin.dano * c.socos.dano, h); controlar(e, { slow: c.socos.slow }); }
+            else if (modo === 'capoeira') {
+              causarDano(e, CLASSES.jin.dano * c.capoeira.dano, h);
+              const a = Math.atan2(e.x - h.x, e.z - h.z);
+              controlar(e, { stun: c.capoeira.stun, empurrar: [Math.sin(a) * c.capoeira.empurra, Math.cos(a) * c.capoeira.empurra] });
+            } else if (tipo === 'chute') { causarDano(e, CLASSES.jin.dano * c.chute.dano, h); controlar(e, { stun: c.chute.stun }); }
+            else { causarDano(e, CLASSES.jin.dano * c.soco.dano, h); controlar(e, { slow: c.soco.slow }); }
+            emitir('faisca', e.x, 1.1, e.z, { n: tipo === 'soco' ? 8 : 14, cor: modo === 'socos' ? tm.socos : modo === 'capoeira' ? tm.capoeira : tm.faisca, vel: 3.5, subida: 2, grav: 9, vida: 0.35 });
+          });
+          // impacto no ar mesmo sem acertar: um "pof" curto na frente
+          emitir('media', frente[0], tipo === 'soco' ? 1.2 : 0.9, frente[1], { n: acertou ? 6 : 3, cor: modo === 'socos' ? tm.socos : modo === 'capoeira' ? tm.capoeira : tm.principal, vel: 1.4, vida: 0.22 });
+          if (tipo !== 'soco') anelEfeito(frente[0], frente[1], modo === 'capoeira' ? 1.6 : 1.1, modo === 'capoeira' ? tm.capoeira : tm.principal, 0.3, true);
+        } });
+        // cada golpe tem o seu tempo: o próximo só sai quando este termina
+        const g = h.anim.golpeAtual ? h.anim.golpeAtual() : null;
+        if (g && g.dur) h.cds[0] = E.t + Math.max(CLASSES.jin.cd[0], g.dur * 0.92) / velAtaque(h);
+      },
+      // Socos: 6 s só de socos rápidos; cada soco deixa lento por 2 s
+      (h) => jinTrocarModo(h, 'socos', CONFIG.jin.socos.dur),
+      // Capoeira: 6 s de gingados; cada golpe atordoa um pouco e empurra para frente
+      (h) => jinTrocarModo(h, 'capoeira', CONFIG.jin.capoeira.dur),
+      // Kung Fu: segura o inimigo durante a sequência e no fim arremessa longe com explosão
+      (h, ang, mira, alvo) => {
+        const c = CONFIG.jin.kungfu, tm = tema(h);
+        const presa = alvo && dist(alvo, h) <= c.alcance + alvo.raio ? alvo : alvoMaisPerto(h, c.alcance);
+        if (presa) { h.rot = Math.atan2(presa.x - h.x, presa.z - h.z); controlar(presa, { stun: (CATALOGO_DUR_KUNGFU()) + 0.2 }); }
+        aura(h, tm.brasa, CATALOGO_DUR_KUNGFU(), 26, true);
+        h.anim.tocar('habilidade3', { momento: 0.97, aoAcertar: () => {
+          const x = presa && !presa.morto ? presa.x : h.x + Math.sin(h.rot) * 1.8, z = presa && !presa.morto ? presa.z : h.z + Math.cos(h.rot) * 1.8;
+          anelEfeito(x, z, c.raio, tm.principal, 0.5, true);
+          emitir('media', x, 1, z, { n: 40, cor: tm.brasa, vel: 6, subida: 3, vida: 0.6, arrasto: 2 });
+          emitir('faisca', x, 1, z, { n: 30, cor: tm.faisca, vel: 7, subida: 4, grav: 10, vida: 0.5 });
+          particulas(x, z, { n: 10, cor: tm.poeira, tam: 1.2, cresce: 2.5, velH: 5, velV: 1, gravidade: 1, vida: 0.7, raio: 1.5, opacidade: 0.6 });
+          E.tremor = { ate: E.t + 0.35, forca: 0.35, dur: 0.35 };
+          area(x, z, c.raio, h, e => {
+            const principal = e === presa;
+            causarDano(e, CLASSES.jin.dano * (principal ? c.dano : c.dano * 0.45), h);
+            const a = Math.atan2(e.x - h.x, e.z - h.z), d = principal ? c.arremesso : c.arremesso * 0.35;
+            controlar(e, { stun: principal ? 0.9 : 0.3, empurrar: [Math.sin(a) * d, Math.cos(a) * d], empurrarT: principal ? 0.6 : 0.35 });
+          });
+        } });
+      }
     ]
   };
+  function CATALOGO_DUR_KUNGFU() { const c = Skins.CATALOGO.habilidades.jin; return (c && c.habilidade3 && c.habilidade3.duracao) || 2.2; }
+  // modo do Jin agora: 'normal', 'socos' ou 'capoeira'
+  function jinModo(h) {
+    if (h.jinModo && E.t >= h.jinModo.ate) { h.jinModo = null; if (h.anim.usarConjunto) h.anim.usarConjunto('normal'); }
+    return h.jinModo ? h.jinModo.nome : 'normal';
+  }
+  function jinTrocarModo(h, nome, dur) {
+    const tm = tema(h), cor = nome === 'socos' ? tm.socos : tm.capoeira;
+    h.jinModo = { nome, ate: E.t + dur };
+    if (h.anim.usarConjunto) h.anim.usarConjunto(nome);
+    h.cds[0] = E.t + 0.1;
+    anelEfeito(h.x, h.z, 1.8, cor, 0.5, true);
+    emitir('media', h.x, 1, h.z, { n: 24, cor, vel: 3, subida: 1.5, vida: 0.5, arrasto: 3 });
+    aura(h, cor, dur, 22, true);
+  }
   function corteVisual(h, ang, cor) {
     // marca do golpe: só aparece para quem ataca (não vai para a rede), fina, no chão e bem apagada
     const m = new THREE.Mesh(new THREE.RingGeometry(2.55, 2.8, 24, 1, -0.9, 1.8),
@@ -2745,6 +2855,7 @@
     return e;
   }
   function iaMob(e, dt) {
+    if (e.labA) return iaAranhaRobo(e, dt);
     if (e.morto) {
       if (E.t >= e.renasceEm) {
         e.morto = false; e.vida = e.vidaMax; e.x = e.casa.x; e.z = e.casa.z; e.alvo = null;
@@ -3219,6 +3330,478 @@
     e.obj.position.set(e.x, 0, e.z);
   }
 
+  /* ======================= LABIRINTO (mapa de evento) =======================
+     As paredes mudam a cada X minutos (o administrador define; padrão 30). A mudança leva de 3 a 5 min,
+     conforme o padrão (6 padrões). Tudo sai do relógio: todos os celulares veem o mesmo labirinto.
+     Fases: aberto -> (faltando 1:30 as aranhas voltam para o túnel) -> porta fecha, paredes se movem
+     -> porta abre -> 30 s depois as aranhas saem do túnel. */
+  const LAB = { duracoes: [180, 210, 240, 270, 300, 225], ordem: [0, 3, 1, 4, 2, 5], janela: 0.24, esp: 1.2, solida: 0.35 };
+  function labCfg() { const a = Jogo.ajustes && Jogo.ajustes.labirinto; return a && typeof a === 'object' ? a : {}; }
+  function labAtivo() {
+    const c = labCfg(); if (!c.ativo) return false;
+    const t = Date.now();
+    if (c.inicio && t < Date.parse(c.inicio)) return false;
+    if (c.fim && t > Date.parse(c.fim)) return false;
+    return true;
+  }
+  const labIntervalo = () => Math.max(2, Number(labCfg().intervalo) || 30) * 60;
+  const labPad = k => LAB.ordem[((k % 6) + 6) % 6];
+  // onde o ciclo está agora (k = número da mudança; atual = padrão de paredes; proximo = o que vem)
+  function labRelogio(agoraMs) {
+    const c = labCfg(), I = labIntervalo(), D = LAB.duracoes;
+    const epoca = Date.parse(c.inicio || '') || Date.UTC(2026, 0, 1);
+    let t = Math.max(0, ((agoraMs || Date.now()) - epoca) / 1000);
+    const volta = 6 * I + D.reduce((a, b) => a + b, 0);
+    let k = Math.floor(t / volta) * 6; t -= Math.floor(t / volta) * volta;
+    for (let i = 0; i < 8; i++) {
+      const dur = D[labPad(k + 1)];
+      if (t < I) return { k, fase: 'aberto', t, dur: I, atual: labPad(k), proximo: labPad(k + 1), durMuda: dur };
+      if (t < I + dur) return { k, fase: 'mudando', t: t - I, dur, atual: labPad(k), proximo: labPad(k + 1), prog: (t - I) / dur };
+      t -= I + dur; k++;
+    }
+    return { k, fase: 'aberto', t: 0, dur: I, atual: labPad(k), proximo: labPad(k + 1), durMuda: D[labPad(k + 1)] };
+  }
+  // um labirinto perfeito (todas as salas ligadas) com alguns atalhos; a porta é embaixo, no meio
+  function labPadrao(n, semente) {
+    const rnd = semeado(semente * 7919 + 13), H = [], V = [], meio = (n - 1) >> 1;
+    for (let r = 0; r <= n; r++) H.push(new Array(n).fill(1));
+    for (let r = 0; r < n; r++) V.push(new Array(n + 1).fill(1));
+    const vis = Array.from({ length: n }, () => new Array(n).fill(false));
+    const pilha = [[n - 1, meio]]; vis[n - 1][meio] = true;
+    while (pilha.length) {
+      const [r, c] = pilha[pilha.length - 1];
+      const viz = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]].filter(([a, b]) => a >= 0 && b >= 0 && a < n && b < n && !vis[a][b]);
+      if (!viz.length) { pilha.pop(); continue; }
+      const [a, b] = viz[Math.floor(rnd() * viz.length)];
+      if (a < r) H[r][c] = 0; else if (a > r) H[a][c] = 0; else if (b < c) V[r][c] = 0; else V[r][b] = 0;
+      vis[a][b] = true; pilha.push([a, b]);
+    }
+    for (let i = 0; i < Math.round(n * n * 0.12); i++) {
+      if (rnd() < 0.5) H[1 + Math.floor(rnd() * (n - 1))][Math.floor(rnd() * n)] = 0;
+      else V[Math.floor(rnd() * n)][1 + Math.floor(rnd() * (n - 1))] = 0;
+    }
+    // salas do fim e da entrada um pouco mais abertas (cabe todo mundo)
+    H[1][meio] = 0; V[0][meio] = 0; V[0][meio + 1] = 0; H[n - 1][meio] = 0;
+    return { H, V };
+  }
+  function texParede() {
+    if (R.texParede) return R.texParede;
+    R.texParede = canvasTex(512, 256, g => {
+      const rnd = semeado(5);
+      g.fillStyle = '#7d7f7a'; g.fillRect(0, 0, 512, 256);
+      // blocos de concreto gasto
+      for (let y = 0; y < 256; y += 64) for (let x = (y / 64) % 2 ? -64 : 0; x < 512; x += 128) {
+        const t = 0.82 + rnd() * 0.25; g.fillStyle = `rgb(${Math.round(120 * t)},${Math.round(122 * t)},${Math.round(116 * t)})`;
+        g.fillRect(x + 2, y + 2, 124, 60);
+        for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(30,30,28,${rnd() * 0.18})`; g.fillRect(x + rnd() * 124, y + rnd() * 60, 2 + rnd() * 6, 1 + rnd() * 3); }
+      }
+      // escorridos de umidade
+      for (let k = 0; k < 26; k++) { const x = rnd() * 512, l = 40 + rnd() * 160; const gr = g.createLinearGradient(0, 0, 0, l); gr.addColorStop(0, 'rgba(40,44,36,0.35)'); gr.addColorStop(1, 'rgba(40,44,36,0)'); g.fillStyle = gr; g.fillRect(x, 0, 3 + rnd() * 6, l); }
+      // hera descendo do topo
+      for (let k = 0; k < 34; k++) {
+        let x = rnd() * 512, y = 0; const fim = 30 + rnd() * 200;
+        while (y < fim) {
+          const r = 4 + rnd() * 7; g.fillStyle = `rgba(${40 + rnd() * 30 | 0},${90 + rnd() * 50 | 0},${30 + rnd() * 20 | 0},0.92)`;
+          g.beginPath(); g.ellipse(x, y, r, r * 0.7, rnd() * 3, 0, 7); g.fill();
+          x += (rnd() - 0.5) * 10; y += 4 + rnd() * 6;
+        }
+      }
+    });
+    if (R.texParede.wrapS !== undefined) R.texParede.wrapS = R.texParede.wrapT = THREE.RepeatWrapping;
+    return R.texParede;
+  }
+  function placaTexto(linhas, w, h) {
+    const t = canvasTex(512, 256, g => {
+      g.fillStyle = '#5a3b22'; g.fillRect(0, 0, 512, 256);
+      g.strokeStyle = '#2e1c0e'; g.lineWidth = 10; g.strokeRect(5, 5, 502, 246);
+      for (let y = 30; y < 256; y += 46) { g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(10, y, 492, 3); }
+      g.fillStyle = '#f3e3c0'; g.textAlign = 'center';
+      linhas.forEach((l, i) => { g.font = (i ? '600 30px' : 'bold 52px') + ' sans-serif'; g.fillText(l, 256, i ? 110 + i * 42 - 42 : 70); });
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshLambertMaterial({ map: t, side: THREE.DoubleSide }));
+    return m;
+  }
+  async function montarLabirinto(d) {
+    const cfg = d.labirinto, n = cfg.celulas, T = cfg.tam, alt = cfg.alt, esp = LAB.esp;
+    const x0 = cfg.x - n * T / 2, z0 = cfg.z - n * T / 2, meio = (n - 1) >> 1;
+    const L = E.lab = { cfg, n, T, alt, x0, z0, meio, arestas: [], pilares: [], aranhas: [], vistos: new Set(), mortes: 0, versao: 0, ultimoK: null };
+    L.padroes = [0, 1, 2, 3, 4, 5].map(p => labPadrao(n, 101 + p * 37));
+    L.centro = (r, c) => [x0 + (c + 0.5) * T, z0 + (r + 0.5) * T];
+    L.cel = (x, z) => { const c = Math.floor((x - x0) / T), r = Math.floor((z - z0) / T); return r >= 0 && c >= 0 && r < n && c < n ? [r, c] : null; };
+    L.dentro = (x, z, folga) => x > x0 - (folga || 0) && x < x0 + n * T + (folga || 0) && z > z0 - (folga || 0) && z < z0 + n * T + (folga || 0);
+    L.tunel = { x: x0 + (meio + 0.5) * T, z: z0 + 2.2 };
+    L.bau = { x: L.tunel.x + 3.2, z: z0 + 3.0 };
+    L.porta = { x: x0 + (meio + 0.5) * T, z: z0 + n * T };
+    // chão de pedra dentro do labirinto
+    camada(uvRep(new THREE.PlaneGeometry(n * T + 4, n * T + 4), (n * T) / 6, (n * T) / 6),
+      new THREE.MeshLambertMaterial({ map: Skins.textura('concreto_praca', 1, 1), color: 0x9a9a90, transparent: true }), cfg.x, cfg.z, 0.03);
+    const mat = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xd8dccf });
+    const matFade = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xd8dccf, transparent: true, opacity: 0.28, depthWrite: false });
+    L.mat = mat; L.matFade = matFade;
+    const geoH = new THREE.BoxGeometry(T + esp * 0.2, alt, esp), geoV = new THREE.BoxGeometry(esp, alt, T + esp * 0.2);
+    const nova_ = (tipo, r, c, borda) => {
+      const hz = tipo === 'H';
+      const x = hz ? x0 + (c + 0.5) * T : x0 + c * T, z = hz ? z0 + r * T : z0 + (r + 0.5) * T;
+      const mesh = new THREE.Mesh(hz ? geoH : geoV, mat); mesh.position.set(x, alt / 2, z); E.mundo.add(mesh);
+      const a = { tipo, r, c, x, z, w: hz ? T : esp, d: hz ? esp : T, mesh, h: 1, borda, porta: false, sem: semeado(r * 131 + c * 17 + (hz ? 7 : 3)) };
+      L.arestas.push(a); return a;
+    };
+    for (let r = 0; r <= n; r++) for (let c = 0; c < n; c++) nova_('H', r, c, r === 0 || r === n);
+    for (let r = 0; r < n; r++) for (let c = 0; c <= n; c++) nova_('V', r, c, c === 0 || c === n);
+    // porta: grade de ferro que desliza para dentro da parede
+    const ap = L.arestas.find(a => a.tipo === 'H' && a.r === n && a.c === meio); ap.porta = true; E.mundo.remove(ap.mesh);
+    const grade = new THREE.Group(), ferro = new THREE.MeshStandardMaterial({ color: 0x3b3f44, metalness: 0.85, roughness: 0.35 });
+    for (let i = 0; i <= 12; i++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, alt - 0.2, 6), ferro); b.position.set(-T / 2 + 0.4 + i * (T - 0.8) / 12, alt / 2, 0); grade.add(b); }
+    [0.4, alt / 2, alt - 0.3].forEach(y => { const b = new THREE.Mesh(new THREE.BoxGeometry(T - 0.4, 0.14, 0.18), ferro); b.position.y = y; grade.add(b); });
+    grade.position.set(ap.x, 0, ap.z); E.mundo.add(grade); ap.mesh = grade;
+    // portal na entrada com o nome
+    const pedra = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xbfc2b8 });
+    [-1, 1].forEach(l => { const p = new THREE.Mesh(new THREE.BoxGeometry(2, alt + 2.6, 2), pedra); p.position.set(ap.x + l * (T / 2 + 0.6), (alt + 2.6) / 2, ap.z + 0.2); E.mundo.add(p); });
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(T + 3.4, 1.1, 2.1), pedra); lintel.position.set(ap.x, alt + 2.1, ap.z + 0.2); E.mundo.add(lintel);
+    const nome = placaTexto(['LABIRINTO'], 5.6, 1.4); nome.position.set(ap.x, alt + 2.1, ap.z + 1.3); E.mundo.add(nome);
+    // pilares em cada canto (giram durante a mudança)
+    const geoP = new THREE.BoxGeometry(esp * 1.35, alt + 0.5, esp * 1.35);
+    const matP = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xb5b8ad, emissive: 0x000000 });
+    L.matPilar = matP;
+    for (let r = 0; r <= n; r++) for (let c = 0; c <= n; c++) {
+      const m = new THREE.Mesh(geoP, matP); m.position.set(x0 + c * T, (alt + 0.5) / 2, z0 + r * T); E.mundo.add(m);
+      L.pilares.push({ x: m.position.x, z: m.position.z, w: esp * 1.35, d: esp * 1.35, h: 1, mesh: m, gira: ((r + c) % 2 ? 1 : -1) });
+    }
+    // túnel das aranhas (o fim do labirinto) e o baú ao lado
+    const boca = camada(new THREE.CircleGeometry(2.2, 32), new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: 0.92 }), L.tunel.x, L.tunel.z, 0.06);
+    boca.scale.set(1, 0.6, 1);
+    const arco = new THREE.Mesh(new THREE.TorusGeometry(2.3, 0.45, 8, 20, Math.PI), pedra); arco.position.set(L.tunel.x, 0, L.tunel.z - 0.6); E.mundo.add(arco);
+    const bau = new THREE.Group(), madeira = new THREE.MeshStandardMaterial({ color: 0x7a4a22, roughness: 0.7 }), ouro = new THREE.MeshStandardMaterial({ color: 0xe3b44c, metalness: 0.8, roughness: 0.3, emissive: 0x3a2a00 });
+    const caixa = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.9, 1), madeira); caixa.position.y = 0.45; bau.add(caixa);
+    const tampa = new THREE.Group(); tampa.position.set(0, 0.9, -0.5); bau.add(tampa);
+    const tp = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.6, 12, 1, false, 0, Math.PI), madeira); tp.rotation.z = Math.PI / 2; tp.position.z = 0.5; tampa.add(tp);
+    [-0.6, 0, 0.6].forEach(x => { const f = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.95, 1.04), ouro); f.position.set(x, 0.45, 0); bau.add(f); });
+    const fecho = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.1), ouro); fecho.position.set(0, 0.8, 0.52); bau.add(fecho);
+    bau.position.set(L.bau.x, 0, L.bau.z); bau.rotation.y = -0.3; E.mundo.add(bau);
+    L.tampa = tampa; L.bauObj = bau;
+    E.interacoes.push({ tipo: 'bau_lab', x: L.bau.x, z: L.bau.z + 1, raio: 3 });
+    // placa na clareira
+    const [px, pz] = cfg.placa;
+    const placa = placaTexto(['LABIRINTO', 'Fecha a cada ' + Math.round(labIntervalo() / 60) + ' min', 'Abre de 3 a 5 min depois', 'Toque para ler'], 3.6, 1.8);
+    placa.position.set(px, 2.1, pz); E.mundo.add(placa); L.placa = placa;
+    [-1.4, 1.4].forEach(dx => { const p = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.6, 0.18), madeira); p.position.set(px + dx, 1.3, pz - 0.05); E.mundo.add(p); });
+    E.interacoes.push({ tipo: 'placa_lab', x: px, z: pz + 1.5, raio: 3.5 });
+    // aranhas robóticas
+    const quantas = cfg.aranhas || 8;
+    for (let i = 0; i < quantas; i++) {
+      const rr = Math.floor(i / 3) * 3 + 1, cc = (i * 4 + 1) % n, [x, z] = L.centro(Math.min(n - 3, rr), cc);
+      await labNovaAranha(x, z, 'patrulha');
+    }
+    L.rel = labRelogio(); labAplicar(0, true);
+  }
+  async function labNovaAranha(x, z, estado, ponto) {
+    const e = await criarMob({ tipo: 'aranha_robo', x, z });
+    if (!e) return null;
+    e.labA = { estado, ponto: ponto || null, rota: [], recalc: 0, paredeAte: 0, proxParede: E.t + 3 + Math.random() * 6 };
+    e.renasceEm = Infinity;
+    if (E.lab) E.lab.aranhas.push(e);
+    return e;
+  }
+  // altura (0 = enterrada, 1 = em pé) de cada parede no momento
+  function labAltura(L, a, rel) {
+    if (a.porta) {
+      if (rel.fase !== 'mudando') return 0;
+      return Math.min(1, rel.t / 6, (rel.dur - rel.t) / 6);
+    }
+    if (a.borda) return 1;
+    const A = L.padroes[rel.atual][a.tipo][a.r][a.c], B = L.padroes[rel.proximo][a.tipo][a.r][a.c];
+    if (rel.fase !== 'mudando' || A === B) return A;
+    // cada parede começa a se mover num momento diferente e leva ~1/4 da mudança (devagar)
+    const ini = (((a.r * 31 + a.c * 17 + (a.tipo === 'H' ? 5 : 11) + rel.k * 13) % 97) / 97) * (1 - LAB.janela) * 0.92 + 0.02;
+    let f = clamp((rel.prog - ini) / LAB.janela, 0, 1); f = f * f * (3 - 2 * f);
+    return A ? 1 - f : f;
+  }
+  function labAplicar(dt, inicio) {
+    const L = E.lab, rel = L.rel, alt = L.alt;
+    L.arestas.forEach(a => {
+      const antes = a.h; a.h = labAltura(L, a, rel);
+      if (a.porta) { a.mesh.position.x = a.x + (1 - a.h) * (L.T - 0.2); return; }
+      a.mesh.visible = a.h > 0.01;
+      a.mesh.position.y = alt / 2 - (1 - a.h) * (alt + 0.1);
+      if (inicio) return;
+      const mexendo = Math.abs(a.h - antes) > 1e-5;
+      if (mexendo && Math.random() < dt * 3) {
+        particulas(a.x + (Math.random() - 0.5) * a.w, a.z + (Math.random() - 0.5) * a.d, { n: 2, cor: 0x9a8f7a, tam: 0.8, cresce: 1.5, velH: 1, velV: 0.6, gravidade: 0.4, vida: 0.9, raio: 0.6, opacidade: 0.5 });
+      }
+      // subindo e passou do ponto de bloquear: quem estiver em cima é esmagado
+      if (antes < LAB.solida && a.h >= LAB.solida) {
+        E.entidades.forEach(e => {
+          if (e.morto || e.tipo === 'torre' || remoto(e)) return;
+          if (Math.abs(e.x - a.x) < a.w / 2 + 0.2 && Math.abs(e.z - a.z) < a.d / 2 + 0.2) {
+            causarDano(e, e.vidaMax * 0.55, null, { verdadeiro: true });
+            emitir('faisca', e.x, 1, e.z, { n: 20, cor: 0xffd27a, vel: 4, subida: 2, vida: 0.4 });
+            if (e === E.heroi) { aviso('Esmagado pelas paredes do labirinto!'); E.tremor = { ate: E.t + 0.4, forca: 0.4, dur: 0.4 }; }
+          }
+        });
+      }
+    });
+    // pilares giram e acendem durante a mudança: dá para ver as colunas se organizando
+    const mudando = rel.fase === 'mudando';
+    L.pilares.forEach(p => { if (mudando) p.mesh.rotation.y += dt * 0.22 * p.gira; else p.mesh.rotation.y += (Math.round(p.mesh.rotation.y / (Math.PI / 2)) * (Math.PI / 2) - p.mesh.rotation.y) * Math.min(1, dt * 2); });
+    if (L.matPilar.emissive && L.matPilar.emissive.setRGB) L.matPilar.emissive.setRGB(mudando ? 0.12 + 0.08 * Math.sin(E.t * 3) : 0, mudando ? 0.06 : 0, 0);
+  }
+  // paredes não deixam ninguém passar (nem as aranhas)
+  function labColidir(e) {
+    const L = E.lab; if (!L || e.tipo === 'serpente') return;
+    if (!L.dentro(e.x, e.z, 3)) return;
+    const r = (e.raio || 0.6) * 0.75;
+    const bater = a => {
+      if (a.h < LAB.solida) return;
+      const hx = a.w / 2 + r, hz = a.d / 2 + r, dx = e.x - a.x, dz = e.z - a.z;
+      if (Math.abs(dx) >= hx || Math.abs(dz) >= hz) return;
+      if (hx - Math.abs(dx) < hz - Math.abs(dz)) e.x = a.x + (dx >= 0 ? 1 : -1) * hx; else e.z = a.z + (dz >= 0 ? 1 : -1) * hz;
+    };
+    L.arestas.forEach(bater); L.pilares.forEach(bater);
+  }
+  // pode passar de uma sala para a vizinha agora?
+  function labPassa(L, r, c, r2, c2) {
+    let a;
+    if (r2 !== r) a = L.arestas[(Math.max(r, r2)) * L.n + c];                       // H: índice r*n + c
+    else a = L.arestas[(L.n + 1) * L.n + r * (L.n + 1) + Math.max(c, c2)];         // V: depois de todas as H
+    return a && a.h < LAB.solida;
+  }
+  function labRota(L, de, para) {
+    if (!de || !para) return null;
+    const n = L.n, chave = (r, c) => r * n + c, veio = new Map([[chave(de[0], de[1]), null]]), fila = [de];
+    while (fila.length) {
+      const [r, c] = fila.shift();
+      if (r === para[0] && c === para[1]) break;
+      [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]].forEach(([a, b]) => {
+        if (a < 0 || b < 0 || a >= n || b >= n || veio.has(chave(a, b)) || !labPassa(L, r, c, a, b)) return;
+        veio.set(chave(a, b), [r, c]); fila.push([a, b]);
+      });
+    }
+    if (!veio.has(chave(para[0], para[1]))) return null;
+    const rota = []; let p = para;
+    while (p && !(p[0] === de[0] && p[1] === de[1])) { rota.unshift(p); p = veio.get(chave(p[0], p[1])); }
+    return rota;
+  }
+  function labAndar(e, x, z, dt, vel) {
+    const dx = x - e.x, dz = z - e.z, d = Math.hypot(dx, dz);
+    if (d < 0.1) return true;
+    e.rot = girarPara(e.rot, Math.atan2(dx, dz), dt * 8);
+    const v = Math.min(d, vel * lentidao(e) * dt);
+    e.x += dx / d * v; e.z += dz / d * v;
+    e.anim.mover(vel);
+    return d < 0.6;
+  }
+  // aranhas robóticas: patrulham, caçam quem entra, voltam para o túnel antes da mudança
+  function iaAranhaRobo(e, dt) {
+    const L = E.lab, A = e.labA;
+    if (!L || !A || e.morto) return;
+    if (preso(e)) { e.anim.mover(0); return; }
+    const rel = L.rel, h = E.heroi;
+    const recolher = rel.fase === 'mudando' || (rel.fase === 'aberto' && (rel.dur - rel.t <= 90 || rel.t < 30));
+    const vel = e.vel * (A.estado === 'enxame' || A.estado === 'recolher' ? 1.35 : 1);
+    if (recolher && A.estado !== 'escondida') A.estado = 'recolher';
+    else if (!recolher && A.estado === 'recolher') { A.estado = 'patrulha'; A.rota = []; A.alvoCel = null; }
+    if (A.estado === 'escondida') {
+      e.obj.visible = false; e.barra.visible = false;
+      // saem do túnel uma de cada vez, 30 s depois da mudança
+      if (!recolher && E.t >= (A.saiEm || 0)) { A.estado = 'patrulha'; e.obj.visible = true; e.x = L.tunel.x; e.z = L.tunel.z + 0.8; A.rota = []; emitir('faisca', e.x, 0.4, e.z, { n: 10, cor: 0xff4040, vel: 2, vida: 0.4 }); }
+      return;
+    }
+    const minha = L.cel(e.x, e.z);
+    let destino = null, direto = null;
+    if (A.estado === 'recolher') {
+      destino = L.cel(L.tunel.x, L.tunel.z + 1);
+      if (Math.hypot(e.x - L.tunel.x, e.z - L.tunel.z) < 2.2) {
+        A.estado = 'escondida'; A.saiEm = 0; e.obj.visible = false;
+        A.saiEm = E.t + Math.random() * 6; return;
+      }
+    } else {
+      const heroiVivo = h && !h.morto && !invisivel(h) && !(h.obj && h.obj.visible === false);
+      const heroiCel = heroiVivo ? L.cel(h.x, h.z) : null, dH = h ? dist(h, e) : 99;
+      // depois de 2 aranhas mortas pelo jogador, elas saem um pouco atrás dele (e logo voltam)
+      const furiosas = L.mortes > 2 && heroiVivo && !heroiCel && Math.hypot(h.x - L.porta.x, h.z - L.porta.z) < 22;
+      if (heroiVivo && dH <= e.alcance + h.raio) {
+        e.rot = girarPara(e.rot, Math.atan2(h.x - e.x, h.z - e.z), dt * 10); e.anim.mover(0);
+        if (E.t >= e.prontoEm) {
+          e.prontoEm = E.t + e.cfg.intervalo;
+          e.anim.tocar('ataque', { momento: 0.5, aoAcertar: () => { if (dist(h, e) <= e.alcance + h.raio + 0.4) { causarDano(h, e.dano, e); emitir('faisca', h.x, 0.9, h.z, { n: 8, cor: 0xff5050, vel: 3, vida: 0.3 }); } } });
+        }
+        return;
+      }
+      if (heroiCel && minha && dH < 18) { A.estado = 'caca'; destino = heroiCel; if (heroiCel[0] === minha[0] && heroiCel[1] === minha[1]) direto = [h.x, h.z]; }
+      else if (furiosas && Math.hypot(e.x - L.porta.x, e.z - L.porta.z) < 26) { A.estado = 'fora'; direto = [h.x, h.z]; if (minha) destino = [L.n - 1, L.meio]; }
+      else if (A.estado === 'enxame' && A.ponto) {
+        destino = L.cel(A.ponto[0], A.ponto[1]);
+        if (Math.hypot(e.x - A.ponto[0], e.z - A.ponto[1]) < 2) A.estado = 'patrulha';
+      } else {
+        if (A.estado === 'fora' || A.estado === 'caca') { A.estado = 'patrulha'; A.alvoCel = null; }
+        if (!minha) destino = [L.n - 1, L.meio];           // ficou do lado de fora: volta pela porta
+        else {
+          if (!A.alvoCel || (minha[0] === A.alvoCel[0] && minha[1] === A.alvoCel[1])) A.alvoCel = [Math.floor(Math.random() * L.n), Math.floor(Math.random() * L.n)];
+          destino = A.alvoCel;
+        }
+      }
+    }
+    // fora do labirinto: anda reto até a porta (ou atrás do jogador)
+    if (!minha) {
+      const [px, pz] = direto || [L.porta.x, L.porta.z - 2];
+      labAndar(e, px, pz, dt, vel); return;
+    }
+    if (direto && !destino) { labAndar(e, direto[0], direto[1], dt, vel); return; }
+    if (E.t >= A.recalc || !A.rota.length) {
+      A.recalc = E.t + 0.6;
+      const rota = labRota(L, minha, destino);
+      A.rota = rota || [];
+      if (!rota && A.estado === 'patrulha') A.alvoCel = null;
+    }
+    if (direto && destino && minha[0] === destino[0] && minha[1] === destino[1]) { labAndar(e, direto[0], direto[1], dt, vel); return; }
+    if (A.rota.length) {
+      const [r, c] = A.rota[0], [cx, cz] = L.centro(r, c);
+      if (labAndar(e, cx, cz, dt, vel)) A.rota.shift();
+    } else if (A.estado === 'recolher') labAndar(e, L.tunel.x, L.tunel.z, dt, vel);
+    else e.anim.mover(0);
+    // de vez em quando sobe pela parede do lado e anda por ela
+    if (E.t > A.proxParede && A.estado !== 'recolher') {
+      const lado = Math.random() < 0.5 ? -1 : 1, sx = e.x + Math.cos(e.rot) * lado * (L.T / 2), sz = e.z - Math.sin(e.rot) * lado * (L.T / 2);
+      const temParede = L.arestas.some(a => a.h > 0.9 && Math.abs(sx - a.x) < a.w / 2 + 0.8 && Math.abs(sz - a.z) < a.d / 2 + 0.8);
+      if (temParede) { A.paredeAte = E.t + 2.5 + Math.random() * 2; A.lado = lado; }
+      A.proxParede = E.t + 6 + Math.random() * 8;
+    }
+    const naParede = E.t < A.paredeAte;
+    e.paredeY = (e.paredeY || 0) + ((naParede ? 1.3 : 0) - (e.paredeY || 0)) * Math.min(1, dt * 5);
+    e.paredeRol = (e.paredeRol || 0) + ((naParede ? -A.lado * 1.25 : 0) - (e.paredeRol || 0)) * Math.min(1, dt * 5);
+    if (naParede) { e.x += Math.cos(e.rot) * A.lado * dt * 1.5; e.z -= Math.sin(e.rot) * A.lado * dt * 1.5; }
+  }
+  // quando uma aranha morre: saem mais 3 do túnel e correm até onde ela caiu
+  function labAranhaMorreu(e) {
+    const L = E.lab; if (!L) return;
+    L.mortes++;
+    E.agenda.push({ em: E.t + 1, fn: () => { e.removerEm = E.t; } });
+    if (L.aranhas.filter(a => !a.morto).length > 22) return;
+    emitir('faisca', L.tunel.x, 0.5, L.tunel.z, { n: 30, cor: 0xff3030, vel: 4, subida: 2, vida: 0.6 });
+    anelEfeito(L.tunel.x, L.tunel.z, 3, 0xff3030, 0.6, true);
+    if (E.heroi && L.cel(E.heroi.x, E.heroi.z)) aviso('Enxame! Mais aranhas saíram do túnel');
+    for (let i = 0; i < 3; i++) labNovaAranha(L.tunel.x + (i - 1) * 1.2, L.tunel.z + 1.5, 'enxame', [e.x, e.z]);
+  }
+  function atualizarLabirinto(dt) {
+    const L = E.lab; if (!L) return;
+    const antes = L.rel; L.rel = labRelogio();
+    const rel = L.rel;
+    // terminou uma mudança: as aranhas que faltam são repostas e o mapa (minimapa) é refeito
+    if (L.ultimoK !== null && rel.k !== L.ultimoK) {
+      L.versao++; L.vistos.clear(); L.mortes = 0;
+      const vivas = L.aranhas.filter(a => !a.morto && E.entidades.indexOf(a) >= 0);
+      L.aranhas = vivas;
+      for (let i = vivas.length; i < (L.cfg.aranhas || 8); i++) labNovaAranha(L.tunel.x, L.tunel.z, 'escondida').then(a => { if (a) { a.labA.saiEm = E.t + 30 + i * 2; a.obj.visible = false; } });
+      if (L.bauAberto) { L.bauAberto = false; }
+    }
+    if (antes && antes.fase !== rel.fase && E.heroi && E.mapa === 'labirinto') {
+      if (rel.fase === 'mudando') aviso(L.cel(E.heroi.x, E.heroi.z) ? 'O labirinto está mudando! A porta fechou: cuidado com as paredes' : 'A porta do labirinto fechou: as paredes estão mudando');
+      else aviso('A porta do labirinto abriu!');
+    }
+    if (antes && antes.fase === 'aberto' && rel.fase === 'aberto' && antes.dur - antes.t > 90 && rel.dur - rel.t <= 90) aviso('Falta 1:30 para o labirinto fechar: as aranhas estão voltando ao túnel');
+    L.ultimoK = rel.k;
+    labAplicar(dt, false);
+    // tampa do baú
+    if (L.tampa) L.tampa.rotation.x += ((L.bauAberto ? -1.6 : 0) - L.tampa.rotation.x) * Math.min(1, dt * 4);
+    // salas que o jogador já viu (o minimapa só mostra essas)
+    const h = E.heroi;
+    if (h && !h.morto) {
+      const c = L.cel(h.x, h.z);
+      if (c) for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) if (Math.abs(dr) + Math.abs(dc) < 2) L.vistos.add((c[0] + dr) + ',' + (c[1] + dc));
+      // paredes entre a câmera e o herói ficam transparentes
+      L.arestas.forEach(a => {
+        if (a.porta) return;
+        const tapa = a.h > 0.3 && Math.abs(a.x - h.x) < a.w / 2 + 2.5 && a.z > h.z + 0.4 && a.z < h.z + 9;
+        if (tapa !== !!a.fade) { a.fade = tapa; a.mesh.material = tapa ? L.matFade : L.mat; }
+      });
+    }
+    // o evento acabou com o jogador lá dentro: volta para casa
+    if (E.mapa === 'labirinto' && !labAtivo() && !ehAdmin() && !ehModerador() && !L.saindo) { L.saindo = true; aviso('O evento do labirinto terminou'); setTimeout(() => labSair('fim'), 3000); }
+  }
+  const ehModerador = () => !!(global.Rede && global.Rede.eu && global.Rede.eu.papel === 'moderador');
+  function labTempo(s) { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+  function labStatus() {
+    const rel = E.lab ? E.lab.rel : labRelogio();
+    if (rel.fase === 'mudando') return 'labirinto mudando · porta abre em ' + labTempo(rel.dur - rel.t);
+    return 'labirinto aberto · fecha em ' + labTempo(rel.dur - rel.t);
+  }
+  // tentativas: todos têm 1 + 2 se perder; quem ganha só volta no próximo evento (ou se o admin liberar)
+  function labRegistro() {
+    const c = labCfg(), id = String(c.id || c.inicio || 'padrao');
+    if (!P.lab || P.lab.ev !== id) P.lab = { ev: id, perdas: 0, vitorias: 0, depoisVitoria: 0, dentro: false };
+    return P.lab;
+  }
+  function labPodeEntrar() {
+    if (ehAdmin() || ehModerador()) return null;
+    if (!labAtivo()) return 'O labirinto só abre em eventos especiais';
+    const g = labRegistro(), c = labCfg();
+    if (g.vitorias > 0) return g.depoisVitoria < (Number(c.tentativasGanhador) || 0) ? null : 'Você já venceu o labirinto neste evento. Volte no próximo!';
+    const max = Number(c.tentativas) || 3;
+    if (g.perdas >= max) return 'Suas ' + max + ' tentativas neste evento acabaram';
+    return null;
+  }
+  async function labEntrar() {
+    const erro = labPodeEntrar(); if (erro) return erro;
+    if (E.heroi && E.heroi.arena) return 'Saia da arena primeiro';
+    const g = labRegistro();
+    if (g.vitorias > 0) g.depoisVitoria++;
+    g.dentro = true; P.labOrigem = E.mapa !== 'labirinto' ? E.mapa : (P.labOrigem || 'mapa1');
+    salvar();
+    await carregarMapa('labirinto');
+    const c = labCfg(), max = Number(c.tentativas) || 3;
+    aviso(g.vitorias > 0 ? 'Bem-vindo de volta ao labirinto' : 'Labirinto: tentativa ' + (g.perdas + 1) + ' de ' + max + '. Leia a placa!');
+    return null;
+  }
+  // sair: por morte, desistência (placa), vitória ou fim do evento
+  async function labSair(motivo) {
+    const g = labRegistro();
+    if (g.dentro && (motivo === 'morte' || motivo === 'desistiu' || motivo === 'saiu')) g.perdas++;
+    g.dentro = false;
+    const destino = P.labOrigem && MAPAS.lista[P.labOrigem] && P.labOrigem !== 'labirinto' ? P.labOrigem : 'mapa1';
+    salvar();
+    if (E.heroi && E.heroi.morto) { E.heroi.morto = false; E.heroi.vida = E.heroi.vidaMax; if (E.heroi.anim) E.heroi.anim.tocar('renascer'); }
+    await carregarMapa(destino);
+    const max = Number(labCfg().tentativas) || 3;
+    if (motivo === 'morte') aviso('Você caiu no labirinto. ' + (g.perdas < max && !g.vitorias ? 'Restam ' + (max - g.perdas) + ' tentativa(s)' : 'Suas tentativas acabaram'));
+    else if (motivo === 'desistiu') aviso('Você desistiu do labirinto. ' + (g.perdas < max ? 'Restam ' + (max - g.perdas) + ' tentativa(s)' : 'Suas tentativas acabaram'));
+  }
+  function telaPlacaLab() {
+    const c = labCfg(), min = Math.round(labIntervalo() / 60), g = labRegistro(), max = Number(c.tentativas) || 3;
+    const pr = c.premio || {};
+    const premio = [pr.ouro ? pr.ouro + ' de ouro' : '', pr.xp ? pr.xp + ' XP' : '', pr.estrelas ? pr.estrelas + ' estrela(s)' : '', pr.skin && pr.skin.id ? 'skin ' + pr.skin.id : ''].filter(Boolean).join(' + ') || 'definido pelo administrador';
+    abrirModal('Placa do Labirinto', `
+      <p><b>O labirinto se fecha a cada ${min} minutos.</b> De 3 a 5 minutos depois as portas se abrem de novo, com as ruas em outra posição.</p>
+      <ul>
+        <li>Durante a mudança a única porta fica fechada e as paredes se movem devagar: quem estiver lá dentro pode ser <b>esmagado</b>, se perder ou ser atacado.</li>
+        <li>As aranhas robóticas andam pelo chão e pelas paredes, mas ninguém atravessa parede. Matou uma? Saem mais 3 do túnel atrás de você.</li>
+        <li>Faltando 1:30 para fechar, as aranhas voltam para o túnel no fundo do labirinto. É lá, ao lado do túnel, que fica o <b>baú</b>.</li>
+        <li>Prêmio do baú: <b>${String(premio).replace(/[<>&]/g, '')}</b>.</li>
+        <li>Morrer lá dentro tira <b>3 estrelas</b> e você sai do mapa. Cada jogador tem ${max} tentativas por evento.</li>
+      </ul>
+      <p class="nota">${labStatus()} · ${g.vitorias ? 'você já venceu' : 'tentativa ' + Math.min(max, g.perdas + 1) + ' de ' + max}</p>
+      <button class="acao" id="bSairLab" type="button">Sair (desistir)</button>`, el => {
+      el.querySelector('#bSairLab').addEventListener('click', () => { fecharModal(); labSair('desistiu'); });
+    });
+    $('modalFechar').hidden = false;
+  }
+  async function labAbrirBau() {
+    const L = E.lab; if (!L) return;
+    if (L.bauAberto) return aviso('Você já pegou o prêmio deste labirinto');
+    const g = labRegistro();
+    let r = gancho('premioLabirinto', L.rel.k);
+    if (r && r.then) { try { r = await r; } catch (e) { aviso(e.message || 'Não foi possível abrir o baú'); return; } }
+    if (r === undefined) { const pr = labCfg().premio || {}; r = { ouro: Number(pr.ouro) || 0, xp: Number(pr.xp) || 0, estrelas: Number(pr.estrelas) || 0, skin: pr.skin }; if (r.ouro) P.ouro += r.ouro; }
+    if (!r || r.repetido) return aviso('Você já pegou este prêmio');
+    L.bauAberto = true;
+    emitir('media', L.bau.x, 1.2, L.bau.z, { n: 50, cor: 0xffd27a, vel: 4, subida: 4, vida: 0.9, arrasto: 1.5 });
+    anelEfeito(L.bau.x, L.bau.z, 3, 0xffd27a, 0.8, true);
+    if (r.xp) ganhar(r.xp, 0, false);
+    if (r.estrelas) { const c = C(); c.estrelas += r.estrelas; }
+    g.vitorias++; salvar(); hud();
+    aviso('Você venceu o labirinto! ' + [r.ouro ? '+' + r.ouro + ' ouro' : '', r.xp ? '+' + r.xp + ' XP' : '', r.estrelas ? '+' + r.estrelas + ' estrela(s)' : '', r.skin && r.skin.id ? 'skin ' + r.skin.id : ''].filter(Boolean).join(' · '));
+    setTimeout(() => labSair('vitoria'), 4500);
+  }
+
   /* ======================= FOTO DO MAPA (minimapa panorâmico) ======================= */
   // tira uma foto de cima do mapa de verdade (sem personagens), para o minimapa
   function fotoMapa(larg) {
@@ -3556,6 +4139,12 @@
   // visita sem cidadania acabou ao sair do jogo: volta para o aeroporto de onde saiu
   function mapaDeInicio() {
     let inicio = P.mapa && MAPAS.lista[P.mapa] ? P.mapa : 'mapa1', voltou = null;
+    // saiu do jogo dentro do labirinto: conta como tentativa e volta para onde entrou
+    if (inicio === 'labirinto') {
+      if (P.lab && P.lab.dentro) { P.lab.perdas = (P.lab.perdas || 0) + 1; P.lab.dentro = false; }
+      inicio = P.labOrigem && MAPAS.lista[P.labOrigem] && P.labOrigem !== 'labirinto' ? P.labOrigem : 'mapa1';
+      return { inicio, voltou: null };
+    }
     const vg = P.viagem;
     if (vg && vg.destino === inicio && MAPAS.lista[vg.origem] && !(P.classe === vg.classe && cidadaniaEm(inicio))) {
       inicio = vg.origem; voltou = MAPAS.lista[vg.origem].nome; P.viagem = null; P.retorno = null;
@@ -3649,6 +4238,8 @@
         if (Entrada.atacando && E.t >= h.cds[0]) usar(0, Entrada.miraAtaque !== null ? { ang: Entrada.miraAtaque, dist: 10 } : null);
         h.anim.mover(vel);
       }
+      moverEmpurrao(h, dt);
+      if (h.classe === 'jin') jinModo(h);
       h.x = clamp(h.x, -E.def.tam[0] / 2, E.def.tam[0] / 2);
       h.z = clamp(h.z, -E.def.tam[1] / 2, E.def.tam[1] / 2);
       empurrarSolidos(h);
@@ -3657,12 +4248,14 @@
     for (const e of E.entidades) {
       const congelado = e.congeladoAte > E.t;
       if (e.anim && e.anim.mixer) e.anim.mixer.timeScale = congelado ? 0 : 1;
+      if (e.empurrao && e !== E.heroi && !remoto(e)) moverEmpurrao(e, dt);
       if (e.tipo === 'mob') iaMob(e, dt);
       else if (e.tipo === 'minion') iaMinion(e, dt);
       else if (e.tipo === 'torre') iaTorre(e);
       else if (e.tipo === 'serpente') iaSerpente(e, dt);
       else if (e.tipo === 'clone') iaClone(e, dt);
     }
+    if (E.lab) atualizarLabirinto(dt);
     gancho('passo', dt);
     atualizarFx(dt);
     if (R.Fx) R.Fx.atualizar(dt);
@@ -3693,7 +4286,8 @@
         // dentro do rio/lago o corpo afunda até as coxas (a água cobre as pernas)
         const fundo = !e.morto && !e.naoAfundaAgua && e.tipo !== 'clone' && naAgua(e.x, e.z) ? CONFIG.afundarAgua * (e.altura || 1.8) / 1.8 : 0;
         e.afundado = (e.afundado || 0) + (fundo - (e.afundado || 0)) * Math.min(1, dt * 6);
-        e.obj.position.set(e.x, -e.afundado, e.z); e.obj.rotation.y = e.rot;
+        e.obj.position.set(e.x, -e.afundado + (e.paredeY || 0), e.z); e.obj.rotation.y = e.rot;
+        if (e.paredeRol !== undefined) e.obj.rotation.z = e.paredeRol;
         if (e.afundado > 0.2 && (e.respingoEm || 0) < E.t && (e.anim && e.anim.velMov > 0.3)) {
           e.respingoEm = E.t + 0.35;
           emitir('faisca', e.x, 0.1, e.z, { n: 4, cor: 0xcfefff, vel: 1.2, subida: 1.4, grav: 6, vida: 0.4 });
@@ -3801,14 +4395,16 @@
     if (h.aceleradoAte > E.t) tags.push('acelerado ' + Math.ceil(h.aceleradoAte - E.t) + ' s');
     if (h.explosivoAte > E.t) tags.push('tiros explosivos ' + Math.ceil(h.explosivoAte - E.t) + ' s');
     if (E.buffDano > 0) tags.push('+' + (E.buffDano * 100).toFixed(1) + '% dano');
-    if (h.morto) tags.push('volta em ' + Math.max(0, Math.ceil(h.renasceEm - E.t)) + ' s');
+    if (h.morto && h.renasceEm !== Infinity) tags.push('volta em ' + Math.max(0, Math.ceil(h.renasceEm - E.t)) + ' s');
+    if (E.lab) tags.push(labStatus());
     const txt = tags.join(' · ');
     const el = $('hudTags'); if (el.textContent !== txt) el.textContent = txt;
     // botão de interação
     const it = E.interacoes.find(i => Math.hypot(h.x - i.x, h.z - i.z) < i.raio);
     const bi = $('bInteragir');
-    const rotulos = { loja: 'Abrir a loja', instrucoes: 'Instruções', aeroporto: 'Aeroporto', arena: 'Guichê da arena' };
-    bi.hidden = !it || h.morto;
+    const rotulos = { loja: 'Abrir a loja', instrucoes: 'Instruções', aeroporto: 'Aeroporto', arena: 'Guichê da arena', caverna_lab: 'Entrar no Labirinto', placa_lab: 'Ler a placa', bau_lab: 'Abrir o baú' };
+    const itVale = it && (it.tipo !== 'caverna_lab' || labAtivo() || ehAdmin() || ehModerador());
+    bi.hidden = !itVale || h.morto;
     if (it) { bi.textContent = rotulos[it.tipo]; bi.dataset.tipo = it.tipo; bi.dataset.arena = it.arenaIndice !== undefined ? it.arenaIndice : ''; }
   }
 
@@ -3937,9 +4533,13 @@
   }
   function telaHeroi(primeiraVez) {
     if (!primeiraVez && E.heroi && !naPracaInicio(E.heroi)) { aviso('Para trocar de herói, volte à praça do começo do mapa'); return; }
-    const classes = Object.keys(CLASSES).map(k => {
-      const c = P.classes[k], r = rankInfo(c.estrelas);
-      return `<button type="button" class="classe ${P.classe === k ? 'sel' : ''}" data-classe="${k}"><b>${CLASSES[k].nome}</b><small>${r.nome} ★ ${r.estrelas}</small><small>${CLASSES[k].habs.join(' · ')}</small></button>`;
+    // heróis de evento (Jin) aparecem logo depois da classe deles, como segunda opção; bloqueados ficam apagados
+    const ordem = [];
+    Object.keys(CLASSES).filter(k => !CLASSES[k].grupo).forEach(k => { ordem.push(k); Object.keys(CLASSES).filter(j => CLASSES[j].grupo === k).forEach(j => ordem.push(j)); });
+    const classes = ordem.map(k => {
+      const c = P.classes[k] || { estrelas: 0 }, r = rankInfo(c.estrelas), livre = heroiLiberado(k), cl = CLASSES[k];
+      const titulo = cl.grupo ? `${CLASSES[cl.grupo].nome} · ${cl.nome}` : cl.nome;
+      return `<button type="button" class="classe ${P.classe === k ? 'sel' : ''} ${livre ? '' : 'bloq'}" data-classe="${k}" ${livre ? '' : 'data-bloq="1"'}><b>${titulo}</b><small>${livre ? r.nome + ' ★ ' + r.estrelas : '🔒 Liberado em evento'}</small><small>${cl.habs.join(' · ')}</small></button>`;
     }).join('');
     const cores = CORES.map(c => `<button type="button" class="cor ${P.cor === c ? 'sel' : ''}" data-cor="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('');
     let escolha = { classe: P.classe || 'soldado', genero: P.genero, cor: P.cor };
@@ -3951,7 +4551,10 @@
       <button class="acao forte" id="bConfirmarHeroi" type="button">Jogar</button>`, el => {
       const marcar = (sel, attr, val) => el.querySelectorAll(sel).forEach(b => b.classList.toggle('sel', b.dataset[attr] === val));
       if (!P.classe) marcar('[data-classe]', 'classe', escolha.classe);
-      el.querySelectorAll('[data-classe]').forEach(b => b.addEventListener('click', () => { escolha.classe = b.dataset.classe; marcar('[data-classe]', 'classe', escolha.classe); }));
+      el.querySelectorAll('[data-classe]').forEach(b => b.addEventListener('click', () => {
+        if (b.dataset.bloq) { aviso(CLASSES[b.dataset.classe].nome + ' é liberado em eventos especiais'); return; }
+        escolha.classe = b.dataset.classe; marcar('[data-classe]', 'classe', escolha.classe);
+      }));
       el.querySelectorAll('[data-genero]').forEach(b => b.addEventListener('click', () => { escolha.genero = b.dataset.genero; marcar('[data-genero]', 'genero', escolha.genero); }));
       el.querySelectorAll('[data-cor]').forEach(b => b.addEventListener('click', () => { escolha.cor = b.dataset.cor; marcar('[data-cor]', 'cor', escolha.cor); }));
       el.querySelector('#bConfirmarHeroi').addEventListener('click', async () => {
@@ -3966,6 +4569,12 @@
     if (!primeiraVez) $('modalFechar').hidden = false; else $('modalFechar').hidden = true;
   }
 
+  // herói liberado? Os de evento precisam ter sido ganhos (o administrador tem todos)
+  function heroiLiberado(k) {
+    const c = CLASSES[k]; if (!c) return false;
+    if (!c.evento) return true;
+    return gancho('temHeroi', k) === true || !!(P.liberados && P.liberados[k]);
+  }
   function textoMira() { const b = temDOM && document.querySelector('[data-menu="mira"]'); if (b) b.textContent = 'Mira auxiliar: ' + (MIRA_AUX.ligada ? 'ligada' : 'desligada'); }
   // coluna de itens: arrasta pela alça para qualquer lugar e minimiza no "–" (fica salvo neste celular)
   function ligarItens() {
@@ -4096,6 +4705,9 @@
       if (t === 'instrucoes') telaInstrucoes();
       if (t === 'aeroporto') telaAeroporto();
       if (t === 'arena') telaArena(Number($('bInteragir').dataset.arena));
+      if (t === 'caverna_lab') labEntrar().then(e => { if (e) aviso(e); });
+      if (t === 'placa_lab') telaPlacaLab();
+      if (t === 'bau_lab') labAbrirBau();
     });
     $('modalFechar').addEventListener('click', fecharModal);
     $('bMenu').addEventListener('click', () => { const m = $('menu'); m.hidden = !m.hidden; });
@@ -4163,6 +4775,8 @@
       ligarControles();
       $('carregando').hidden = true;
       relogio = new THREE.Clock();
+      // herói de evento que não está mais liberado: volta para a classe dele
+      if (P.classe && !heroiLiberado(P.classe)) P.classe = CLASSES[P.classe] && CLASSES[P.classe].grupo || 'soldado';
       if (!P.classe) telaHeroi(true);
       else { await criarHeroi(); }
       // espera escolher o herói para começar a desenhar
@@ -4190,10 +4804,10 @@
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
       atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
-      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, xpProximaEstrela, temporadaAtual, aplicarTemporada
+      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
-    _t: { CONFIG, E, P, R, MIRA_AUX, CAMERA, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
+    _t: { CONFIG, E, P, R, MIRA_AUX, CAMERA, heroiLiberado, jinModo, labRelogio, labPadrao, labEntrar, labSair, labRota, labAbrirBau, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }
   };
   if (temDOM && !global.ESPERAR_LOGIN) global.addEventListener('load', () => Jogo.iniciar().catch(err => {
     const el = $('carregando'); if (el) el.innerHTML = '<div>NÃO FOI POSSÍVEL INICIAR<p>' + (err && err.message || err) + '</p></div>';

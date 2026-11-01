@@ -11,7 +11,7 @@
   const doc = global.document;
   const $ = id => doc.getElementById(id);
   const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const CLASSES_NOMES = { soldado: 'Soldado', suporte: 'Suporte', mago: 'Mago', atirador: 'Atirador' };
+  const CLASSES_NOMES = { soldado: 'Soldado', jin: 'Jin (Soldado)', suporte: 'Suporte', mago: 'Mago', atirador: 'Atirador' };
   const dataBR = d => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
   const ateBR = d => (!d || String(d).indexOf('infinity') >= 0 || new Date(d).getFullYear() > 9000) ? 'para sempre' : 'até ' + dataBR(d);
 
@@ -457,7 +457,8 @@
   /* ======================= FORMULÁRIOS REUSADOS ======================= */
   // sugestões de skins já cadastradas (o campo continua aceitando qualquer nome)
   const listaSkins = () => `<datalist id="dlSkins">${Object.keys(CLASSES_NOMES).map(c => ((global.Skins.CATALOGO.classes[c] || {}).skins || [])
-    .filter(k => k.id !== 'default').map(k => `<option value="${k.id}">${CLASSES_NOMES[c]} · ${esc(k.nome || k.id)}</option>`).join('')).join('')}</datalist>`;
+    .filter(k => k.id !== 'default').map(k => `<option value="${k.id}">${CLASSES_NOMES[c]} · ${esc(k.nome || k.id)}</option>`).join('')).join('')}
+    <option value="default">Herói de evento: escolha a classe Jin e use "default" para liberar o herói</option></datalist>`;
   const selClasse = (id) => `<select id="${id}" class="campo">${Object.keys(CLASSES_NOMES).map(c => `<option value="${c}">${CLASSES_NOMES[c]}</option>`).join('')}</select>`;
   const formBan = `
     <div class="form">
@@ -494,7 +495,7 @@
   function telaModeracao(aba) {
     const Rede = global.Rede, eu = Rede.eu;
     aba = aba || 'banir';
-    const abas = { banir: 'Banir', punir: 'Punir', doar: 'Doar ouro', invisivel: eu.invisivel ? 'Ficar visível' : 'Ficar invisível' };
+    const abas = { banir: 'Banir', punir: 'Punir', doar: 'Doar ouro', invisivel: eu.invisivel ? 'Ficar visível' : 'Ficar invisível', teleporte: 'Teleporte', imortal: 'Imortal' };
     const corpo = {
       banir: formBan,
       punir: `<div class="form"><p class="nota">Tira de 1 a 5 estrelas da classe e manda o motivo para o jogador.</p>
@@ -504,7 +505,11 @@
         <button class="acao forte" id="fPunir" type="button">Punir</button></div>`,
       doar: formDoar(1000),
       invisivel: `<p class="nota">Invisível, nenhum jogador vê você (só o administrador). Serve para observar: enquanto estiver invisível você não ataca jogadores nem ganha recompensas de batalha.</p>
-        <button class="acao forte" id="fInvis" type="button">${eu.invisivel ? 'Ficar visível' : 'Ficar invisível'}</button>`
+        <button class="acao forte" id="fInvis" type="button">${eu.invisivel ? 'Ficar visível' : 'Ficar invisível'}</button>`,
+      teleporte: `<p class="nota">Vai direto para qualquer mapa, sem aeroporto e sem comprar passe.</p>
+        <div class="botoes">${global.MAPAS.ordem.concat(global.MAPAS.eventos || []).map(m => `<button class="acao fina ${J().E.mapa === m ? 'sel' : ''}" type="button" data-teleporte="${m}">${esc(global.MAPAS.lista[m].nome)}</button>`).join('')}</div>`,
+      imortal: `<p class="nota">Imortal: nada tira sua vida (mobs, torres, jogadores).</p>
+        <button class="acao forte" id="fImortal" type="button">${eu.imortal ? 'Desligar imortal' : 'Ligar imortal'}</button>`
     }[aba];
     modal('Moderação', abasHtml(abas, aba) + corpo, el => {
       ligarAbas(el, telaModeracao);
@@ -513,6 +518,13 @@
       if (aba === 'punir') el.querySelector('#fPunir').addEventListener('click', () =>
         tentar(() => Rede.rpc('ajustar_estrelas', { p_num: Number(el.querySelector('#fPunNum').value), p_classe: el.querySelector('#fPunClasse').value,
           p_estrelas: -Math.min(5, Math.max(1, Number(el.querySelector('#fPunQtd').value) || 1)), p_xp: 0, p_motivo: el.querySelector('#fPunMotivo').value }), r => r));
+      if (aba === 'teleporte') el.querySelectorAll('[data-teleporte]').forEach(b => b.addEventListener('click', async () => {
+        J().fecharModal(); const e = await J().teleportar(b.dataset.teleporte); if (e) aviso(e);
+      }));
+      if (aba === 'imortal') el.querySelector('#fImortal').addEventListener('click', async () => {
+        const r = await tentar(() => Rede.rpc('meus_poderes', { p_imortal: !eu.imortal, p_invisivel: null }));
+        if (r) { Rede.depoisDeGastarNoServidor(r); aviso(r.imortal ? 'Imortal ligado' : 'Imortal desligado'); telaModeracao('imortal'); }
+      });
       if (aba === 'invisivel') el.querySelector('#fInvis').addEventListener('click', async () => {
         const r = await tentar(() => Rede.rpc('meus_poderes', { p_imortal: null, p_invisivel: !eu.invisivel }));
         if (r) { Rede.depoisDeGastarNoServidor(r); aviso(r.invisivel ? 'Você está invisível' : 'Você está visível'); telaModeracao('invisivel'); }
@@ -528,8 +540,8 @@
   let jogadorSel = null;
   function telaAdmin(aba) {
     if (typeof aba !== 'string') aba = 'jogadores';
-    const abas = { jogadores: 'Jogadores', banimentos: 'Banimentos', recompensas: 'Recompensas', premios: 'Prêmios dos mobs', balanco: 'Dano e defesa', loja: 'Loja de skins', evento: 'Evento da arena', cinematicas: 'Cinemáticas', moderadores: 'Moderadores', poderes: 'Meus poderes' };
-    const f = { jogadores: admJogadores, banimentos: admBanimentos, recompensas: admRecompensas, premios: admPremios, balanco: admBalanco, loja: admLoja, evento: admEvento, cinematicas: admCinematicas, moderadores: admModeradores, poderes: admPoderes }[aba];
+    const abas = { jogadores: 'Jogadores', banimentos: 'Banimentos', recompensas: 'Recompensas', premios: 'Prêmios dos mobs', balanco: 'Dano e defesa', loja: 'Loja de skins', evento: 'Evento da arena', labirinto: 'Labirinto', cinematicas: 'Cinemáticas', moderadores: 'Moderadores', poderes: 'Meus poderes' };
+    const f = { jogadores: admJogadores, banimentos: admBanimentos, recompensas: admRecompensas, premios: admPremios, balanco: admBalanco, loja: admLoja, evento: admEvento, labirinto: admLabirinto, cinematicas: admCinematicas, moderadores: admModeradores, poderes: admPoderes }[aba];
     f(abasHtml(abas, aba), el => ligarAbas(el, telaAdmin));
   }
   const adm = (topo, html, ligar, montarAbas) => modal('Administrador', topo + html, el => { montarAbas(el); if (ligar) ligar(el); });
@@ -801,6 +813,56 @@
     }, abas);
   }
 
+  // ---- labirinto: mapa de evento (abre pelas cavernas dos minions) ----
+  async function admLabirinto(topo, abas) {
+    const aj = await global.Rede.carregarAjustes();
+    const c = aj.labirinto && typeof aj.labirinto === 'object' ? aj.labirinto : {};
+    const agora = new Date(), pr = c.premio || {}, sk = pr.skin || {};
+    const local = d => { const x = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return x.toISOString().slice(0, 16); };
+    const ativoAgora = J().labAtivo && J().labAtivo();
+    const html = `
+      <p class="nota">Com o evento ligado, as cavernas dos minions de todos os mapas viram a entrada do labirinto. Quem morre lá dentro perde 3 estrelas e sai do mapa; quem pega o baú ganha o prêmio e sai também.</p>
+      <p class="nota">Situação: <b>${ativoAgora ? 'aberto agora' : c.ativo ? 'ligado, fora do horário' : 'desligado'}</b>${ativoAgora && J().labRelogio ? ' · ' + (J().labRelogio().fase === 'mudando' ? 'mudando as paredes' : 'portas abertas') : ''}</p>
+      <div class="form">
+        <label class="rotulo"><input id="lAtivo" type="checkbox" ${c.ativo ? 'checked' : ''}> Evento do labirinto ligado</label>
+        <label class="rotulo">Começa em<input id="lIni" class="campo" type="datetime-local" value="${local(c.inicio ? new Date(c.inicio) : agora)}"></label>
+        <label class="rotulo">Termina em<input id="lFim" class="campo" type="datetime-local" value="${local(c.fim ? new Date(c.fim) : new Date(agora.getTime() + 3 * 864e5))}"></label>
+        <label class="rotulo">Paredes mudam a cada (minutos)<input id="lInt" class="campo" type="number" min="2" max="240" value="${c.intervalo || 30}"></label>
+        <div class="linha2"><label class="rotulo">Tentativas por jogador<input id="lTent" class="campo" type="number" min="1" max="20" value="${c.tentativas || 3}"></label>
+          <label class="rotulo">Entradas extras para quem já ganhou<input id="lTentG" class="campo" type="number" min="0" max="20" value="${c.tentativasGanhador || 0}"></label></div>
+      </div>
+      <h3 class="sub">Prêmio do baú</h3>
+      ${listaSkins()}
+      <div class="form">
+        <div class="linha2"><input id="lOuro" class="campo" type="number" min="0" placeholder="Ouro" value="${pr.ouro || ''}">
+          <input id="lXp" class="campo" type="number" min="0" placeholder="XP" value="${pr.xp || ''}"></div>
+        <div class="linha2"><input id="lEstrelas" class="campo" type="number" min="0" max="50" placeholder="Estrelas" value="${pr.estrelas || ''}">
+          <select id="lClasse" class="campo">${Object.keys(CLASSES_NOMES).map(k => `<option value="${k}" ${sk.classe === k ? 'selected' : ''}>${CLASSES_NOMES[k]}</option>`).join('')}</select></div>
+        <div class="linha2"><input id="lSkin" class="campo" list="dlSkins" placeholder="Skin (vazio = sem skin)" value="${esc(sk.id || '')}">
+          <select id="lDias" class="campo"><option value="0">Permanente</option>${[1, 3, 7].map(d => `<option value="${d}" ${+sk.dias === d ? 'selected' : ''}>Teste ${d} dia(s)</option>`).join('')}</select></div>
+      </div>
+      <div class="botoes"><button class="acao forte" id="lSalvar" type="button">Salvar labirinto</button></div>
+      <p class="nota">Mudar as datas começa um evento novo: as tentativas de todos voltam a contar do zero.</p>`;
+    adm(topo, html, el => {
+      el.querySelector('#lSalvar').addEventListener('click', async () => {
+        const v = id => el.querySelector(id).value.trim();
+        const ini = new Date(v('#lIni')), fim = new Date(v('#lFim'));
+        if (!(fim > ini)) return aviso('O fim precisa ser depois do começo');
+        const premio = { ouro: Number(v('#lOuro')) || 0, xp: Number(v('#lXp')) || 0, estrelas: Math.min(50, Number(v('#lEstrelas')) || 0) };
+        if (v('#lSkin')) {
+          const id = v('#lSkin').toLowerCase();
+          if (!/^[a-z0-9_]{2,24}$/.test(id)) return aviso('Nome da skin: letras minúsculas, números ou _');
+          premio.skin = { classe: v('#lClasse'), id, dias: Number(v('#lDias')) || 0 };
+        }
+        if (!premio.ouro && !premio.xp && !premio.estrelas && !premio.skin) return aviso('Coloque um prêmio (ouro, XP, estrelas ou skin)');
+        const valor = { id: ini.toISOString() + '|' + fim.toISOString(), ativo: el.querySelector('#lAtivo').checked, inicio: ini.toISOString(), fim: fim.toISOString(),
+          intervalo: Math.max(2, Math.min(240, Number(v('#lInt')) || 30)), tentativas: Math.max(1, Number(v('#lTent')) || 3),
+          tentativasGanhador: Math.max(0, Number(v('#lTentG')) || 0), premio };
+        if (await tentar(() => global.Rede.rpc('salvar_config', { p_chave: 'labirinto', p_valor: valor }), 'Labirinto salvo') !== undefined) { global.Jogo.ajustes.labirinto = valor; telaAdmin('labirinto'); }
+      });
+    }, abas);
+  }
+
   // ---- dano e defesa: geral (vale em todo lugar) ou só num mapa (vale por cima do geral) ----
   let escopoBalanco = 'geral';
   async function admBalanco(topo, abas) {
@@ -924,7 +986,7 @@
       <div class="linha"><div><b>Imortal</b><small>Nada tira sua vida.</small></div><button class="acao ${eu.imortal ? 'forte' : ''}" id="pImortal" type="button">${eu.imortal ? 'Ligado' : 'Desligado'}</button></div>
       <div class="linha"><div><b>Invisível</b><small>Nenhum jogador vê você. Enquanto invisível você não ataca jogadores.</small></div><button class="acao ${eu.invisivel ? 'forte' : ''}" id="pInvis" type="button">${eu.invisivel ? 'Ligado' : 'Desligado'}</button></div>
       <h3 class="sub">Teleporte</h3><p class="nota">Vai direto para qualquer mapa, sem aeroporto nem passe.</p>
-      <div class="botoes">${global.MAPAS.ordem.map(m => `<button class="acao fina ${J().E.mapa === m ? 'sel' : ''}" type="button" data-teleporte="${m}">${esc(global.MAPAS.lista[m].nome)}</button>`).join('')}</div>`;
+      <div class="botoes">${global.MAPAS.ordem.concat(global.MAPAS.eventos || []).map(m => `<button class="acao fina ${J().E.mapa === m ? 'sel' : ''}" type="button" data-teleporte="${m}">${esc(global.MAPAS.lista[m].nome)}</button>`).join('')}</div>`;
     adm(topo, html, el => {
       const trocar = async (imortal, invisivel) => {
         const r = await tentar(() => global.Rede.rpc('meus_poderes', { p_imortal: imortal, p_invisivel: invisivel }));
@@ -933,7 +995,7 @@
       el.querySelector('#pImortal').addEventListener('click', () => trocar(!eu.imortal, null));
       el.querySelector('#pInvis').addEventListener('click', () => trocar(null, !eu.invisivel));
       el.querySelectorAll('[data-teleporte]').forEach(b => b.addEventListener('click', async () => {
-        if (global.Rede.eu.papel !== 'admin') return aviso('Só o administrador');
+        if (global.Rede.eu.papel !== 'admin' && global.Rede.eu.papel !== 'moderador') return aviso('Só administrador e moderador');
         J().fecharModal(); const e = await J().teleportar(b.dataset.teleporte); if (e) aviso(e);
       }));
     }, abas);
@@ -954,7 +1016,7 @@
     c.addEventListener('dblclick', e => e.preventDefault());
 
     let fundo = null, fundoMapa = null;
-    const ICONES_MOB = { golem: '🗿', dragao: '🐉', aranha: '🕷', barao: '🎩', maestro: '🎻', veterano: '🪖', serpente: '🐍' };
+    const ICONES_MOB = { golem: '🗿', dragao: '🐉', aranha: '🕷', aranha_robo: '🤖', barao: '🎩', maestro: '🎻', veterano: '🪖', serpente: '🐍' };
     function desenharFundo(def, w, h) {
       const f = doc.createElement('canvas'); f.width = w; f.height = h;
       const g = f.getContext('2d'), [W, H] = def.tam, sx = w / W, sz = h / H;
@@ -995,6 +1057,17 @@
       g.save(); g.beginPath(); g.rect(0, 0, lado, lado); g.clip();
       g.fillStyle = '#121a10'; g.fillRect(0, 0, lado, lado);
       g.drawImage(fundo, tx(-W / 2), tz(-H / 2), W * k, H * k);
+      // labirinto: só aparecem as salas que você já viu (o resto fica escuro)
+      if (E.lab) {
+        const L = E.lab;
+        if (desenhar.labVersao !== L.versao && A.fotoMapa) { desenhar.labVersao = L.versao; setTimeout(() => { const f = A.fotoMapa(640); if (f) fundo = f; }, 400); }
+        g.fillStyle = 'rgba(8,10,12,0.93)';
+        for (let r = 0; r < L.n; r++) for (let c2 = 0; c2 < L.n; c2++) {
+          if (L.vistos.has(r + ',' + c2)) continue;
+          g.fillRect(tx(L.x0 + c2 * L.T) - 0.5, tz(L.z0 + r * L.T) - 0.5, L.T * k + 1, L.T * k + 1);
+        }
+        g.fillStyle = '#e3b44c'; g.beginPath(); g.arc(tx(L.bau.x), tz(L.bau.z), grande ? 4 : 3, 0, 7); g.fill();
+      }
       const Rede = global.Rede, souAdmin = Rede && Rede.eu && Rede.eu.papel === 'admin';
       const amigos = [];
       if (Rede && Rede.remotos) Rede.remotos.forEach((r, uid) => { if (r.ent && (Rede.amigos.has(uid) || Rede.aliado(uid)) && !r.ent.morto) amigos.push(r.ent); });
@@ -1016,6 +1089,8 @@
         }
       });
       mobs.forEach(e => {
+        // aranhas do labirinto só aparecem nas salas já vistas
+        if (E.lab && e.labA) { const c = E.lab.cel(e.x, e.z); if (e.obj.visible === false || (c && !E.lab.vistos.has(c[0] + ',' + c[1]))) return; }
         const ic = ICONES_MOB[e.especie || e.tipo] || '★', chefe = e.especie === 'golem' || e.tipo === 'serpente' || e.especie === 'dragao';
         const r = grande ? (chefe ? 8 : 6.5) : (chefe ? 5 : 3.6);
         g.fillStyle = chefe ? 'rgba(127,29,29,0.85)' : 'rgba(120,53,15,0.8)';

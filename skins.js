@@ -46,12 +46,17 @@
         { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
         { id: 'anubis', nome: 'Vontade de Anubis', aceitaCor: false, preco: 0 },
         { id: 'noturna', nome: 'Chamas Noturna', aceitaCor: false, preco: 0 } ] },
+      // Jin: segundo herói do Soldado (não é skin). Luta de mãos e pés, sem arma.
+      jin:      { nome: 'Jin', corPadrao: '#c0392b', skins: [
+        { id: 'default', nome: 'Padrão', aceitaCor: false, preco: 0 } ] },
       atirador: { nome: 'Atirador', corPadrao: '#d68910', skins: [
         { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
         { id: 'cosmos', nome: 'Atirador do Cosmos', aceitaCor: false, preco: 0 },
         { id: 'paintball', nome: 'Maníaco do Paintball', aceitaCor: false, preco: 0 } ] }
     },
     generos: { m: 'Homem', f: 'Mulher' },
+    // estados que todas as skins de uma classe pegam da animação nova (arquivos em assets/anims/<classe>_<skin>/)
+    herdarSkins: { soldado: ['habilidade2'] },
     // realce das skins (cores mais vivas): metal máximo e quanto a textura acende sozinha
     // realce: cada textura é ajustada sozinha (escura sobe, clara fica como está); o brilho próprio é pequeno para o branco não estourar
     realceSkins: { metal: 0.3, brilho: 0.12, noite: 0.08, brilhoCor: 0.75, alvoLuz: 0.3, alvoCor: 0.4, maxGanho: 1.5, maxCor: 1.7, contraste: 1.15 },
@@ -62,6 +67,7 @@
       mapa3:    { escalaMob: 1.5,  variante: 'anciao' },
       arenas:   { escalaMob: 1.5,  variante: 'default' },
       ascensao: { escalaMob: 1.8,  variante: 'ascensao' },
+      labirinto: { escalaMob: 1.0, variante: 'default' },
       repouso:  { escalaMob: 1.0,  variante: 'default' }
     },
 
@@ -72,6 +78,8 @@
       dragao:   { nome: 'Pequeno Dragão', altura: 1.2, cor: '#c0392b', anim: 'quadrupede' },
       barao:    { nome: 'Barão do Ouro',  altura: 1.5, cor: '#d4ac0d', anim: 'humanoide' },
       aranha:   { nome: 'Aranha',         altura: 1.0, cor: '#5b2c8f', cor2: '#9cff3a', anim: 'aranha' },
+      // aranha robótica do labirinto: montada por código, de metal, olhos vermelhos
+      aranha_robo: { nome: 'Aranha Robótica', altura: 1.1, cor: '#59636b', cor2: '#ff2a2a', anim: 'aranha', robo: true, soCodigo: true },
       golem:    { nome: 'Golem da Chuva', altura: 4.5, cor: '#2e86c1', anim: 'humanoide' },
       serpente: { nome: 'Serpente',       altura: 3.0, cor: '#148f77', anim: 'livre' }
     },
@@ -135,6 +143,34 @@
       mago: { habilidade3: { clipe: 'extra_magia_longa' } },
       // golem é pesado: golpes mais lentos que os dos heróis
       golem: { ataque: { duracao: 1.6 }, habilidade1: { duracao: 1.8 } },
+      // Jin: o ataque básico tem conjuntos de golpes; as habilidades 1 e 2 trocam o conjunto.
+      // de/ate = pedaço da animação; golpe = momento do acerto dentro do pedaço; duracao = segundos no jogo
+      jin: {
+        habilidade3: { clipe: 'Kung_Fu_Punch', de: 0.12, ate: 0.64, duracao: 2.2 },
+        ataque: { clipe: 'Punch_Combo', conjuntos: {
+          normal: [
+            { clipe: 'Punch_Combo', de: 0.0, ate: 0.32, golpe: 0.7, tipo: 'soco', duracao: 0.6 },
+            { clipe: 'Rising_Flying_Kick', golpe: 0.62, tipo: 'chute', duracao: 0.95 },
+            { clipe: 'Punch_Combo_1', de: 0.33, ate: 0.5, golpe: 0.3, tipo: 'soco', duracao: 0.5 },
+            { clipe: 'Rising_Flying_Kick', golpe: 0.62, tipo: 'chute', duracao: 0.95 }
+          ],
+          socos: [
+            { clipe: 'Punch_Combo', de: 0.0, ate: 0.32, golpe: 0.7, tipo: 'soco', duracao: 0.45 },
+            { clipe: 'Punch_Combo', de: 0.32, ate: 0.55, golpe: 0.4, tipo: 'soco', duracao: 0.4 },
+            { clipe: 'Punch_Combo', de: 0.55, ate: 0.85, golpe: 0.47, tipo: 'soco', duracao: 0.45 },
+            { clipe: 'Punch_Combo_1', de: 0.1, ate: 0.33, golpe: 0.7, tipo: 'soco', duracao: 0.45 },
+            { clipe: 'Punch_Combo_1', de: 0.33, ate: 0.5, golpe: 0.3, tipo: 'soco', duracao: 0.4 },
+            { clipe: 'Punch_Combo_1', de: 0.5, ate: 0.75, golpe: 0.36, tipo: 'soco', duracao: 0.45 }
+          ],
+          capoeira: [
+            { clipe: 'Sweeping_Kick', de: 0.2, ate: 0.75, golpe: 0.42, tipo: 'capoeira', duracao: 0.9 },
+            { clipe: 'Lunge_Spin_Kick', de: 0.15, golpe: 0.55, tipo: 'capoeira', duracao: 0.9 },
+            { clipe: 'Roundhouse_Kick', de: 0.15, ate: 0.8, golpe: 0.57, tipo: 'capoeira', duracao: 1.0 },
+            { clipe: 'Sweep_Kick', de: 0.3, ate: 0.75, golpe: 0.55, tipo: 'capoeira', duracao: 1.0 },
+            { clipe: 'Backflip_Sweep_Kick', de: 0.55, ate: 0.95, golpe: 0.55, tipo: 'capoeira', duracao: 1.0 }
+          ]
+        } }
+      },
       suporte: { habilidade2: { duracao: 1.2 }, habilidade3: { clipe: 'habilidade1' } }
     },
 
@@ -152,11 +188,12 @@
     // arma de cada classe; uma habilidade pode trocar de arma enquanto dura
     armasDaClasse: {
       soldado:  { padrao: 'espada' },
-      suporte:  { padrao: 'cajado' }
+      suporte:  { padrao: 'cajado' },
+      jin:      {}
     },
     animacoes: {
       humanoide: [],   // ex.: ['parado','andar','correr','dano','morte']
-      suporte: [], soldado: [], mago: [], atirador: [],
+      suporte: [], soldado: [], mago: [], atirador: [], jin: [],
       maestro: [], veterano: [], barao: [], golem: [], dragao: [],
       minion: []
     },
@@ -379,9 +416,10 @@
 
   /* ================= ARANHA (montada por código) ================= */
   // Frente da aranha = +Z. h = altura de referência.
-  function criarAranha(h, cor, corMarca) {
+  function criarAranha(h, cor, corMarca, robo) {
     const g = new THREE.Group();
-    const matCorpo = new THREE.MeshStandardMaterial({ color: cor, roughness: 0.75 });
+    const matCorpo = robo ? new THREE.MeshStandardMaterial({ color: cor, roughness: 0.32, metalness: 0.85 })
+      : new THREE.MeshStandardMaterial({ color: cor, roughness: 0.75 });
     const matMarca = new THREE.MeshStandardMaterial({ color: corMarca, emissive: corMarca, emissiveIntensity: 0.55 });
     const matOlho = new THREE.MeshStandardMaterial({ color: '#111118', roughness: 0.2, metalness: 0.3 });
 
@@ -459,6 +497,15 @@
       });
     });
 
+    if (robo) {
+      // placas de metal, parafusos e uma luz vermelha que pisca nas costas
+      const placa = new THREE.MeshStandardMaterial({ color: '#2b3137', roughness: 0.4, metalness: 0.9 });
+      const p1 = new THREE.Mesh(new THREE.BoxGeometry(h * 0.42, h * 0.06, h * 0.5), placa); p1.position.set(0, h * 0.33, -h * 0.3); corpo.add(p1);
+      const p2 = new THREE.Mesh(new THREE.BoxGeometry(h * 0.3, h * 0.05, h * 0.24), placa); p2.position.set(0, h * 0.2, h * 0.22); corpo.add(p2);
+      const luz = new THREE.Mesh(new THREE.SphereGeometry(h * 0.06, 10, 8), new THREE.MeshBasicMaterial({ color: corMarca }));
+      luz.position.set(0, h * 0.38, -h * 0.3); corpo.add(luz); g.userData.luzRobo = luz;
+      const antena = new THREE.Mesh(new THREE.CylinderGeometry(h * 0.008, h * 0.012, h * 0.35, 5), placa); antena.position.set(h * 0.1, h * 0.5, -h * 0.4); antena.rotation.x = -0.4; corpo.add(antena);
+    }
     g.userData.aranha = { corpo, abd, pernas, h };
     return g;
   }
@@ -519,7 +566,9 @@
           if (e.action === this.acoes[this.estado]) this._concluir();
         });
       }
-      const c = clip.clone(); c.name = estado;
+      const cfgC = this.config && this.config[estado];
+      const c = cfgC && (cfgC.de !== undefined || cfgC.ate !== undefined) ? recortar(clip, cfgC.de || 0, cfgC.ate === undefined ? 1 : cfgC.ate) : clip.clone();
+      c.name = estado;
       noLugar(c);
       const acao = this.mixer.clipAction(c);
       if (UMA_VEZ[estado]) { acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true; }
@@ -534,6 +583,17 @@
 
     tem(estado) { return !!this.acoes[estado]; }
 
+    // troca o conjunto de golpes do ataque básico (Jin: normal, socos, capoeira)
+    usarConjunto(nome) {
+      const c = this.conjuntos && (this.conjuntos[nome] || this.conjuntos.normal);
+      if (!c || !c.length) return false;
+      this.conjunto = nome; this.varAtaque = c.length > 1 ? c : null; this.iVar = -1;
+      this.acoes.ataque = c[0].acao; this.escalas = this.escalas || {}; this.escalas.ataque = c[0].escala;
+      return true;
+    }
+    // golpe que o próximo/atual ataque usa (tipo e momento do acerto)
+    golpeAtual() { return this.varAtaque && this.iVar >= 0 ? this.varAtaque[this.iVar] : (this.conjuntos && this.conjuntos[this.conjunto] || [])[0] || null; }
+
     // outro golpe para o ataque básico: cada ataque usa o próximo da lista
     adicionarVariacaoAtaque(clip, v) {
       v = v || {};
@@ -544,7 +604,7 @@
       noLugar(c);
       const acao = this.mixer.clipAction(c);
       acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true;
-      this.varAtaque.push({ acao, escala: c.duration > 0 ? c.duration / CATALOGO.duracoes.ataque : 1, golpe: v.golpe });
+      this.varAtaque.push({ acao, escala: c.duration > 0 ? c.duration / (v.duracao || CATALOGO.duracoes.ataque) : 1, golpe: v.golpe, tipo: v.tipo, dur: v.duracao || CATALOGO.duracoes.ataque });
       this.iVar = -1;
       return true;
     }
@@ -917,6 +977,14 @@
     }
   }
 
+  // troca o clipe de um estado pelo do arquivo (ex.: o chute voador do soldado novo nas skins antigas)
+  async function herdarAnimacoes(anim, pasta, estados) {
+    for (const estado of estados) {
+      const r = await carregarArquivo(pasta + estado + '.glb');
+      const clip = r && r.animations && r.animations[0];
+      if (clip && anim) anim.adicionarClipe(estado, clip);
+    }
+  }
   const ESTADOS = ['parado', 'andar', 'correr', 'ataque', 'habilidade1', 'habilidade2', 'habilidade3', 'dano', 'morte'];
   function clipesEmbutidos(anim, animacoes) {
     const lista = animacoes || [];
@@ -936,6 +1004,17 @@
         const clip = lista.find(c => c.name === nome);
         if (clip) anim.adicionarCombo(clip, v);
       });
+    }
+    if (cfgA && cfgA.conjuntos) {
+      // conjuntos de golpes trocáveis (Jin): cada um vira uma lista de variações
+      anim.conjuntos = {};
+      Object.keys(cfgA.conjuntos).forEach(nome => {
+        anim.varAtaque = [];
+        cfgA.conjuntos[nome].forEach(v => { const clip = lista.find(c => c.name === v.clipe); if (clip) anim.adicionarVariacaoAtaque(clip, v); });
+        if (anim.varAtaque.length) anim.conjuntos[nome] = anim.varAtaque;
+      });
+      anim.varAtaque = null;
+      anim.usarConjunto('normal');
     }
     if (cfgA && cfgA.variacoes && anim.tem('ataque')) {
       cfgA.variacoes.forEach(v => {
@@ -1092,9 +1171,9 @@
 
     // modelo único (um arquivo para homem e mulher): ex. o soldado padrão usa só soldado_m_default
     const gArq = (def.modeloUnico && def.modeloUnico[skin.id]) || o.genero;
-    let gltf = await carregarModelo(`${BASE}chars/${o.classe}_${gArq}_${skin.id}`);
+    let gltf = await carregarModelo(`${BASE}chars/${o.classe}_${gArq}_${skin.id}`), genArq = gArq;
     // skin com um modelo só (vale para homem e mulher): usa o arquivo do outro gênero
-    if (!gltf && skin.id !== 'default') gltf = await carregarModelo(`${BASE}chars/${o.classe}_${o.genero === 'f' ? 'm' : 'f'}_${skin.id}`);
+    if (!gltf && skin.id !== 'default') { genArq = o.genero === 'f' ? 'm' : 'f'; gltf = await carregarModelo(`${BASE}chars/${o.classe}_${genArq}_${skin.id}`); }
     if (!gltf && skin.id !== 'default') {
       // modelo da skin ainda não foi enviado: usa o padrão para não travar
       skin = def.skins[0];
@@ -1114,6 +1193,9 @@
       [`${o.classe}_${o.genero}`, o.classe, 'humanoide']);
     const armas = skin.armas || CATALOGO.armasDaClasse[o.classe];
     if (gltf && armas && !o.semArmas) carregarArmas(raiz.userData.animador, armas);   // em segundo plano
+    // animações novas da classe que as skins herdam (arquivo pequeno, já ajustado ao esqueleto da skin)
+    const herdadas = gltf && skin.id !== 'default' && CATALOGO.herdarSkins[o.classe];
+    if (herdadas) herdarAnimacoes(raiz.userData.animador, `${BASE}anims/${o.classe}_${genArq === 'f' ? 'f_' : ''}${skin.id}/`, herdadas);
     return raiz;
   }
 
@@ -1138,13 +1220,13 @@
     const def = CATALOGO.mobs[id];
     if (!def) throw new Error('Mob desconhecido: ' + id);
     const m = CATALOGO.mapas[mapa] || CATALOGO.mapas.mapa1;
-    let gltf = await carregarModelo(`${BASE}mobs/${id}_${m.variante}`);
-    if (!gltf && m.variante !== 'default') gltf = await carregarModelo(`${BASE}mobs/${id}_default`);
+    let gltf = def.soCodigo ? null : await carregarModelo(`${BASE}mobs/${id}_${m.variante}`);
+    if (!gltf && !def.soCodigo && m.variante !== 'default') gltf = await carregarModelo(`${BASE}mobs/${id}_default`);
 
     let corpo;
     if (def.anim === 'aranha' && !(gltf && gltf.animations && gltf.animations.length)) {
       gltf = null;   // sem animação no arquivo: usa a aranha montada por código
-      corpo = criarAranha(def.altura, def.cor, def.cor2 || '#9cff3a');
+      corpo = criarAranha(def.altura, def.cor, def.cor2 || '#9cff3a', def.robo);
     } else if (gltf) {
       corpo = clonar(gltf);
       normalizar(corpo, def.altura);
