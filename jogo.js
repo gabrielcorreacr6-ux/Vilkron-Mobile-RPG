@@ -80,7 +80,7 @@
 
   // Classes: vida, dano, alcance, recargas [ataque, hab1, hab2]
   const CLASSES = {
-    soldado:  { nome: 'Soldado',  vida: 1300, dano: 70, alcance: 2.8, cd: [0.9, 6, 9, 30],    habs: ['Giro', 'Investida', 'Terremoto'] },
+    soldado:  { nome: 'Soldado', nomes: { m: 'Kael', f: 'Kayla' }, vida: 1300, dano: 70, alcance: 2.8, cd: [0.9, 6, 9, 30],    habs: ['Giro', 'Investida', 'Terremoto'] },
     suporte:  { nome: 'Suporte',  vida: 950,  dano: 45, alcance: 11,  cd: [1.0, 8, 12, 40],   habs: ['Cura', 'Escudo', 'Selo'] },
     mago:     { nome: 'Mago',     vida: 850,  dano: 62, alcance: 9.5, cd: [1.0, 7, 12, 35],   habs: ['Chamas', 'Ilusão', 'Fogo Roxo'] },
     atirador: { nome: 'Atirador', vida: 900,  dano: 58, alcance: 12,  cd: [0.85, 12, 14, 20], habs: ['Aceleração', 'Explosão', 'Salto'] },
@@ -1002,6 +1002,7 @@
     aplicarAmbiente(d);
     hud();
     gancho('mapaCarregado', id);
+    if (E.heroi) setTimeout(() => falar(E.heroi, 'entrar'), 1800);
   }
 
   /* ---------- noite com vaga-lumes (gráfico alto) / dia (gráfico baixo) ---------- */
@@ -1426,6 +1427,7 @@
         const rc = recompensaMob(e.especie, e.cfg, esc);
         ganhar(rc.xp, rc.ouro, true);
         gancho('mobAbatido', e);
+        falar(E.heroi, 'abateMob');
         if (E.def.buffPorMob) { E.buffDano += E.def.buffPorMob; aviso('Buff do vale: +' + (E.buffDano * 100).toFixed(1) + '% de dano'); }
         if (dentroEvento(E.heroi)) { P.pontosRank += 1; }
       }
@@ -1886,6 +1888,7 @@
     }
     HABILIDADES[h.classe][slot](h, ang, mira, alvo);
     gancho('acao', slot, ang);
+    falar(h, slot === 0 ? 'ataque' : slot === 3 ? 'ult' : 'habilidade', slot);
     return true;
   }
 
@@ -2613,6 +2616,57 @@
     h.anim.tocar('habilidade3');
   }
 
+  // nome do herói: o Soldado homem é o Kael, a mulher é a Kayla
+  function nomeHeroi(classe, genero) {
+    const c = CLASSES[classe]; if (!c) return '';
+    return (c.nomes && c.nomes[genero]) || c.nome;
+  }
+  /* ---------- falas dos heróis (dublagem) ----------
+     Arquivos em assets/vozes/<classe>_<skin>_<m|f>/ ou assets/vozes/<classe>_<m|f>/ (1.mp3, 2.mp3...).
+     A skin usa as falas próprias; sem elas, as do herói base do mesmo gênero. Tocam sorteadas, sem repetir a anterior. */
+  const VOZES = {
+    lista: { soldado_m: 4 },          // quantas falas sorteadas tem cada pasta (1.mp3, 2.mp3...)
+    // fala própria de cada habilidade (hab1.mp3, hab2.mp3, hab3.mp3): toca sempre que aperta
+    habilidades: { soldado_m: [1, 2, 3] },
+    intervalo: 7,                     // segundos mínimos entre uma fala e outra do mesmo herói
+    chance: { ataque: 0.07, habilidade: 0.4, ult: 0.85, abate: 0.9, abateMob: 0.3, entrar: 1 }
+  };
+  const SOM = { falas: true, volume: 0.9 };
+  try { const v = JSON.parse(global.localStorage.getItem('vilkron_som') || 'null'); if (v) Object.assign(SOM, v); } catch (e) {}
+  function pastaVoz(classe, genero, skin) {
+    const a = classe + '_' + (skin && skin !== 'default' && skin !== 'padrao' ? skin + '_' : '') + genero, b = classe + '_' + genero;
+    const tem = k => VOZES.lista[k] || VOZES.habilidades[k];
+    return tem(a) ? a : tem(b) ? b : null;
+  }
+  const _audios = {};
+  function tocarFala(pasta, idx, vol) {
+    if (!temDOM || !SOM.falas || !pasta || !global.Audio) return;
+    const url = 'assets/vozes/' + pasta + '/' + (typeof idx === 'string' ? idx : idx + 1) + '.mp3?v=1';
+    let a = _audios[url];
+    if (!a) { a = _audios[url] = new Audio(url); a.preload = 'auto'; }
+    try { a.pause(); a.currentTime = 0; a.volume = clamp((vol === undefined ? 1 : vol) * SOM.volume, 0, 1); const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }
+  // o meu herói fala (às vezes); quem estiver perto ouve a mesma fala
+  function falar(h, momento, slot) {
+    if (!h || h.morto || !SOM.falas) return;
+    const pasta = pastaVoz(h.classe, P.genero, (P.skinEquipada || {})[h.classe]); if (!pasta) return;
+    // habilidade com fala própria: o grito dela sai sempre
+    const proprias = VOZES.habilidades[pasta];
+    if (slot && proprias && proprias.indexOf(slot) >= 0) {
+      if (E.t < (h.gritoEm || 0)) return;
+      h.gritoEm = E.t + 1.2; h.falaEm = E.t + VOZES.intervalo;
+      tocarFala(pasta, 'hab' + slot, 1); gancho('fala', pasta, 'hab' + slot);
+      return;
+    }
+    if (!VOZES.lista[pasta]) return;
+    if (E.t < (h.falaEm || 0) || Math.random() > (VOZES.chance[momento] || 0.3)) return;
+    h.falaEm = E.t + VOZES.intervalo;
+    const n = VOZES.lista[pasta];
+    let i = Math.floor(Math.random() * n); if (n > 1 && i === h.ultimaFala) i = (i + 1) % n;
+    h.ultimaFala = i;
+    tocarFala(pasta, i, 1);
+    gancho('fala', pasta, i);
+  }
   // um golpe do Jin (soco, chute ou capoeira) com o efeito de cada modo; nas sequências de socos cada acerto vale metade
   function golpeJin(h, g, modo) {
     const c = CONFIG.jin, tipo = (g && g.tipo) || 'soco', tm = tema(h), parte = g && g.golpes && g.golpes.length > 1 ? 0.5 : 1;
@@ -4408,7 +4462,7 @@
     if (!temDOM || !P.classe) return;
     const c = C(), r = rankInfo(c.estrelas), h = E.heroi;
     $('hudMapa').textContent = E.def ? E.def.nome : '';
-    $('hudRank').innerHTML = `${CLASSES[P.classe].nome} · <b style="color:${CONFIG.coresElo[r.indice]}">${r.nome}</b> ★ ${r.estrelas}${r.indice < CONFIG.ranks.length - 1 ? '/50' : ''}` +
+    $('hudRank').innerHTML = `${nomeHeroi(P.classe, P.genero)} · <b style="color:${CONFIG.coresElo[r.indice]}">${r.nome}</b> ★ ${r.estrelas}${r.indice < CONFIG.ranks.length - 1 ? '/50' : ''}` +
       ` · <small>${Math.floor(c.xp)}/${xpProximaEstrela(c.estrelas)} XP</small>` +
       (c.protecao ? ' · <span class="prot">proteção</span>' : '');
     $('hudOuro').textContent = Math.floor(P.ouro);
@@ -4486,6 +4540,26 @@
       <button class="acao ${q === 'baixa' ? 'forte' : ''}" data-q="baixa" type="button">Baixa</button></div>
       <p class="nota">A página recarrega para aplicar.</p>`, el => {
       el.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { if (b.dataset.q === q) return fecharModal(); Fx.definirQualidade(b.dataset.q); global.location.reload(); }));
+    });
+    $('modalFechar').hidden = false;
+  }
+  function telaSom() {
+    abrirModal('Som', `
+      <label class="rotulo"><input id="somFalas" type="checkbox" ${SOM.falas ? 'checked' : ''}> Falas dos heróis</label>
+      <div style="display:flex;align-items:center;gap:10px;margin:14px 0"><span>Volume</span><input id="somVol" type="range" min="0" max="100" step="5" style="flex:1" value="${Math.round(SOM.volume * 100)}"></div>
+      <button class="acao" id="somTeste" type="button">Ouvir uma fala</button>
+      <p class="nota">As falas tocam de vez em quando ao atacar, usar habilidades e derrotar inimigos. Jogadores perto de você também ouvem.</p>`, el => {
+      const salvarSom = () => { try { global.localStorage.setItem('vilkron_som', JSON.stringify(SOM)); } catch (e) {} };
+      el.querySelector('#somFalas').addEventListener('change', e => { SOM.falas = e.target.checked; salvarSom(); });
+      el.querySelector('#somVol').addEventListener('input', e => { SOM.volume = Number(e.target.value) / 100; salvarSom(); });
+      el.querySelector('#somTeste').addEventListener('click', () => {
+        const h = E.heroi, pasta = h && pastaVoz(h.classe, P.genero, (P.skinEquipada || {})[h.classe]);
+        if (!pasta) return aviso('Este herói ainda não tem falas');
+        const todas = [];
+        for (let i = 0; i < (VOZES.lista[pasta] || 0); i++) todas.push(i);
+        (VOZES.habilidades[pasta] || []).forEach(n => todas.push('hab' + n));
+        const ligado = SOM.falas; SOM.falas = true; tocarFala(pasta, todas[Math.floor(Math.random() * todas.length)], 1); SOM.falas = ligado;
+      });
     });
     $('modalFechar').hidden = false;
   }
@@ -4596,7 +4670,7 @@
     Object.keys(CLASSES).filter(k => !CLASSES[k].grupo).forEach(k => { ordem.push(k); Object.keys(CLASSES).filter(j => CLASSES[j].grupo === k).forEach(j => ordem.push(j)); });
     const classes = ordem.map(k => {
       const c = P.classes[k] || { estrelas: 0 }, r = rankInfo(c.estrelas), livre = heroiLiberado(k), cl = CLASSES[k];
-      const titulo = cl.grupo ? `${CLASSES[cl.grupo].nome} · ${cl.nome}` : cl.nome;
+      const titulo = cl.grupo ? `${CLASSES[cl.grupo].nome} · ${cl.nome}` : cl.nomes ? `${cl.nome} · ${cl.nomes.m} / ${cl.nomes.f}` : cl.nome;
       return `<button type="button" class="classe ${P.classe === k ? 'sel' : ''} ${livre ? '' : 'bloq'}" data-classe="${k}" ${livre ? '' : 'data-bloq="1"'}><b>${titulo}</b><small>${livre ? r.nome + ' ★ ' + r.estrelas : '🔒 Liberado em evento'}</small><small>${cl.habs.join(' · ')}</small></button>`;
     }).join('');
     const cores = CORES.map(c => `<button type="button" class="cor ${P.cor === c ? 'sel' : ''}" data-cor="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('');
@@ -4778,6 +4852,7 @@
       else if (q === 'graficos') telaGraficos();
       else if (q === 'camera') telaCamera();
       else if (q === 'telacheia') telaCheia();
+      else if (q === 'som') telaSom();
       else if (q === 'instalar') {
         const p = global.__pedidoInstalar;
         if (p) { p.prompt(); p.userChoice.then(() => { global.__pedidoInstalar = null; const b = $('menuInstalar'); if (b) b.hidden = true; }); }
@@ -4868,7 +4943,7 @@
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
       atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
-      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
+      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, tocarFala, pastaVoz, nomeHeroi, SOM, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
     _t: { CONFIG, E, P, R, MIRA_AUX, CAMERA, heroiLiberado, jinModo, labRelogio, labPadrao, labEntrar, labSair, labRota, labAbrirBau, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }

@@ -320,6 +320,7 @@
       .on('broadcast', { event: 'apoio' }, m => receberApoio(m.payload))
       .on('broadcast', { event: 'abate' }, m => receberAbate(m.payload))
       .on('broadcast', { event: 'efeito' }, m => receberEfeito(m.payload))
+      .on('broadcast', { event: 'fala' }, m => receberFala(m.payload))
       .on('broadcast', { event: 'torre' }, m => receberTorre(m.payload))
       .on('presence', { event: 'leave' }, m => removerRemoto(m.key))
       .subscribe(st => { if (st === 'SUBSCRIBED') { canal.track({ nick: Rede.eu.nick }); enviarEm = 0; ultimoEnvio = ''; } });
@@ -498,6 +499,13 @@
   }
 
   // stun, lentidão e corte de cura vindos de outro jogador
+  function receberFala(f) {
+    if (!f || f.u === Rede.eu.id || !/^[a-z0-9_]{2,40}$/.test(f.p || '')) return;
+    const r = Rede.remotos.get(f.u), h = J.api.E.heroi; if (!r || !r.ent || !h || Rede.chat.silenciados.has(f.u) || Rede.chat.bloqueados.has(f.u)) return;
+    const d = Math.hypot(r.ent.x - h.x, r.ent.z - h.z); if (d > 26) return;
+    const i = /^hab[1-3]$/.test(f.i) ? f.i : Math.max(0, Math.min(30, f.i | 0));
+    J.api.tocarFala(f.p, i, Math.max(0.15, 1 - d / 26));
+  }
   function receberEfeito(a) {
     if (a.para !== Rede.eu.id || Rede.aliado(a.de)) return;
     const r = Rede.remotos.get(a.de); if (!r) return;
@@ -548,6 +556,8 @@
         (ev.metas || []).map(m => `${m.vitorias} vitórias seguidas: ${premioTexto(m)}`).join('<br>') +
         `<br><small>Sua sequência agora: ${seq}</small></div>`;
     };
+    // fala do meu herói: quem está perto ouve a mesma (mais baixo de longe)
+    G.fala = (pasta, i) => mandar('fala', { u: Rede.eu.id, p: pasta, i });
     G.acao = (slot, ang) => {
       const h = J.api.E.heroi, m = h && h.classe === 'jin' && h.jinModo ? h.jinModo.nome : undefined;
       mandar('acao', { u: Rede.eu.id, s: slot, a: +ang.toFixed(2), m });
