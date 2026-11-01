@@ -2999,35 +2999,82 @@
       vida: cfg.vida * esc, vidaMax: cfg.vida * esc, dano: cfg.dano * esc, raio: Math.max(0.6, def.altura * 0.35 * (Skins.CATALOGO.mapas[E.mapa] || { escalaMob: 1 }).escalaMob),
       vel: cfg.vel, alcance: cfg.alcance, ataques: 0, altura: def.altura
     });
-    if (m.tipo === 'barao') { morroDeMoedas(m.x, m.z); e.fixo = true; e.alturaMorro = 0.95; }   // o barão fica sentado no morro de moedas
+    if (m.tipo === 'barao') { const mm = morroDeMoedas(m.x, m.z); e.fixo = true; e.alturaMorro = mm.topo - 0.05; }   // o barão fica sentado no morro de moedas
     return e;
   }
-  // morrinho de moedas de ouro (o Barão fica em cima)
+  // morrinho de moedas de ouro (o Barão fica em cima): centenas de moedas empilhadas, inclinadas,
+  // cobrindo todo o monte (o "chão" escuro por baixo só aparece nas frestas, como sombra entre moedas)
+  function texMoeda() {
+    if (R.texMoeda) return R.texMoeda;
+    R.texMoeda = canvasTex(128, 128, g => {
+      const gr = g.createRadialGradient(54, 50, 6, 64, 64, 64);
+      gr.addColorStop(0, '#fff2b0'); gr.addColorStop(0.55, '#e8b53a'); gr.addColorStop(1, '#9a6c12');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      g.strokeStyle = 'rgba(110,70,10,0.8)'; g.lineWidth = 6; g.beginPath(); g.arc(64, 64, 52, 0, 7); g.stroke();
+      g.strokeStyle = 'rgba(255,240,180,0.6)'; g.lineWidth = 2; g.beginPath(); g.arc(64, 64, 46, 0, 7); g.stroke();
+      // serrilhado da borda
+      for (let i = 0; i < 48; i++) { const a = i / 48 * 6.283; g.fillStyle = i % 2 ? 'rgba(120,80,10,0.7)' : 'rgba(255,230,150,0.5)'; g.fillRect(64 + Math.cos(a) * 58 - 2, 64 + Math.sin(a) * 58 - 2, 4, 4); }
+      // "V" de Vilkron em relevo
+      g.font = 'bold 54px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = 'rgba(120,78,8,0.85)'; g.fillText('V', 66, 68);
+      g.fillStyle = 'rgba(255,236,160,0.9)'; g.fillText('V', 63, 65);
+    });
+    return R.texMoeda;
+  }
   function morroDeMoedas(x, z) {
-    const ouro = new THREE.MeshStandardMaterial({ color: 0xd9a531, metalness: 0.8, roughness: 0.3, emissive: 0x120c00 });
-    const ouroEsc = new THREE.MeshStandardMaterial({ color: 0x9c7418, metalness: 0.75, roughness: 0.38 });
+    const R0 = 2.7, ALT = 1.05;                         // raio e altura do monte
+    const altura = r => r >= R0 ? 0 : ALT * Math.pow(1 - r / R0, 0.85) * (0.75 + 0.25 * Math.cos(r / R0 * 1.4));
     const g = new THREE.Group(); g.position.set(x, 0, z);
-    // o morro: um monte arredondado e achatado
-    const morro = new THREE.Mesh(new THREE.SphereGeometry(2.6, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), ouroEsc);
-    morro.scale.set(1, 0.38, 1); g.add(morro);
-    // moedas por cima e escorregando pelas bordas
-    const rnd = semeado(Math.round(x * 7 + z * 13));
-    const moeda = new THREE.CylinderGeometry(0.2, 0.2, 0.05, 14);
-    for (let i = 0; i < 90; i++) {
-      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 3.1, h = r < 2.6 ? 0.99 * Math.sqrt(Math.max(0, 1 - (r / 2.6) * (r / 2.6))) : 0;
-      const c = new THREE.Mesh(moeda, ouro);
-      c.position.set(Math.cos(a) * r, h + 0.03, Math.sin(a) * r);
-      c.rotation.set((rnd() - 0.5) * 1.1, rnd() * 3, (rnd() - 0.5) * 1.1);
-      g.add(c);
+    // miolo escuro (sombra entre as moedas)
+    // miolo com o mesmo formato do monte, um pouco abaixo das moedas (só aparece nas frestas)
+    if (THREE.LatheGeometry && THREE.Vector2) {
+      const perfil = []; for (let k = 0; k <= 16; k++) { const r = R0 * (1 - k / 16); perfil.push(new THREE.Vector2(r, Math.max(0, altura(r) - 0.05))); }
+      g.add(new THREE.Mesh(new THREE.LatheGeometry(perfil, 32), new THREE.MeshLambertMaterial({ color: 0x3a2706, side: THREE.DoubleSide })));
     }
-    // algumas pilhas de moedas em volta
-    for (let k = 0; k < 5; k++) {
-      const a = k / 5 * Math.PI * 2 + rnd(), r = 3 + rnd() * 0.6, n = 3 + Math.floor(rnd() * 5);
-      for (let j = 0; j < n; j++) { const c = new THREE.Mesh(moeda, ouro); c.position.set(Math.cos(a) * r + (rnd() - 0.5) * 0.05, 0.03 + j * 0.055, Math.sin(a) * r); g.add(c); }
+    const face = new THREE.MeshStandardMaterial({ map: texMoeda(), color: 0xffffff, metalness: 0.85, roughness: 0.28, emissive: 0x1a1200 });
+    const borda = new THREE.MeshStandardMaterial({ color: 0xc9952a, metalness: 0.9, roughness: 0.35 });
+    const geo = new THREE.CylinderGeometry(0.21, 0.21, 0.045, 18);
+    const rnd = semeado(Math.round(x * 7 + z * 13) + 5);
+    const pos = [];
+    // coberta do monte: em anéis, de fora para dentro, várias camadas
+    for (let camada = 0; camada < 3; camada++) {
+      for (let r = 0.05; r < R0 + 0.3; r += 0.17) {
+        const n = Math.max(3, Math.round(2 * Math.PI * Math.max(r, 0.15) / 0.22));
+        for (let i = 0; i < n; i++) {
+          const a = (i + rnd() * 0.8 + camada * 0.33) / n * Math.PI * 2, rr = r + (rnd() - 0.5) * 0.18;
+          const hh = altura(Math.max(0, rr)) + camada * 0.02 + rnd() * 0.04;
+          pos.push([Math.cos(a) * rr, hh, Math.sin(a) * rr, a, rr]);
+        }
+      }
+    }
+    // moedas que rolaram para o chão em volta
+    for (let i = 0; i < 70; i++) { const a = rnd() * 6.283, rr = R0 + 0.2 + Math.pow(rnd(), 1.6) * 1.6; pos.push([Math.cos(a) * rr, 0.025, Math.sin(a) * rr, a, rr, true]); }
+    const n = pos.length;
+    const inst = (THREE.InstancedMesh && THREE.Matrix4 && THREE.Quaternion && THREE.Euler);
+    const m4 = inst ? new THREE.Matrix4() : null, q = inst ? new THREE.Quaternion() : null, e = inst ? new THREE.Euler() : null, um = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    const malha = inst ? new THREE.InstancedMesh(geo, [borda, face, face], n) : null;
+    pos.forEach(([px, py, pz, a, rr, chao], i) => {
+      // inclinação acompanha o morro (mais deitada no topo, mais em pé na beira) + um pouco de bagunça
+      // deitada sobre a encosta (segue a inclinação do monte) com um pouco de bagunça
+      const decl = (altura(Math.max(0, rr - 0.1)) - altura(rr + 0.1)) / 0.2;
+      const incl = chao ? (rnd() < 0.12 ? 1.1 : rnd() * 0.2) : Math.atan(decl) + (rnd() - 0.5) * 0.5;
+      if (malha) {
+        e.set(Math.sin(a) * incl + (rnd() - 0.5) * 0.4, rnd() * 6.28, -Math.cos(a) * incl + (rnd() - 0.5) * 0.4, 'YXZ');
+        q.setFromEuler(e); p.set(px, py, pz); m4.compose(p, q, um); malha.setMatrixAt(i, m4);
+        if (malha.setColorAt) { const k = 0.82 + rnd() * 0.3; malha.setColorAt(i, new THREE.Color(k, k * (0.95 + rnd() * 0.05), k * (0.8 + rnd() * 0.15))); }
+      } else if (i < 120) {
+        const c = new THREE.Mesh(geo, face); c.position.set(px, py, pz); c.rotation.set((rnd() - 0.5), rnd() * 6, (rnd() - 0.5)); g.add(c);
+      }
+    });
+    if (malha) { if (malha.instanceColor) malha.instanceColor.needsUpdate = true; malha.instanceMatrix.needsUpdate = true; g.add(malha); }
+    // pilhas arrumadas em volta
+    for (let k = 0; k < 6; k++) {
+      const a = k / 6 * Math.PI * 2 + rnd(), r = R0 + 0.6 + rnd() * 0.5, h = 3 + Math.floor(rnd() * 6);
+      for (let j = 0; j < h; j++) { const c = new THREE.Mesh(geo, [borda, face, face]); c.position.set(Math.cos(a) * r + (rnd() - 0.5) * 0.04, 0.025 + j * 0.047, Math.sin(a) * r + (rnd() - 0.5) * 0.04); c.rotation.y = rnd() * 6; g.add(c); }
     }
     E.mundo.add(g);
-    camada(new THREE.CircleGeometry(3.2, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 }), x, z, 0.03);
-    return g;
+    camada(new THREE.CircleGeometry(R0 + 0.6, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25 }), x, z, 0.03);
+    return { grupo: g, topo: altura(0) };
   }
   function iaMob(e, dt) {
     if (e.labA) return iaAranhaRobo(e, dt);
