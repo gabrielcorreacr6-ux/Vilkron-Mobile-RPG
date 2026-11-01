@@ -67,7 +67,7 @@
     jin: { soco: { dano: 1.0, slow: [0.35, 0.2] }, chute: { dano: 1.35, stun: 1.2 },
       socos: { dur: 6, dano: 1.05, slow: [0.35, 2], alcance: 1.15 },
       capoeira: { dur: 6, dano: 1.15, stun: 0.35, empurra: 1.6, alcance: 1.15 },
-      kungfu: { alcance: 3.2, dano: 3.6, raio: 2.6, arremesso: 9 } },
+      kungfu: { alcance: 3.2, avanco: 8, dano: 3.6, raio: 2.8, arremesso: 9 } },
     arena: { inscricao: 150, minionsCada: 30, respawnBase: 30, respawnPasso: 20, respawnMax: 120 },
     loja: {
       cura:   { nome: 'Frasco de cura', preco: 30, desc: 'Recupera toda a vida.' },
@@ -1652,7 +1652,10 @@
                 vilkronomita: { principal: 0x4fb8ff, faisca: 0xcfeeff, poeira: 0x2a3440, brasa: 0x2a7bff },
                 viking: { principal: 0x39ff14, faisca: 0xb6ffb0, poeira: 0x2e3326, brasa: 0x1a9a20 },
                 samurai: { principal: 0xff5a1a, faisca: 0xffa040, poeira: 0x1a1a1a, brasa: 0xff3d00 } },
-    jin:      { padrao: { principal: 0xffb347, faisca: 0xffe6b0, poeira: 0xcbb38f, brasa: 0xff7a1a, socos: 0xff4d4d, capoeira: 0x4dd2ff } },
+    jin:      { padrao: { principal: 0xffb347, faisca: 0xffe6b0, poeira: 0xcbb38f, brasa: 0xff7a1a, socos: 0xff4d4d, capoeira: 0x4dd2ff },
+                // Soberano: golpes azuis e dourados; Força Sombria: vermelho com fumaça escura
+                soberano: { principal: 0x4da6ff, faisca: 0xd6ecff, poeira: 0x9fb4c8, brasa: 0x2f7bff, socos: 0x7fc4ff, capoeira: 0xffd27a },
+                forca_sombria: { principal: 0xff3030, faisca: 0xffb0a0, poeira: 0x2a1a1a, brasa: 0xb3001b, socos: 0xff4d4d, capoeira: 0x8b0000 } },
     suporte:  { padrao: { principal: 0xfff3b0, cura: 0x6dff9c, brilho: 0xffe08a, selo: 0xfff3b0, controle: 0xff6b6b },
                 ciber: { principal: 0x39ff88, cura: 0x39ff88, brilho: 0xa6ffcf, selo: 0x39ff88, controle: 0x39ff88 },
                 medicina: { principal: 0xff2a2a, cura: 0xff3b3b, brilho: 0xff8080, selo: 0xff2a2a, controle: 0xff2a2a } },
@@ -1843,7 +1846,9 @@
     // o atirador só atira parado (o salto é a exceção: é movimento)
     if (h.classe === 'atirador' && slot !== 3 && Entrada.mag > 0.12) return false;
     const saltoLivre = h.classe === 'atirador' && slot === 3;      // o salto pode ser usado no meio de qualquer animação
-    if (h.anim && ['ataque', 'habilidade1', 'habilidade2', 'habilidade3'].indexOf(h.anim.estado) >= 0 && slot !== 0 && !saltoLivre) return false;
+    // habilidade corta o ataque básico (como nos MOBAs); só não corta outra habilidade
+    if (h.anim && ['habilidade1', 'habilidade2', 'habilidade3'].indexOf(h.anim.estado) >= 0 && slot !== 0 && !saltoLivre) return false;
+    if (slot !== 0 && h.anim && h.anim.estado === 'ataque' && !saltoLivre) { h.anim.aoAcertar = null; if (h.classe !== 'jin' || slot === 3) h.anim.cancelar && h.anim.cancelar(); }
     const cls = CLASSES[h.classe];
     let ang = h.rot, alvo = null;
     if (slot === 0) {
@@ -2764,10 +2769,19 @@
       // Kung Fu: segura o inimigo durante a sequência e no fim arremessa longe com explosão
       (h, ang, mira, alvo) => {
         const c = CONFIG.jin.kungfu, tm = tema(h);
-        const presa = alvo && dist(alvo, h) <= c.alcance + alvo.raio ? alvo : alvoMaisPerto(h, c.alcance);
-        if (presa) { h.rot = Math.atan2(presa.x - h.x, presa.z - h.z); controlar(presa, { stun: (CATALOGO_DUR_KUNGFU()) + 0.2 }); }
+        // pega o inimigo escolhido (ou o mais perto) até ~8 m: o Jin avança até ele num salto rápido
+        const presa = alvo && !alvo.morto && dist(alvo, h) <= c.avanco + alvo.raio ? alvo : alvoMaisPerto(h, c.avanco);
+        if (presa) {
+          const a = Math.atan2(presa.x - h.x, presa.z - h.z), d = dist(presa, h), parar = presa.raio + 1.1;
+          if (d > parar) {
+            const passos = 6;
+            for (let i = 1; i <= passos; i++) emitir('media', h.x + Math.sin(a) * (d - parar) * i / passos, 0.6, h.z + Math.cos(a) * (d - parar) * i / passos, { n: 2, cor: tm.brasa, vel: 0.6, vida: 0.35 });
+            h.x += Math.sin(a) * (d - parar); h.z += Math.cos(a) * (d - parar); empurrarSolidos(h);
+          }
+          h.rot = a; controlar(presa, { stun: CATALOGO_DUR_KUNGFU() + 0.3 });
+        }
         aura(h, tm.brasa, CATALOGO_DUR_KUNGFU(), 26, true);
-        h.anim.tocar('habilidade3', { momento: 0.97, aoAcertar: () => {
+        h.anim.tocar('habilidade3', { momento: 0.9, aoAcertar: () => {
           const x = presa && !presa.morto ? presa.x : h.x + Math.sin(h.rot) * 1.8, z = presa && !presa.morto ? presa.z : h.z + Math.cos(h.rot) * 1.8;
           anelEfeito(x, z, c.raio, tm.principal, 0.5, true);
           emitir('media', x, 1, z, { n: 40, cor: tm.brasa, vel: 6, subida: 3, vida: 0.6, arrasto: 2 });
@@ -3388,18 +3402,18 @@
     if (R.texParede) return R.texParede;
     R.texParede = canvasTex(512, 256, g => {
       const rnd = semeado(5);
-      g.fillStyle = '#7d7f7a'; g.fillRect(0, 0, 512, 256);
+      g.fillStyle = '#a3a59d'; g.fillRect(0, 0, 512, 256);
       // blocos de concreto gasto
       for (let y = 0; y < 256; y += 64) for (let x = (y / 64) % 2 ? -64 : 0; x < 512; x += 128) {
-        const t = 0.82 + rnd() * 0.25; g.fillStyle = `rgb(${Math.round(120 * t)},${Math.round(122 * t)},${Math.round(116 * t)})`;
+        const t = 0.85 + rnd() * 0.2; g.fillStyle = `rgb(${Math.round(176 * t)},${Math.round(178 * t)},${Math.round(168 * t)})`;
         g.fillRect(x + 2, y + 2, 124, 60);
         for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(30,30,28,${rnd() * 0.18})`; g.fillRect(x + rnd() * 124, y + rnd() * 60, 2 + rnd() * 6, 1 + rnd() * 3); }
       }
       // escorridos de umidade
       for (let k = 0; k < 26; k++) { const x = rnd() * 512, l = 40 + rnd() * 160; const gr = g.createLinearGradient(0, 0, 0, l); gr.addColorStop(0, 'rgba(40,44,36,0.35)'); gr.addColorStop(1, 'rgba(40,44,36,0)'); g.fillStyle = gr; g.fillRect(x, 0, 3 + rnd() * 6, l); }
       // hera descendo do topo
-      for (let k = 0; k < 34; k++) {
-        let x = rnd() * 512, y = 0; const fim = 30 + rnd() * 200;
+      for (let k = 0; k < 14; k++) {
+        let x = rnd() * 512, y = 0; const fim = 30 + rnd() * 140;
         while (y < fim) {
           const r = 4 + rnd() * 7; g.fillStyle = `rgba(${40 + rnd() * 30 | 0},${90 + rnd() * 50 | 0},${30 + rnd() * 20 | 0},0.92)`;
           g.beginPath(); g.ellipse(x, y, r, r * 0.7, rnd() * 3, 0, 7); g.fill();
@@ -3434,15 +3448,20 @@
     L.porta = { x: x0 + (meio + 0.5) * T, z: z0 + n * T };
     // chão de pedra dentro do labirinto
     camada(uvRep(new THREE.PlaneGeometry(n * T + 4, n * T + 4), (n * T) / 6, (n * T) / 6),
-      new THREE.MeshLambertMaterial({ map: Skins.textura('concreto_praca', 1, 1), color: 0x9a9a90, transparent: true }), cfg.x, cfg.z, 0.03);
-    const mat = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xd8dccf });
-    const matFade = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xd8dccf, transparent: true, opacity: 0.28, depthWrite: false });
+      new THREE.MeshLambertMaterial({ map: Skins.textura('concreto_praca', 1, 1), color: 0x76716a, transparent: true }), cfg.x, cfg.z, 0.03);
+    // paredes claras (com brilho próprio leve, para aparecer até à noite) sobre um chão mais escuro
+    const mat = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xc9c5b6 });
+    const matFade = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xc9c5b6, transparent: true, opacity: 0.22, depthWrite: false });
+    const matTopo = new THREE.MeshLambertMaterial({ color: 0x9c937a });
     L.mat = mat; L.matFade = matFade;
     const geoH = new THREE.BoxGeometry(T + esp * 0.2, alt, esp), geoV = new THREE.BoxGeometry(esp, alt, T + esp * 0.2);
+    const geoTopoH = new THREE.BoxGeometry(T + esp * 0.4, 0.22, esp + 0.25), geoTopoV = new THREE.BoxGeometry(esp + 0.25, 0.22, T + esp * 0.4);
     const nova_ = (tipo, r, c, borda) => {
       const hz = tipo === 'H';
       const x = hz ? x0 + (c + 0.5) * T : x0 + c * T, z = hz ? z0 + r * T : z0 + (r + 0.5) * T;
       const mesh = new THREE.Mesh(hz ? geoH : geoV, mat); mesh.position.set(x, alt / 2, z); E.mundo.add(mesh);
+      // borda clara em cima: desenha o contorno do labirinto visto de cima
+      const topo = new THREE.Mesh(hz ? geoTopoH : geoTopoV, matTopo); topo.position.y = alt / 2 + 0.1; mesh.add(topo);
       const a = { tipo, r, c, x, z, w: hz ? T : esp, d: hz ? esp : T, mesh, h: 1, borda, porta: false, sem: semeado(r * 131 + c * 17 + (hz ? 7 : 3)) };
       L.arestas.push(a); return a;
     };
@@ -3461,7 +3480,7 @@
     const nome = placaTexto(['LABIRINTO'], 5.6, 1.4); nome.position.set(ap.x, alt + 2.1, ap.z + 1.3); E.mundo.add(nome);
     // pilares em cada canto (giram durante a mudança)
     const geoP = new THREE.BoxGeometry(esp * 1.35, alt + 0.5, esp * 1.35);
-    const matP = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xb5b8ad, emissive: 0x000000 });
+    const matP = new THREE.MeshLambertMaterial({ map: texParede(), color: 0xb9b4a4, emissive: 0x000000 });
     L.matPilar = matP;
     for (let r = 0; r <= n; r++) for (let c = 0; c <= n; c++) {
       const m = new THREE.Mesh(geoP, matP); m.position.set(x0 + c * T, (alt + 0.5) / 2, z0 + r * T); E.mundo.add(m);
@@ -3543,7 +3562,7 @@
     // pilares giram e acendem durante a mudança: dá para ver as colunas se organizando
     const mudando = rel.fase === 'mudando';
     L.pilares.forEach(p => { if (mudando) p.mesh.rotation.y += dt * 0.22 * p.gira; else p.mesh.rotation.y += (Math.round(p.mesh.rotation.y / (Math.PI / 2)) * (Math.PI / 2) - p.mesh.rotation.y) * Math.min(1, dt * 2); });
-    if (L.matPilar.emissive && L.matPilar.emissive.setRGB) L.matPilar.emissive.setRGB(mudando ? 0.12 + 0.08 * Math.sin(E.t * 3) : 0, mudando ? 0.06 : 0, 0);
+    if (L.matPilar.emissive && L.matPilar.emissive.setRGB) L.matPilar.emissive.setRGB(mudando ? 0.22 + 0.1 * Math.sin(E.t * 3) : 0, mudando ? 0.08 : 0, 0);
   }
   // paredes não deixam ninguém passar (nem as aranhas)
   function labColidir(e) {
@@ -3717,6 +3736,20 @@
     }
     // o evento acabou com o jogador lá dentro: volta para casa
     if (E.mapa === 'labirinto' && !labAtivo() && !ehAdmin() && !ehModerador() && !L.saindo) { L.saindo = true; aviso('O evento do labirinto terminou'); setTimeout(() => labSair('fim'), 3000); }
+  }
+  // relógio grande na tela: quanto falta para fechar / abrir
+  function labRelogioTela() {
+    if (!temDOM) return;
+    let el = document.getElementById('labTempo');
+    if (!E.lab || E.mapa !== 'labirinto') { if (el) el.hidden = true; return; }
+    if (!el) { el = document.createElement('div'); el.id = 'labTempo'; document.body.appendChild(el); }
+    el.hidden = false;
+    const rel = E.lab.rel, falta = rel.dur - rel.t, mudando = rel.fase === 'mudando';
+    const titulo = mudando ? '🔒 Mudando · abre em' : falta <= 90 ? '⚠️ Fecha em' : '🔓 Fecha em';
+    const sub = mudando ? 'porta fechada' : falta <= 90 ? 'aranhas voltando ao túnel' : (rel.t < 30 ? 'aranhas saindo do túnel' : 'porta aberta');
+    const html = `${titulo}<b>${labTempo(falta)}</b><small>${sub}</small>`;
+    if (el.innerHTML !== html) el.innerHTML = html;
+    el.className = mudando ? 'fechado' : falta <= 90 ? 'alerta' : '';
   }
   const ehModerador = () => !!(global.Rede && global.Rede.eu && global.Rede.eu.papel === 'moderador');
   function labTempo(s) { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
@@ -4228,6 +4261,8 @@
           // começou a andar no meio do tiro: o tiro é cancelado e ele só anda
           h.anim.aoAcertar = null; h.anim.cancelar && h.anim.cancelar();
         }
+        // Jin: depois que o golpe acertou, andar corta o resto da animação (não fica preso no chute)
+        if (h.classe === 'jin' && Entrada.mag > 0.12 && h.anim && h.anim.estado === 'ataque' && !h.anim.aoAcertar && h.anim.cancelar) h.anim.cancelar();
         if (!h.investida && !ocupadoHeroi(h) && Entrada.mag > 0.12) {
           const dir = Math.atan2(Entrada.x, Entrada.z);
           // atirando: o corpo fica virado para o alvo enquanto as pernas andam
@@ -4256,6 +4291,7 @@
       else if (e.tipo === 'clone') iaClone(e, dt);
     }
     if (E.lab) atualizarLabirinto(dt);
+    if (temDOM && (E._labTela = (E._labTela || 0) + dt) > 0.25) { E._labTela = 0; labRelogioTela(); }
     gancho('passo', dt);
     atualizarFx(dt);
     if (R.Fx) R.Fx.atualizar(dt);

@@ -109,6 +109,13 @@ button { font: inherit; color: inherit; }
 #cinematica .pular:disabled { opacity: 0.6; }
 #cinematica .som { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); padding: 10px 16px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.5); background: rgba(0,0,0,0.55); color: #fff; font-size: 15px; }
 .rotulo.inline { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+/* relógio do labirinto */
+#labTempo { position: fixed; z-index: 25; right: calc(12px + env(safe-area-inset-right, 0px)); top: calc(62px + env(safe-area-inset-top, 0px)); padding: 8px 14px; border-radius: 14px; background: rgba(14,18,16,0.82); border: 1px solid rgba(227,180,76,0.55); color: #f3ecd8; font: 600 13px/1.2 system-ui, sans-serif; text-align: center; min-width: 120px; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+#labTempo b { display: block; font-size: 24px; letter-spacing: 1px; font-variant-numeric: tabular-nums; color: #ffe08a; }
+#labTempo.fechado { border-color: rgba(239,68,68,0.7); }
+#labTempo.fechado b { color: #ff8a8a; }
+#labTempo.alerta b { color: #ffb347; animation: labPisca 1s infinite; }
+@keyframes labPisca { 50% { opacity: 0.45; } }
 #bChat { position: fixed; z-index: 30; left: calc(10px + env(safe-area-inset-left, 0px)); top: calc(118px + env(safe-area-inset-top, 0px)); width: 44px; height: 44px; border-radius: 12px; color: #e9dcc0; display: flex; align-items: center; justify-content: center; padding: 0; }
 #bChat svg { width: 22px; height: 22px; }
 #bChat b { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: #ef4444; color: #fff; font-size: 11px; line-height: 18px; padding: 0 4px; }
@@ -263,13 +270,13 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
-<script src="servidor.js?v=39"></script>
-<script src="config-online.js?v=39"></script>
-<script src="efeitos.js?v=39"></script>
-<script src="skins.js?v=39"></script>
-<script src="mapas.js?v=39"></script>
-<script src="rede.js?v=39"></script>
-<script src="jogo.js?v=39"></script>
-<script src="painel.js?v=39"></script>
+<script src="servidor.js?v=41"></script>
+<script src="config-online.js?v=41"></script>
+<script src="efeitos.js?v=41"></script>
+<script src="skins.js?v=41"></script>
+<script src="mapas.js?v=41"></script>
+<script src="rede.js?v=41"></script>
+<script src="jogo.js?v=41"></script>
+<script src="painel.js?v=41"></script>
 </body>
 </html>

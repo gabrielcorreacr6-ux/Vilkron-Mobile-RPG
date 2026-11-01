@@ -48,7 +48,9 @@
         { id: 'noturna', nome: 'Chamas Noturna', aceitaCor: false, preco: 0 } ] },
       // Jin: segundo herói do Soldado (não é skin). Luta de mãos e pés, sem arma.
       jin:      { nome: 'Jin', corPadrao: '#c0392b', skins: [
-        { id: 'default', nome: 'Padrão', aceitaCor: false, preco: 0 } ] },
+        { id: 'default', nome: 'Padrão', aceitaCor: false, preco: 0 },
+        { id: 'soberano', nome: 'Soberano', aceitaCor: false, preco: 0 },
+        { id: 'forca_sombria', nome: 'Força Sombria', aceitaCor: false, preco: 0 } ] },
       atirador: { nome: 'Atirador', corPadrao: '#d68910', skins: [
         { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
         { id: 'cosmos', nome: 'Atirador do Cosmos', aceitaCor: false, preco: 0 },
@@ -563,7 +565,8 @@
         this.mixer = new THREE.AnimationMixer(this.corpo);
         this.mixer.addEventListener('finished', e => {
           if (this.acaoCima && e.action === this.acaoCima) { this.acaoCima.fadeOut(0.15); this.acaoCima = null; if (this.estado === 'ataque') this._concluir(); return; }
-          if (e.action === this.acoes[this.estado]) this._concluir();
+          // compara também com a ação que está tocando (o Jin troca a lista de golpes no meio de um golpe)
+          if (e.action === this.acoes[this.estado] || (UMA_VEZ[this.estado] && e.action === this.acaoAtual)) this._concluir();
         });
       }
       const cfgC = this.config && this.config[estado];
@@ -755,11 +758,14 @@
         const a = this.acoes[k];
         if (a !== nova && (a.isRunning() || a.getEffectiveWeight() > 0)) a.fadeOut(fade);
       });
+      if (this.acaoAtual && this.acaoAtual !== nova && this.acaoAtual.isRunning()) this.acaoAtual.fadeOut(fade);
       nova.reset().setEffectiveTimeScale(escala).setEffectiveWeight(1).fadeIn(fade).play();
       this.acaoAtual = nova;
     }
 
     _concluir() {
+      // golpe terminou antes do momento do acerto ser visto: acerta agora
+      if (this.aoAcertar && UMA_VEZ[this.estado] && this.estado !== 'dano' && this.estado !== 'morte') { const f = this.aoAcertar; this.aoAcertar = null; f(); }
       const cb = this.aoTerminar; this.aoTerminar = null;
       if (this.estado !== 'morte') {
         this.estado = null;
@@ -778,6 +784,8 @@
     atualizar(dt) {
       this.t += dt; this.tEstado += dt;
       if (this.mixer) this.mixer.update(dt);
+      // trava de segurança: golpe ou habilidade presa por muito tempo libera o herói
+      if (UMA_VEZ[this.estado] && this.estado !== 'morte' && !this.comboAtivo && this.tEstado > 4.5) this._concluir();
 
       const temClipe = !!this.acoes[this.estado];
       const dur = (CATALOGO.duracoes[this.estado] && !temClipe ? Math.min(CATALOGO.duracoes[this.estado], DURACAO[this.estado] || 9) : DURACAO[this.estado]) || 0;
@@ -785,7 +793,7 @@
 
       // momento do golpe (para aplicar o dano no instante certo)
       if (this.aoAcertar) {
-        const acao = (this.estado === 'ataque' && this.acaoCima) || this.acoes[this.estado];
+        const acao = (this.estado === 'ataque' && this.acaoCima) || (UMA_VEZ[this.estado] && this.acaoAtual) || this.acoes[this.estado];
         const prog = acao ? acao.time / acao.getClip().duration : p;
         if (prog >= this.momento) { const f = this.aoAcertar; this.aoAcertar = null; f(); }
       }

@@ -207,13 +207,13 @@
        Na frente: clareira com árvores e a placa; depois, o labirinto (11 x 11 salas de 9 m)
        com uma única porta. O fim fica no fundo, no túnel das aranhas, ao lado do baú. */
     labirinto: {
-      nome: 'Labirinto', evento: true, tam: [150, 210], ceu: '#aebcc4', nevoa: [55, 130],
+      nome: 'Labirinto', evento: true, tam: [150, 210], ceu: '#c3d1d8', nevoa: [90, 210],
       chao: { tex: 'grama_mapa1', tint: '#a3c28e', metrosPorRepeticao: 6 },
       entrada: [0, 92],
       pracas: [{ x: 0, z: 88, w: 14, h: 14 }],
       caminhos: [{ largura: 4.5, pts: [[0, 80], [-2, 58], [2, 36], [0, 13]] }],
       rios: [], lagos: [],
-      aeroporto: { x: 0, z: 140 }, semAeroporto: true,
+      aeroporto: { x: 0, z: 140 }, semAeroporto: true, semNoite: true,   // sempre de dia: as paredes precisam aparecer
       decor: [
         { img: 'poste_simples', h: 3.6, x: -8, z: 80 }, { img: 'poste_simples', h: 3.6, x: 8, z: 80 },
         { img: 'banco_1', h: 1.3, x: -6, z: 94 }, { img: 'banco_2', h: 1.3, x: 6, z: 94 },
