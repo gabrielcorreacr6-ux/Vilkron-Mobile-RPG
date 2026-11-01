@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Vilkron</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a1034">
+<link rel="icon" type="image/png" href="icones/favicon-64.png">
+<link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vilkron">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Nunito:wght@500;700&display=swap">
 <style>
@@ -119,6 +127,13 @@ button { font: inherit; color: inherit; }
 #labTempo.fechado b { color: #ff8a8a; }
 #labTempo.alerta b { color: #ffb347; animation: labPisca 1s infinite; }
 @keyframes labPisca { 50% { opacity: 0.45; } }
+/* aviso para deitar o celular */
+#girar { position: fixed; inset: 0; z-index: 90; background: rgba(6,10,28,0.94); color: #f3ecd8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 24px; font: 600 16px/1.4 system-ui, sans-serif; }
+#girar[hidden] { display: none; }
+#girar .cel { width: 54px; height: 92px; border: 4px solid #e3b44c; border-radius: 12px; position: relative; animation: girarCel 2.2s ease-in-out infinite; }
+#girar .cel::after { content: ''; position: absolute; left: 50%; bottom: 6px; width: 14px; height: 4px; margin-left: -7px; border-radius: 2px; background: #e3b44c; }
+@keyframes girarCel { 0%, 25% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+#girar button { margin-top: 6px; background: none; border: 1px solid rgba(243,236,216,0.35); color: #cfc6ad; border-radius: 10px; padding: 8px 14px; font: inherit; font-size: 13px; }
 #bChat { position: fixed; z-index: 30; left: calc(10px + env(safe-area-inset-left, 0px)); top: calc(118px + env(safe-area-inset-top, 0px)); width: 44px; height: 44px; border-radius: 12px; color: #e9dcc0; display: flex; align-items: center; justify-content: center; padding: 0; }
 #bChat svg { width: 22px; height: 22px; }
 #bChat b { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: #ef4444; color: #fff; font-size: 11px; line-height: 18px; padding: 0 4px; }
@@ -227,10 +242,13 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
   <button type="button" data-menu="instrucoes">Como jogar</button>
   <button type="button" data-menu="graficos">Gráficos</button>
   <button type="button" data-menu="camera">Distância da câmera</button>
+  <button type="button" data-menu="telacheia" id="menuTelaCheia">Tela cheia</button>
+  <button type="button" data-menu="instalar" id="menuInstalar" hidden>Instalar o jogo</button>
   <button type="button" data-menu="mira">Mira auxiliar: ligada</button>
 </div>
 
 <div id="aviso" class="hud caixa" hidden></div>
+<div id="girar" hidden><div class="cel"></div><div>Gire o celular para jogar deitado</div><small>Fica muito melhor em tela cheia: toque em ⋮ → Tela cheia</small><button type="button" id="girarIgnorar">Jogar em pé mesmo</button></div>
 <div id="joy" hidden><i></i></div>
 <div id="mira" hidden></div>
 
@@ -273,13 +291,34 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
-<script src="servidor.js?v=42"></script>
-<script src="config-online.js?v=42"></script>
-<script src="efeitos.js?v=42"></script>
-<script src="skins.js?v=42"></script>
-<script src="mapas.js?v=42"></script>
-<script src="rede.js?v=42"></script>
-<script src="jogo.js?v=42"></script>
-<script src="painel.js?v=42"></script>
+<script>
+// instalar como app (Chrome) e aviso de girar o celular
+(function () {
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); window.__pedidoInstalar = e; const b = document.getElementById('menuInstalar'); if (b) b.hidden = false; });
+  const toque = matchMedia('(pointer: coarse)').matches;
+  let ignorou = false; try { ignorou = localStorage.getItem('vilkron_em_pe') === '1'; } catch (e) {}
+  function conferir() {
+    const g = document.getElementById('girar'); if (!g) return;
+    g.hidden = !(toque && !ignorou && innerHeight > innerWidth * 1.05);
+  }
+  window.addEventListener('resize', conferir); window.addEventListener('orientationchange', () => setTimeout(conferir, 300));
+  document.addEventListener('DOMContentLoaded', () => {
+    conferir();
+    const b = document.getElementById('girarIgnorar');
+    if (b) b.addEventListener('click', () => { ignorou = true; try { localStorage.setItem('vilkron_em_pe', '1'); } catch (e) {} conferir(); });
+    const tc = document.getElementById('menuTelaCheia');
+    if (tc && !(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)) tc.hidden = true;
+  });
+})();
+</script>
+<script src="servidor.js?v=43"></script>
+<script src="config-online.js?v=43"></script>
+<script src="efeitos.js?v=43"></script>
+<script src="skins.js?v=43"></script>
+<script src="mapas.js?v=43"></script>
+<script src="rede.js?v=43"></script>
+<script src="jogo.js?v=43"></script>
+<script src="painel.js?v=43"></script>
 </body>
 </html>

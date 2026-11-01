@@ -4476,6 +4476,15 @@
     });
     $('modalFechar').hidden = false;
   }
+  // tela cheia (some a barra do navegador) e trava deitado onde o celular deixa
+  async function telaCheia() {
+    const d = document, el = d.documentElement;
+    try {
+      if (d.fullscreenElement || d.webkitFullscreenElement) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); return; }
+      await (el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen());
+      if (global.screen && screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+    } catch (e) { aviso('Este navegador não deixa entrar em tela cheia. Instale o jogo: menu do navegador → Adicionar à tela inicial'); }
+  }
   function telaCamera() {
     abrirModal('Distância da câmera', `
       <p class="nota">Arraste para aproximar ou afastar a câmera do seu herói.</p>
@@ -4755,6 +4764,12 @@
       else if (q === 'instrucoes') telaInstrucoes();
       else if (q === 'graficos') telaGraficos();
       else if (q === 'camera') telaCamera();
+      else if (q === 'telacheia') telaCheia();
+      else if (q === 'instalar') {
+        const p = global.__pedidoInstalar;
+        if (p) { p.prompt(); p.userChoice.then(() => { global.__pedidoInstalar = null; const b = $('menuInstalar'); if (b) b.hidden = true; }); }
+        else aviso('No Chrome: menu ⋮ → Adicionar à tela inicial / Instalar app');
+      }
       else if (q === 'mira') {
         MIRA_AUX.ligada = !MIRA_AUX.ligada;
         try { global.localStorage.setItem('vilkron_mira_aux', MIRA_AUX.ligada ? '1' : '0'); } catch (e) {}
