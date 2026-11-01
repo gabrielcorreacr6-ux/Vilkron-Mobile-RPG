@@ -52,10 +52,13 @@
     // Atirador de energia: habilidade 1 acelera os ataques; habilidade 2 faz as bolas explodirem
     atirador: { aceleracao: 0.6, aceleracaoDur: 5, explosaoDur: 6, explosaoRaio: 2.5, explosaoCritico: 0.05,
                 saltos: 2, janelaSaltos: 15, distSalto: 8 },
+    // Círculo Arcano do mago: raio, quanto tempo segura no meio, queimação por tique (0,5 s) e duração
+    circuloMago: { raio: 3.4, prende: 1.6, queima: 0.5, dur: 2.5 },
     // Últimates (4º botão)
     ultimate: {
       soldado: { alcance: 10, largura: 1.7, dano: 2.0 },                       // explosão em linha (x dano)
-      mago:    { comprimento: 10, base: 9, dano: 1.5, slow: 0.4, dur: 3 },     // triângulo de fogo roxo; dano real
+      // Selo de Destruição: o triângulo aparece e deixa lento; depois explode (dobro do antigo 1,5x) e o chão queima
+      mago:    { comprimento: 10, base: 9, dano: 3.0, slow: 0.5, espera: 0.9, dur: 3 },
       suporte: { raio: 8, stun: 4, antiCura: 0.5, antiCuraDur: 10, cura: 0.5 }
     },
     torre: { vida: 3000, dano: 120, alcance: 9, intervalo: 1.2, xp: 80, ouro: 60, golpesParaMinion: 3.5,
@@ -81,11 +84,11 @@
   // Classes: vida, dano, alcance, recargas [ataque, hab1, hab2]
   const CLASSES = {
     soldado:  { nome: 'Soldado', nomes: { m: 'Kael', f: 'Kayla' }, vida: 1300, dano: 70, alcance: 2.8, cd: [0.9, 6, 9, 30],    habs: ['Giro', 'Investida', 'Terremoto'] },
-    suporte:  { nome: 'Suporte',  vida: 950,  dano: 45, alcance: 11,  cd: [1.0, 8, 12, 40],   habs: ['Cura', 'Escudo', 'Selo'] },
-    mago:     { nome: 'Mago',     vida: 850,  dano: 62, alcance: 9.5, cd: [1.0, 7, 12, 35],   habs: ['Chamas', 'Ilusão', 'Fogo Roxo'] },
-    atirador: { nome: 'Atirador', vida: 900,  dano: 58, alcance: 12,  cd: [0.85, 12, 14, 20], habs: ['Aceleração', 'Explosão', 'Salto'] },
+    suporte:  { nome: 'Suporte', nomes: { m: 'Bryan', f: 'Brenda' },  vida: 950,  dano: 45, alcance: 11,  cd: [1.0, 8, 12, 40],   habs: ['Cura', 'Escudo', 'Selo'] },
+    mago:     { nome: 'Mago', nomes: { m: 'Drake', f: 'Diany' }, vida: 850,  dano: 62, alcance: 9.5, cd: [1.0, 7, 12, 35],   habs: ['Círculo Arcano', 'Ilusão', 'Selo'] },
+    atirador: { nome: 'Atirador', nomes: { m: 'Mike', f: 'Mia' }, vida: 900,  dano: 58, alcance: 12,  cd: [0.85, 12, 14, 20], habs: ['Aceleração', 'Explosão', 'Salto'] },
     // Jin: segundo herói do Soldado, liberado por evento (o administrador já tem)
-    jin:      { nome: 'Jin', grupo: 'soldado', evento: true, vida: 1250, dano: 58, alcance: 2.5, cd: [0.6, 12, 14, 16], habs: ['Socos', 'Capoeira', 'Kung Fu'] }
+    jin:      { nome: 'Jin', nomes: { m: 'Jin', f: 'Jeane' }, grupo: 'soldado', evento: true, vida: 1250, dano: 58, alcance: 2.5, cd: [0.6, 12, 14, 16], habs: ['Socos', 'Capoeira', 'Kung Fu'] }
   };
   const CORES = ['#9aa3a8', '#c0392b', '#2e86de', '#27ae60', '#8e44ad', '#e67e22', '#f1c40f', '#ecf0f1'];
 
@@ -1955,23 +1958,38 @@
           controlar(e, { slow: [u.slow, slowDur] });
         });
       };
-      golpe(u.dano, 2);                                         // explosão: 150% do dano como dano real + lentidão
+      // 1) o selo aparece e deixa lento quem está dentro
+      E.entidades.forEach(e => {
+        if (e.morto || !inimigos(e, h) || e === h || e.tipo === 'clone' || !dentro(e)) return;
+        if (remoto(e) && !deMim(h)) return;
+        controlar(e, { slow: [u.slow, u.espera + 1.2] });
+      });
+      // 2) explosão com o dobro do dano (dano real); 3) o chão continua queimando
+      const explodir = () => {
+        golpe(u.dano, 1.2);
+        const cx = (A[0] + B[0] + C[0]) / 3, cz = (A[1] + B[1] + C[1]) / 3, tm = tema(h);
+        emitir('grande', cx, 0.8, cz, { n: 26, cor: tm.chama, vel: 6, subida: 3, vida: 0.6, raio: u.base * 0.4 });
+        emitir('faisca', cx, 0.8, cz, { n: 40, cor: tm.brasa, vel: 8, subida: 4, grav: 9, vida: 0.6, raio: u.base * 0.4 });
+        anelEfeito(cx, cz, u.base * 0.7, 0xc58bff, 0.6, true);
+        E.tremor = { ate: E.t + 0.3, forca: 0.3, dur: 0.3 };
+      };
+      agendar(u.espera, explodir);
       if (fxSkin(h).triangulo) {
-        fxSkin(h).triangulo(h, A, B, C, u.dur);
-        for (let k = 1; k <= u.dur / 0.5; k++) agendar(k * 0.5, () => golpe(0.25, 0.6));
+        fxSkin(h).triangulo(h, A, B, C, u.dur + u.espera);
+        for (let k = 1; k <= u.dur / 0.5; k++) agendar(u.espera + k * 0.5, () => golpe(0.25, 0.6));
         return;
       }
-      const fogo = chaoTriangulo(A, B, C, tema(h).chama, u.dur);
+      const fogo = chaoTriangulo(A, B, C, tema(h).chama, u.dur + u.espera);
       const tm = tema(h);
       const brasas = () => { for (let q = 0; q < 10; q++) { const r1 = Math.random(), r2 = Math.random(), w = r1 + r2 > 1 ? [1 - r1, 1 - r2] : [r1, r2];
         emitir(q % 2 ? 'faisca' : 'media', A[0] + (B[0] - A[0]) * w[0] + (C[0] - A[0]) * w[1], 0.2, A[1] + (B[1] - A[1]) * w[0] + (C[1] - A[1]) * w[1], { n: 1, cor: q % 2 ? tm.brasa : tm.chama, vel: 0.3, subida: 3, vida: 0.8 }); } };
       brasas();
-      for (let k = 1; k <= u.dur / 0.5; k++) agendar(k * 0.5, () => golpe(0.25, 0.6));   // o chão continua queimando
-      for (let k = 1; k <= u.dur / 0.15; k++) agendar(k * 0.15, brasas);
+      for (let k = 1; k <= u.dur / 0.5; k++) agendar(u.espera + k * 0.5, () => golpe(0.25, 0.6));   // o chão continua queimando
+      for (let k = 1; k <= (u.dur + u.espera) / 0.15; k++) agendar(k * 0.15, brasas);
       for (let k = 0; k < 14; k++) {
         const r1 = Math.random(), r2 = Math.random(), q = r1 + r2 > 1 ? [1 - r1, 1 - r2] : [r1, r2];
         const x = A[0] + (B[0] - A[0]) * q[0] + (C[0] - A[0]) * q[1], z = A[1] + (B[1] - A[1]) * q[0] + (C[1] - A[1]) * q[1];
-        labareda(x, z, tema(h).chama, 1.3 + Math.random() * 0.9, u.dur);
+        labareda(x, z, tema(h).chama, 1.3 + Math.random() * 0.9, u.dur + u.espera);
       }
       anelEfeito(h.x + fx * u.comprimento * 0.55, h.z + fz * u.comprimento * 0.55, u.base * 0.55, 0xc58bff, 0.5, true);
       return fogo;
@@ -2625,9 +2643,10 @@
      Arquivos em assets/vozes/<classe>_<skin>_<m|f>/ ou assets/vozes/<classe>_<m|f>/ (1.mp3, 2.mp3...).
      A skin usa as falas próprias; sem elas, as do herói base do mesmo gênero. Tocam sorteadas, sem repetir a anterior. */
   const VOZES = {
-    lista: { soldado_m: 4 },          // quantas falas sorteadas tem cada pasta (1.mp3, 2.mp3...)
+    lista: { soldado_m: 4, soldado_f: 4, jin_m: 4, jin_f: 4, mago_m: 4, mago_f: 4, atirador_m: 4, atirador_f: 4, suporte_m: 4, suporte_f: 4 },   // falas sorteadas (1.mp3, 2.mp3...)
     // fala própria de cada habilidade (hab1.mp3, hab2.mp3, hab3.mp3): toca sempre que aperta
-    habilidades: { soldado_m: [1, 2, 3] },
+    habilidades: { soldado_m: [1, 2, 3], soldado_f: [1, 2, 3], jin_m: [1, 2, 3], jin_f: [1, 2, 3], mago_m: [1, 2, 3], mago_f: [1, 2, 3],
+      atirador_m: [1, 2, 3], atirador_f: [1, 2, 3], suporte_m: [1, 2, 3], suporte_f: [1, 2, 3] },
     intervalo: 7,                     // segundos mínimos entre uma fala e outra do mesmo herói
     chance: { ataque: 0.07, habilidade: 0.4, ult: 0.85, abate: 0.9, abateMob: 0.3, entrar: 1 }
   };
@@ -2741,24 +2760,34 @@
       (h, ang) => h.anim.tocar('ataque', { velocidade: bonus().velAtaque, momento: 0.5, aoAcertar: () =>
         atirar(h, h.rot, Object.assign({ alvo: h.ultimoAlvo, raio: 0.8, vel: 15, restante: CLASSES.mago.alcance + 1.5, dano: CLASSES.mago.dano, cor: tema(h).principal, tamanho: 0.9,
           rastro: tema(h).brasa, impacto: tema(h).brasa, efeito: e => aplicarSlow(e, 0.3, 0.2) }, fxSkin(h).projetil ? fxSkin(h).projetil(false) : {})) }),
+      // Círculo Arcano: puxa quem está dentro para o meio da roda, segura lá e queima
       (h, ang, mira) => {
         const d = mira ? clamp(mira.dist, 2, 10) : 6;
         const x = h.x + Math.sin(ang) * d, z = h.z + Math.cos(ang) * d;
-        const tm = tema(h);
+        const tm = tema(h), c = CONFIG.circuloMago;
         h.anim.tocar('habilidade1', { momento: 0.55, aoAcertar: () => {
+          // prende: cada inimigo dentro é puxado até o centro e fica preso
+          area(x, z, c.raio, h, e => {
+            const dx = x - e.x, dz = z - e.z, dd = Math.hypot(dx, dz);
+            if (dd > 0.5) controlar(e, { empurrar: [dx / dd * (dd - 0.4), dz / dd * (dd - 0.4)], empurrarT: 0.35 });
+            controlar(e, { stun: c.prende });
+            emitir('faisca', e.x, 1, e.z, { n: 10, cor: tm.principal, vel: 2, vida: 0.4 });
+          });
+          anelEfeito(x, z, c.raio, tm.principal, 0.6, false);
+          for (let k = 1; k <= 4; k++) agendar(k * 0.45, () => anelEfeito(x, z, c.raio * (1 - k * 0.18), tm.brasa, 0.45, false));
+          const queimar = () => area(x, z, c.raio, h, e => causarDano(e, CLASSES.mago.dano * c.queima, h, { semReacao: true }));
           const fs = fxSkin(h);
           if (fs.chamas) {
-            // visual da skin; o dano continua igual (a cada 0,5 s durante 2,5 s)
-            fs.chamas(h, x, z, 2.5);
-            for (let k = 1; k <= 5; k++) agendar(k * 0.5, () => area(x, z, 3.2, h, e => causarDano(e, CLASSES.mago.dano * 0.5, h, { semReacao: true })));
+            fs.chamas(h, x, z, c.dur);
+            for (let k = 1; k <= c.dur / 0.5; k++) agendar(k * 0.5, queimar);
             return;
           }
           emitir('grande', x, 0.6, z, { n: 10, cor: tm.chama, vel: 2.5, subida: 1, vida: 0.5, raio: 1 });
-          for (let q = 0; q < 7; q++) { const a = Math.random() * 6.28, rr = Math.sqrt(Math.random()) * 2.6; labareda(x + Math.cos(a) * rr, z + Math.sin(a) * rr, tm.chama, 1.1 + Math.random() * 0.8, 2.5); }
-          discoEfeito(x, z, 3.2, tm.chama, 2.5, { intervalo: 0.5, fn: () => {
-            area(x, z, 3.2, h, e => causarDano(e, CLASSES.mago.dano * 0.5, h, { semReacao: true }));
-            emitir('media', x, 0.2, z, { n: 14, cor: tm.chama, vel: 0.3, subida: 2.4, vida: 0.7, raio: 3 });
-            emitir('faisca', x, 0.2, z, { n: 10, cor: tm.brasa, vel: 0.4, subida: 3.5, vida: 0.9, raio: 3 });
+          for (let q = 0; q < 8; q++) { const a = q / 8 * 6.283; labareda(x + Math.cos(a) * c.raio * 0.85, z + Math.sin(a) * c.raio * 0.85, tm.chama, 1.2 + Math.random() * 0.6, c.dur); }
+          discoEfeito(x, z, c.raio, tm.chama, c.dur, { intervalo: 0.5, fn: () => {
+            queimar();
+            emitir('media', x, 0.2, z, { n: 14, cor: tm.chama, vel: 0.3, subida: 2.4, vida: 0.7, raio: c.raio });
+            emitir('faisca', x, 0.2, z, { n: 10, cor: tm.brasa, vel: 0.4, subida: 3.5, vida: 0.9, raio: c.raio });
           } });
         } });
       },
@@ -4670,7 +4699,7 @@
     Object.keys(CLASSES).filter(k => !CLASSES[k].grupo).forEach(k => { ordem.push(k); Object.keys(CLASSES).filter(j => CLASSES[j].grupo === k).forEach(j => ordem.push(j)); });
     const classes = ordem.map(k => {
       const c = P.classes[k] || { estrelas: 0 }, r = rankInfo(c.estrelas), livre = heroiLiberado(k), cl = CLASSES[k];
-      const titulo = cl.grupo ? `${CLASSES[cl.grupo].nome} · ${cl.nome}` : cl.nomes ? `${cl.nome} · ${cl.nomes.m} / ${cl.nomes.f}` : cl.nome;
+      const titulo = cl.grupo ? `${CLASSES[cl.grupo].nome} · ${cl.nomes ? cl.nomes.m + ' / ' + cl.nomes.f : cl.nome}` : cl.nomes ? `${cl.nome} · ${cl.nomes.m} / ${cl.nomes.f}` : cl.nome;
       return `<button type="button" class="classe ${P.classe === k ? 'sel' : ''} ${livre ? '' : 'bloq'}" data-classe="${k}" ${livre ? '' : 'data-bloq="1"'}><b>${titulo}</b><small>${livre ? r.nome + ' ★ ' + r.estrelas : '🔒 Liberado em evento'}</small><small>${cl.habs.join(' · ')}</small></button>`;
     }).join('');
     const cores = CORES.map(c => `<button type="button" class="cor ${P.cor === c ? 'sel' : ''}" data-cor="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('');
