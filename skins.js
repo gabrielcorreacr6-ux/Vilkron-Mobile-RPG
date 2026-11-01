@@ -34,7 +34,7 @@
         // armas: {} = sem cajado (só os gestos das mãos)
         { id: 'ciber', nome: 'Ajuda Cibernética', aceitaCor: false, preco: 0, armas: {} },
         { id: 'medicina', nome: 'Medicina Vilkronomita', aceitaCor: false, preco: 0, armas: {} } ] },
-      soldado:  { nome: 'Soldado',  corPadrao: '#c0392b', skins: [
+      soldado:  { nome: 'Soldado',  corPadrao: '#c0392b', modeloUnico: { default: 'm' }, skins: [
         { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
         // armas: espada própria da skin (assets/armas/espada_lava.glb); os efeitos de fogo ficam no jogo.js (TEMAS)
         { id: 'lava', nome: 'Soldado Infernal', aceitaCor: false, preco: 0, armas: { padrao: 'espada_lava' } },
@@ -109,6 +109,8 @@
     habilidades: {
       soldado: {
         habilidade1: { clipe: 'extra_golpe_carregado', voltas: 1 },
+        // investida: chute voador (1,5 s no arquivo, toca em 1 s)
+        habilidade2: { duracao: 1.0 },
         habilidade3: { clipe: 'extra_golpe_chao' },
         // modo combo: cada clipe toca inteiro e sem cortes; cada toque no ataque avança
         // para o próximo golpe do mesmo combo (golpes = frações da animação em que a espada acerta)
@@ -1088,7 +1090,9 @@
     if (!skin) { skin = { id: skinId, nome: skinId, aceitaCor: false }; if (skinId !== 'default') def.skins.push(skin); }
     const cor = o.cor || perfil.cores[o.classe] || def.corPadrao;
 
-    let gltf = await carregarModelo(`${BASE}chars/${o.classe}_${o.genero}_${skin.id}`);
+    // modelo único (um arquivo para homem e mulher): ex. o soldado padrão usa só soldado_m_default
+    const gArq = (def.modeloUnico && def.modeloUnico[skin.id]) || o.genero;
+    let gltf = await carregarModelo(`${BASE}chars/${o.classe}_${gArq}_${skin.id}`);
     // skin com um modelo só (vale para homem e mulher): usa o arquivo do outro gênero
     if (!gltf && skin.id !== 'default') gltf = await carregarModelo(`${BASE}chars/${o.classe}_${o.genero === 'f' ? 'm' : 'f'}_${skin.id}`);
     if (!gltf && skin.id !== 'default') {
