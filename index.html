@@ -50,7 +50,10 @@ button { font: inherit; color: inherit; }
 #ouro { padding: 6px 10px; flex: none; font-family: var(--hud); font-weight: 700; color: var(--ouro); white-space: nowrap; pointer-events: auto; }
 #ouro::before { content: "●"; margin-right: 5px; }
 
-#menu { top: calc(58px + env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); display: grid; gap: 2px; padding: 6px; min-width: 210px; }
+#menu { top: calc(58px + env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); display: grid; gap: 2px; padding: 6px; min-width: 210px;
+  max-height: calc(100vh - 70px - env(safe-area-inset-top, 0px)); max-height: calc(100dvh - 70px - env(safe-area-inset-top, 0px)); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+/* celular deitado: o menu ficou comprido (itens do modo online); duas colunas para caber tudo */
+@media (max-height: 560px) { #menu { grid-template-columns: repeat(3, auto); column-gap: 4px; min-width: 0; z-index: 40; } #menu hr { grid-column: 1 / -1; margin: 2px 0; } #menu button { padding: 6px 9px; font-size: 13px; } }
 #menu button { text-align: left; background: none; border: 0; padding: 9px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; }
 #menu button:hover, #menu button:focus-visible { background: rgba(227,180,76,0.18); outline: none; }
 #menu hr { border: 0; border-top: 1px solid var(--linha); margin: 4px 0; width: 100%; }
@@ -270,13 +273,13 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
-<script src="servidor.js?v=41"></script>
-<script src="config-online.js?v=41"></script>
-<script src="efeitos.js?v=41"></script>
-<script src="skins.js?v=41"></script>
-<script src="mapas.js?v=41"></script>
-<script src="rede.js?v=41"></script>
-<script src="jogo.js?v=41"></script>
-<script src="painel.js?v=41"></script>
+<script src="servidor.js?v=42"></script>
+<script src="config-online.js?v=42"></script>
+<script src="efeitos.js?v=42"></script>
+<script src="skins.js?v=42"></script>
+<script src="mapas.js?v=42"></script>
+<script src="rede.js?v=42"></script>
+<script src="jogo.js?v=42"></script>
+<script src="painel.js?v=42"></script>
 </body>
 </html>
