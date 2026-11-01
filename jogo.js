@@ -1359,6 +1359,42 @@
     const v = k => (m && m[k] !== undefined && m[k] !== '' && m[k] !== null) ? Number(m[k]) : (g && g[k] !== undefined && g[k] !== '' && g[k] !== null) ? Number(g[k]) : null;
     return { dano: v('dano'), defesa: v('defesa') };
   }
+  /* ---------- números de dano (texto de combate flutuante) ----------
+     Aparecem em cima do alvo e somem: dano físico em vermelho (Soldado, Jin, Atirador), mágico em roxo
+     (Mago, Suporte); o dano que você leva aparece em branco. Sempre o valor bruto, nunca porcentagem. */
+  const NUMEROS = { ativos: [], max: 40 };
+  const DANO_MAGICO = { mago: 1, suporte: 1 };
+  function numeroDano(alvo, v, origem, opc) {
+    if (!temDOM || !alvo || v < 0.5) return;
+    const meu = origem && (origem.tipo === 'heroi' || origem.donoHeroi || (origem.tipo === 'clone' && origem.dono === E.heroi));
+    const emMim = alvo === E.heroi;
+    if (!meu && !emMim) return;
+    let camadaN = document.getElementById('numeros');
+    if (!camadaN) { camadaN = document.createElement('div'); camadaN.id = 'numeros'; document.body.appendChild(camadaN); }
+    if (NUMEROS.ativos.length >= NUMEROS.max) { const velho = NUMEROS.ativos.shift(); velho.el.remove(); }
+    const classe = meu ? (E.heroi && E.heroi.classe) : null;
+    const el = document.createElement('div');
+    el.className = 'numDano ' + (emMim ? 'recebido' : DANO_MAGICO[classe] ? 'magico' : 'fisico') + (opc && opc._crit ? ' critico' : '');
+    el.textContent = Math.round(v);
+    camadaN.appendChild(el);
+    // o que você leva sai do lado do peito (não cobre o seu nome e o elo); o que você dá sai em cima do alvo
+    const alt = (alvo.altura || 1.8) * (alvo.obj && alvo.obj.scale ? alvo.obj.scale.y : 1) + (alvo.paredeY || 0);
+    NUMEROS.ativos.push({ el, x: alvo.x + (emMim ? 0.9 : (Math.random() - 0.5) * 0.8), y: emMim ? alt * 0.55 : alt + 0.2, z: alvo.z, t: 0, vida: opc && opc._crit ? 1.1 : 0.85 });
+  }
+  let _vn = null;
+  function atualizarNumeros(dt) {
+    if (!NUMEROS.ativos.length || !R.camera) return;
+    _vn = _vn || new THREE.Vector3();
+    NUMEROS.ativos = NUMEROS.ativos.filter(n => {
+      n.t += dt; n.y += dt * 1.6;
+      if (n.t >= n.vida) { n.el.remove(); return false; }
+      _vn.set(n.x, n.y, n.z).project(R.camera);
+      const k = n.t / n.vida, esc = k < 0.15 ? 0.6 + k / 0.15 * 0.6 : 1.2 - Math.min(0.2, (k - 0.15));
+      n.el.style.transform = `translate(${((_vn.x + 1) / 2 * innerWidth).toFixed(1)}px, ${((1 - _vn.y) / 2 * innerHeight).toFixed(1)}px) translate(-50%, -50%) scale(${esc.toFixed(2)})`;
+      n.el.style.opacity = k > 0.6 ? (1 - (k - 0.6) / 0.4).toFixed(2) : '1';
+      return true;
+    });
+  }
   function causarDano(alvo, valor, origem, opc) {
     opc = opc || {};
     // quem bate: o dano dele sobe ou desce (jogador de outro celular já mandou o dano ajustado)
@@ -1374,7 +1410,7 @@
     if (deHeroi) {
       const b = bonus();
       v *= b.poder * (1 + E.buffDano);
-      if (Math.random() < b.critico + (opc.critExtra || 0)) v *= 1.5;
+      if (Math.random() < b.critico + (opc.critExtra || 0)) { v *= 1.5; opc._crit = true; }
       if ((alvo.tipo === 'mob' || alvo.tipo === 'minion' || alvo.tipo === 'serpente') && E.heroi.cacadorAte > E.t) v *= 1.5;
     }
     // defesa da torre: limite de dano por jogador numa janela de tempo
@@ -1397,6 +1433,7 @@
     if (remoto(alvo)) {
       // a vida dele é controlada pelo celular dele: só avisamos o dano
       gancho('danoRemoto', alvo, v, opc);
+      numeroDano(alvo, v, origem, opc);
       if (E.heroi.ilusao && E.heroi.invisAte > E.t) { E.heroi.invisAte = 0; E.heroi.invulAte = 0; E.heroi.ilusao = false; }
       return v;
     }
@@ -1404,6 +1441,7 @@
       const abs = Math.min(alvo.escudo, v); alvo.escudo -= abs; v -= abs;
     }
     alvo.vida -= v;
+    numeroDano(alvo, v, origem, opc);
     if (deHeroi) {
       P.danoTotal += v;
       const rv = bonus().rouboVida;
@@ -2961,11 +2999,40 @@
       vida: cfg.vida * esc, vidaMax: cfg.vida * esc, dano: cfg.dano * esc, raio: Math.max(0.6, def.altura * 0.35 * (Skins.CATALOGO.mapas[E.mapa] || { escalaMob: 1 }).escalaMob),
       vel: cfg.vel, alcance: cfg.alcance, ataques: 0, altura: def.altura
     });
-    if (m.tipo === 'barao') camada(new THREE.CircleGeometry(2.4, 32), new THREE.MeshStandardMaterial({ color: 0xe3b44c, metalness: 0.7, roughness: 0.35 }), m.x, m.z, 0.07);   // piscina de moedas
+    if (m.tipo === 'barao') { morroDeMoedas(m.x, m.z); e.fixo = true; e.alturaMorro = 0.95; }   // o barão fica sentado no morro de moedas
     return e;
+  }
+  // morrinho de moedas de ouro (o Barão fica em cima)
+  function morroDeMoedas(x, z) {
+    const ouro = new THREE.MeshStandardMaterial({ color: 0xd9a531, metalness: 0.8, roughness: 0.3, emissive: 0x120c00 });
+    const ouroEsc = new THREE.MeshStandardMaterial({ color: 0x9c7418, metalness: 0.75, roughness: 0.38 });
+    const g = new THREE.Group(); g.position.set(x, 0, z);
+    // o morro: um monte arredondado e achatado
+    const morro = new THREE.Mesh(new THREE.SphereGeometry(2.6, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), ouroEsc);
+    morro.scale.set(1, 0.38, 1); g.add(morro);
+    // moedas por cima e escorregando pelas bordas
+    const rnd = semeado(Math.round(x * 7 + z * 13));
+    const moeda = new THREE.CylinderGeometry(0.2, 0.2, 0.05, 14);
+    for (let i = 0; i < 90; i++) {
+      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 3.1, h = r < 2.6 ? 0.99 * Math.sqrt(Math.max(0, 1 - (r / 2.6) * (r / 2.6))) : 0;
+      const c = new THREE.Mesh(moeda, ouro);
+      c.position.set(Math.cos(a) * r, h + 0.03, Math.sin(a) * r);
+      c.rotation.set((rnd() - 0.5) * 1.1, rnd() * 3, (rnd() - 0.5) * 1.1);
+      g.add(c);
+    }
+    // algumas pilhas de moedas em volta
+    for (let k = 0; k < 5; k++) {
+      const a = k / 5 * Math.PI * 2 + rnd(), r = 3 + rnd() * 0.6, n = 3 + Math.floor(rnd() * 5);
+      for (let j = 0; j < n; j++) { const c = new THREE.Mesh(moeda, ouro); c.position.set(Math.cos(a) * r + (rnd() - 0.5) * 0.05, 0.03 + j * 0.055, Math.sin(a) * r); g.add(c); }
+    }
+    E.mundo.add(g);
+    camada(new THREE.CircleGeometry(3.2, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 }), x, z, 0.03);
+    return g;
   }
   function iaMob(e, dt) {
     if (e.labA) return iaAranhaRobo(e, dt);
+    // Barão: em cima do morro quando está em casa (desce um pouco quando é empurrado para longe)
+    if (e.alturaMorro) { const dc = Math.hypot(e.x - e.casa.x, e.z - e.casa.z); e.paredeY = e.alturaMorro * Math.max(0, 1 - dc / 2.6); }
     if (e.morto) {
       if (E.t >= e.renasceEm) {
         e.morto = false; e.vida = e.vidaMax; e.x = e.casa.x; e.z = e.casa.z; e.alvo = null;
@@ -2985,7 +3052,7 @@
       const d = dist(alvo, e);
       e.rot = girarPara(e.rot, Math.atan2(alvo.x - e.x, alvo.z - e.z), dt * 6);
       const alcanceAgora = e.especie === 'aranha' && e.grudada ? e.cfg.corpoACorpo : e.alcance;
-      if (d > alcanceAgora * 0.9) { alvoPos = alvo; vel = e.vel; }
+      if (d > alcanceAgora * 0.9) { if (!e.fixo) { alvoPos = alvo; vel = e.vel; } }
       else if (E.t >= e.prontoEm && !['ataque', 'dano'].includes(e.anim.estado)) atacarMob(e, alvo);
     } else if (dist(e, e.casa) > 0.8) {
       alvoPos = e.casa; vel = e.vel * 1.2;
@@ -4387,6 +4454,7 @@
       else if (e.tipo === 'clone') iaClone(e, dt);
     }
     if (E.lab) atualizarLabirinto(dt);
+    if (temDOM) atualizarNumeros(dt);
     if (temDOM && (E._labTela = (E._labTela || 0) + dt) > 0.25) { E._labTela = 0; labRelogioTela(); }
     gancho('passo', dt);
     atualizarFx(dt);
@@ -4427,7 +4495,7 @@
         }
       }
       e.sombra.position.set(e.x, 0.06, e.z); e.sombra.visible = !e.morto && e.tipo !== 'serpente' && e.obj.visible !== false && !(e.afundado > 0.1);
-      e.barra.position.set(e.x, (e.altura || 1.8) * (e.obj.scale ? e.obj.scale.y : 1) + 0.5 - (e.afundado || 0), e.z);
+      e.barra.position.set(e.x, (e.altura || 1.8) * (e.obj.scale ? e.obj.scale.y : 1) + 0.5 - (e.afundado || 0) + (e.paredeY || 0), e.z);
       desenharBarra(e);
       if (e === E.heroi && P.classe) selo(e, C().estrelas, true);
       if (e.seloSprite) atualizarSelo(e, dt);
@@ -4673,10 +4741,12 @@
     }[qual];
     const servidor = Jogo.rankingServidor && Jogo.rankingServidor[qual];
     if (!servidor) gancho('pedirRanking', qual);
-    const lista = (servidor || []).slice(0, 30).map((l, i) => `<li><span>${i + 1}. ${l.nome}</span><b>${l.valor}</b></li>`).join('');
+    const lista = (servidor || []).slice(0, 30).map((l, i) => `<li${l.eu ? ' class="eu"' : ''}><span>${i + 1}. ${l.nome}</span><b>${Number(l.valor || 0).toLocaleString('pt-BR')}</b></li>`).join('');
+    const pos = servidor && servidor.posicao;
     abrirModal(nomes[qual], `
-      ${lista ? '<ol class="rank">' + lista + '</ol>' : '<p class="nota">A lista dos 30 melhores aparece quando o servidor estiver ligado. Para entrar nela, sua pontuação precisa passar a do 30º colocado.</p>'}
-      <div class="linha minha"><span>Sua posição</span><b>${meu === null ? 'Entre em um clã para pontuar' : meu}</b></div>`);
+      ${lista ? '<ol class="rank">' + lista + '</ol>' : servidor ? '<p class="nota">Ninguém pontuou ainda.</p>' : '<p class="nota">Carregando o ranking…</p>'}
+      <div class="linha minha"><span>Sua posição</span><b>${meu === null ? 'Entre em um clã para pontuar' : pos ? pos.posicao + 'º · ' + Number(pos.valor || 0).toLocaleString('pt-BR') : Number(meu).toLocaleString('pt-BR')}</b></div>
+      <p class="nota">Atualiza na hora em que você abre esta tela.</p>`);
   }
   function telaPassaportes() {
     const ps = passesDaClasse();

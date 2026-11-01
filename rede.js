@@ -595,13 +595,18 @@
         J.api.hud();
       } catch (er) { /* sem prêmio */ }
     };
+    // ranking na hora: salva o seu progresso antes, busca os 30 primeiros e a sua posição
     G.pedirRanking = async qual => {
       try {
-        const l = await rpc('ranking', { p_qual: qual });
+        await sincronizar(true);
+        const [l, pos] = await Promise.all([rpc('ranking', { p_qual: qual }), rpc('minha_posicao', { p_qual: qual }).catch(() => null)]);
         global.Jogo.rankingServidor = global.Jogo.rankingServidor || {};
-        global.Jogo.rankingServidor[qual] = (l || []).map(x => ({ nome: x.nick, valor: x.valor }));
-        setTimeout(() => { if (global.Jogo.rankingServidor) delete global.Jogo.rankingServidor[qual]; }, 60000);
-        J.api.telaRanking(qual);
+        const meu = Array.isArray(pos) ? pos[0] : pos;
+        global.Jogo.rankingServidor[qual] = (l || []).map(x => ({ nome: x.nick, valor: x.valor, eu: x.nick === Rede.eu.nick }));
+        global.Jogo.rankingServidor[qual].posicao = meu && meu.posicao ? { posicao: meu.posicao, valor: meu.valor } : null;
+        setTimeout(() => { if (global.Jogo.rankingServidor) delete global.Jogo.rankingServidor[qual]; }, 10000);
+        const aberto = document.getElementById('modalTitulo');
+        if (aberto && !document.getElementById('modal').hidden && /Ranking/.test(aberto.textContent)) J.api.telaRanking(qual);
       } catch (e) {}
     };
     // o mapa já foi carregado antes dos ganchos existirem

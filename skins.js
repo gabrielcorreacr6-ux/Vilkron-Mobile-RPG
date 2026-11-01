@@ -59,7 +59,7 @@
     generos: { m: 'Homem', f: 'Mulher' },
     // estados que todas as skins de uma classe pegam da animação nova (arquivos em assets/anims/<classe>_<skin>/)
     // (o parado da Vilkronomita das Sombras vale para todo o Soldado e todo o Jin)
-    herdarSkins: { soldado: ['habilidade2', 'parado'], jin: ['parado', 'Punch_Combo_2'] },
+    herdarSkins: { soldado: ['habilidade2', 'parado'], jin: ['parado', 'Punch_Combo_2'], mago: ['extra_lancar_7', 'extra_lancar_4'] },
     // realce das skins (cores mais vivas): metal máximo e quanto a textura acende sozinha
     // realce: cada textura é ajustada sozinha (escura sobe, clara fica como está); o brilho próprio é pequeno para o branco não estourar
     realceSkins: { metal: 0.3, brilho: 0.12, noite: 0.08, brilhoCor: 0.75, alvoLuz: 0.3, alvoCor: 0.4, maxGanho: 1.5, maxCor: 1.7, contraste: 1.15 },
@@ -143,7 +143,13 @@
         ] },
         habilidade3: { clipe: 'habilidade1', duracao: 0.5 }
       },
-      mago: { habilidade3: { clipe: 'extra_magia_longa' } },
+      // mago: o ataque básico intercala o feitiço dele com dois arremessos (vindos do atirador)
+      mago: { habilidade3: { clipe: 'extra_magia_longa' }, ataque: { variacoes: [
+        { clipe: 'ataque', golpe: 0.5 },
+        { clipe: 'extra_lancar_7', de: 0.1, ate: 0.7, golpe: 0.45 },
+        { clipe: 'ataque', golpe: 0.5 },
+        { clipe: 'extra_lancar_4', de: 0.0, ate: 0.65, golpe: 0.42 }
+      ] } },
       // golem é pesado: golpes mais lentos que os dos heróis
       golem: { ataque: { duracao: 1.6 }, habilidade1: { duracao: 1.8 } },
       // Jin: o ataque básico tem conjuntos de golpes; as habilidades 1 e 2 trocam o conjunto.
@@ -1006,6 +1012,20 @@
         }));
         anim.varAtaque = antes;
         if (anim.conjunto) anim.usarConjunto(anim.conjunto);
+        continue;
+      }
+      // golpe extra do ataque básico (ex.: arremessos do mago): entra na lista de golpes alternados, na ordem da config
+      if (cfgA && cfgA.variacoes && ESTADOS.indexOf(estado) < 0) {
+        const vs = cfgA.variacoes.filter(v => (typeof v === 'string' ? v : v.clipe) === estado);
+        if (vs.length && anim.acoes.ataque) {
+          if (!anim.varAtaque) anim.varAtaque = [{ acao: anim.acoes.ataque, escala: anim.escalas.ataque, clipe: 'ataque' }];
+          if (!anim.varAtaque.some(x => x.clipe === estado)) vs.forEach(v => anim.adicionarVariacaoAtaque(clip, typeof v === 'string' ? { clipe: v } : v));
+          // reordena como na config (o feitiço próprio intercalado com os arremessos)
+          const ordem = cfgA.variacoes.map(v => typeof v === 'string' ? v : v.clipe), usadas = new Set(), nova = [];
+          ordem.forEach(nome => { const x = anim.varAtaque.find(o => o.clipe === nome && !usadas.has(o)); if (x) { usadas.add(x); nova.push(x); } else if (nome === 'ataque') { const y = anim.varAtaque.find(o => o.clipe === 'ataque'); if (y) nova.push(y); } });
+          if (nova.length >= 2) anim.varAtaque = nova;
+          anim.iVar = -1;
+        }
         continue;
       }
       anim.adicionarClipe(estado, clip);

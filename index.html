@@ -122,6 +122,14 @@ button { font: inherit; color: inherit; }
 .rotulo.inline { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
 /* menu do jogador: botões um embaixo do outro */
 .botoes.coluna { flex-direction: column; align-items: stretch; }
+/* ranking: você destacado */
+.rank li.eu { color: #ffe08a; font-weight: 700; }
+/* números de dano: físico vermelho, mágico roxo, o que você leva em branco */
+#numeros { position: fixed; inset: 0; pointer-events: none; z-index: 7; overflow: hidden; }
+.numDano { position: absolute; left: 0; top: 0; font: 800 17px/1 'Chakra Petch', system-ui, sans-serif; letter-spacing: 0.5px; will-change: transform, opacity;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.75), 0 0 4px rgba(0,0,0,0.8); }
+.numDano.fisico { color: #ff4a3d; } .numDano.magico { color: #c77dff; } .numDano.recebido { color: #f4f1ea; font-size: 14px; }
+.numDano.critico { font-size: 24px; } .numDano.critico::after { content: '!'; }
 /* nome em cima dos jogadores */
 #rotulos { position: fixed; inset: 0; pointer-events: none; z-index: 6; overflow: hidden; }
 .rotJ { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 3px; white-space: nowrap; font: 700 12px/1 'Nunito', system-ui, sans-serif; color: #ffd2c8; text-shadow: 0 1px 2px #000, 0 0 3px #000; will-change: transform; }
@@ -321,13 +329,13 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
   });
 })();
 </script>
-<script src="servidor.js?v=52"></script>
-<script src="config-online.js?v=52"></script>
-<script src="efeitos.js?v=52"></script>
-<script src="skins.js?v=52"></script>
-<script src="mapas.js?v=52"></script>
-<script src="rede.js?v=52"></script>
-<script src="jogo.js?v=52"></script>
-<script src="painel.js?v=52"></script>
+<script src="servidor.js?v=53"></script>
+<script src="config-online.js?v=53"></script>
+<script src="efeitos.js?v=53"></script>
+<script src="skins.js?v=53"></script>
+<script src="mapas.js?v=53"></script>
+<script src="rede.js?v=53"></script>
+<script src="jogo.js?v=53"></script>
+<script src="painel.js?v=53"></script>
 </body>
 </html>
