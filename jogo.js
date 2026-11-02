@@ -1127,20 +1127,32 @@
 
   function montarPodio(pd) {
     const rankings = ['Clãs', 'Players', 'Farm', 'Top'];
-    const marmore = new THREE.MeshStandardMaterial({ color: 0xece8e0, roughness: 0.35 });
+    // mármore cinza com veios e fosco: o branco puro estourava no brilho da tela e escondia as estátuas
+    const veios = canvasTex(256, 256, g => {
+      g.fillStyle = '#d9d4ca'; g.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 9; i++) {
+        g.strokeStyle = `rgba(${90 + i * 6},${88 + i * 5},${84 + i * 4},${0.18 + (i % 3) * 0.08})`; g.lineWidth = 0.8 + (i % 3);
+        g.beginPath(); let x = (i * 53) % 256, y = 0; g.moveTo(x, y);
+        while (y < 256) { y += 18; x += Math.sin(y * 0.05 + i) * 14; g.lineTo(x, y); }
+        g.stroke();
+      }
+    });
+    if (veios.wrapS !== undefined) { veios.wrapS = veios.wrapT = THREE.RepeatWrapping; }
+    const marmore = new THREE.MeshStandardMaterial({ color: 0x5a554d, map: veios, roughness: 0.85, metalness: 0 });
+    const pedra = new THREE.MeshStandardMaterial({ color: 0x26231f, roughness: 0.42, metalness: 0.3 });
     const ouro = new THREE.MeshStandardMaterial({ color: 0xe3b44c, metalness: 0.6, roughness: 0.35 });
     rankings.forEach(async (r, i) => {
       const x = pd.x + (i - 1.5) * 6.5, z = pd.z;
       const base = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.2, 3.4), marmore); base.position.set(x, 0.6, z); E.mundo.add(base);
       const placa = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.5, 0.1), ouro); placa.position.set(x, 0.6, z + 1.75); E.mundo.add(placa);
       const nome = nomeTop(r);
-      const t = textoSprite('Top 1 · ' + r + ': ' + nome, 6); t.position.set(x, 4.6, z + 1.8); E.mundo.add(t);
+      const t = textoSprite('Top 1 · ' + r + ': ' + nome, 6); t.position.set(x, 5.4, z); E.mundo.add(t);   // em cima da cabeça (na frente cobria a estátua)
       // estátua: herói de mármore, parado
       const classe = ['soldado', 'mago', 'suporte', 'atirador'][i];
       try {
         const est = await Skins.criarPersonagem({ classe, genero: i % 2 ? 'f' : 'm', cor: '#ffffff', semArmas: true });
         const an = Skins.animador(est); if (an) { an.atualizar(0.6); Skins.remover(est); }
-        est.traverse(n => { if (n.isMesh) n.material = marmore; });
+        est.traverse(n => { if (n.isMesh) { n.material = pedra; n.castShadow = true; } });
         est.position.set(x, 1.2, z); est.scale.setScalar(1.25);
         E.mundo.add(est);
       } catch (e) { /* sem modelo: fica só o pedestal */ }

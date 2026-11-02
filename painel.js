@@ -654,7 +654,7 @@
           <input id="aEstXp" class="campo" type="number" placeholder="XP (+ ou -)">
           <input id="aEstMotivo" class="campo" maxlength="200" placeholder="Motivo (obrigatório para retirar)">
           <button class="acao forte" id="aEst" type="button">Aplicar</button></div>
-        <h4>Banimento</h4>${formBan}
+        <h4>Banimento</h4>${p.papel === 'admin' ? '<p class="nota">O administrador não pode ser banido.</p>' : formBan}
         <h4>Dar skin</h4>
         <div class="form"><div class="linha2">${selClasse('aSkClasse')}<input id="aSkId" class="campo" list="dlSkins" placeholder="skin (ex.: lava)">${listaSkins()}</div>
           <p class="nota">Doar não tira a skin de você.</p>
@@ -683,7 +683,7 @@
       if (!jogadorSel) return;
       const p = jogadorSel, num = p.num;
       const recarregar = async () => { const l = await Rede.rpc('buscar_jogador', { p_texto: String(num) }).catch(() => null); if (l && l[0]) jogadorSel = l[0]; telaAdmin('jogadores'); };
-      ligarDoar(el, num); ligarBan(el, num);
+      ligarDoar(el, num); if (el.querySelector('#fBanir')) ligarBan(el, num);
       el.querySelector('#fDoar').addEventListener('click', () => setTimeout(recarregar, 600));
       el.querySelector('#aEst').addEventListener('click', async () => {
         const r = await tentar(() => Rede.rpc('ajustar_estrelas', { p_num: num, p_classe: el.querySelector('#aEstClasse').value,

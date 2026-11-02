@@ -85,7 +85,7 @@
       .is('removido_em', null).order('criado_em', { ascending: false }).limit(1);
     return data && data[0];
   };
-  Rede.banido = row => !!(row && row.banido_ate && new Date(row.banido_ate) > new Date());
+  Rede.banido = row => !!(row && row.papel !== 'admin' && row.banido_ate && new Date(row.banido_ate) > new Date());   // o administrador nunca fica banido
 
   /* ---------------- PERFIL ↔ JOGO ---------------- */
   let J = null, base = 0, danoBase = 0, versao = 1, sincT = null, sincronizando = false;
