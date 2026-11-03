@@ -549,7 +549,7 @@
   // sugestões de skins já cadastradas (o campo continua aceitando qualquer nome)
   const listaSkins = () => `<datalist id="dlSkins">${Object.keys(CLASSES_NOMES).map(c => ((global.Skins.CATALOGO.classes[c] || {}).skins || [])
     .filter(k => k.id !== 'default').map(k => `<option value="${k.id}">${CLASSES_NOMES[c]} · ${esc(k.nome || k.id)}</option>`).join('')).join('')}
-    <option value="default">Herói de evento: escolha a classe (Jin, Gigante, Phil, Merlin ou Violet) e use "default" para liberar o herói</option></datalist>`;
+    <option value="default">Dar um herói: escolha a classe do herói e use "default" (o jogador não precisa comprar)</option></datalist>`;
   const selClasse = (id) => `<select id="${id}" class="campo">${Object.keys(CLASSES_NOMES).map(c => `<option value="${c}">${CLASSES_NOMES[c]}</option>`).join('')}</select>`;
   const formBan = `
     <div class="form">

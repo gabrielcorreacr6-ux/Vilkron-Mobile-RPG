@@ -576,7 +576,15 @@
       if (r && r.skin && r.skin.id) sincronizar(true);
       return r;
     };
-    // heróis de evento (Jin): liberados quando ganhos (guardados junto das skins) ou para o administrador
+    // heróis: comprados na loja (15.000 de ouro) ou dados pelo administrador; ficam guardados junto das skins
+    // (skins.<classe>.default). O administrador tem todos.
+    G.comprarHeroi = async k => {
+      await sincronizar(true);                   // garante que o ouro do jogo está no servidor
+      const r = await rpc('comprar_heroi', { p_classe: k });
+      J.api.P.ouro = r.ouro; base = r.ouro;
+      receberPerfil(r);
+      return r;
+    };
     G.temHeroi = k => {
       if (!Rede.eu) return false;
       if (Rede.eu.papel === 'admin') return true;

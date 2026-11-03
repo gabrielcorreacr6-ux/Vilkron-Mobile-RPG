@@ -85,7 +85,8 @@
       barreira: { dur: 5, largura: 4.6, altura: 2.6, distancia: 1.3, vel: 1.8, protege: 1.25 } },
     // Merlin (mago tatu): pedras; Órbita Rochosa (7 s), Rocha Colossal (200%), Prisão Gravitacional (200%)
     merlin: { basico: 0.75,
-      orbita: { dur: 7, n: 8, raio: 1.5, dano: 1.2, queima: 0.12, tiques: 4, intervalo: 0.28 },
+      // as pedras saem sozinhas, em ordem, nos inimigos que chegarem perto (alcance), uma atrás da outra
+      orbita: { dur: 7, n: 8, raio: 1.5, dano: 1.2, queima: 0.12, tiques: 4, intervalo: 0.22, alcance: 9 },
       colossal: { dano: 2.0, raio: 2.6, alcance: 10 },
       prisao: { dano: 2.0, alcance: 10, segura: 2.6, pedras: 14 } },
     // Violet (suporte elfa): fadas que cortam cura; colete (defesa 20%), reflexo (cura 60% + devolve 75%), circuitos (prende 2 s)
@@ -93,6 +94,8 @@
       colete: { dur: 5, defesa: 0.20, raio: 7 },
       reflexo: { dur: 6, cura: 0.6, devolve: 0.75, raio: 8 },
       circuito: { segura: 2, antiCura: [0.5, 6], alcance: 14, vel: 9 } },
+    // Loja de heróis (v58): todos os heróis são vendidos. O jogador começa com este ouro e compra o primeiro.
+    lojaHerois: { preco: 15000, ouroInicial: 15000 },
     arena: { inscricao: 150, minionsCada: 30, respawnBase: 30, respawnPasso: 20, respawnMax: 120 },
     loja: {
       cura:   { nome: 'Frasco de cura', preco: 30, desc: 'Recupera toda a vida.' },
@@ -109,9 +112,9 @@
     suporte:  { nome: 'Suporte', nomes: { m: 'Bryan', f: 'Brenda' },  vida: 950,  dano: 45, alcance: 11,  cd: [1.0, 8, 12, 40],   habs: ['Cura', 'Escudo', 'Selo'] },
     mago:     { nome: 'Mago', nomes: { m: 'Drake', f: 'Diany' }, vida: 850,  dano: 62, alcance: 9.5, cd: [1.0, 7, 12, 35],   habs: ['Círculo Arcano', 'Ilusão', 'Selo'] },
     atirador: { nome: 'Atirador', nomes: { m: 'Mike', f: 'Mia' }, vida: 900,  dano: 58, alcance: 12,  cd: [0.85, 12, 14, 20], habs: ['Aceleração', 'Explosão', 'Salto'] },
-    // Jin: segundo herói do Soldado, liberado por evento (o administrador já tem)
+    // Jin: segundo herói do Soldado. Todos os heróis são comprados na loja (CONFIG.lojaHerois)
     jin:      { nome: 'Jin', nomes: { m: 'Jin', f: 'Jeane' }, grupo: 'soldado', evento: true, vida: 1250, dano: 60, alcance: 2.8, cd: [0.55, 10, 14, 22], habs: ['Ampliar Formação', 'Blindagem', 'Asas da Guerra'] },
-    // heróis novos (v57): liberados em evento, como o Jin; "unico" = um modelo só (sem versão homem/mulher); vel = fator da velocidade
+    // heróis novos (v57): "unico" = um modelo só (sem versão homem/mulher); vel = fator da velocidade
     gigante:  { nome: 'Gigante', nomes: { m: 'Gigante', f: 'Gigante' }, unico: true, grupo: 'atirador', evento: true, vida: 900, dano: 58, alcance: 12, vel: 0.8, cd: [1.15, 8, 14, 30], habs: ['Modo Turbo', 'Granada de Fumaça', 'Festival de Explosões'] },
     phil:     { nome: 'Phil', nomes: { m: 'Phil', f: 'Phil' }, unico: true, grupo: 'suporte', evento: true, vida: 1700, dano: 38, alcance: 2.9, vel: 0.95, cd: [0.8, 18, 16, 20], habs: ['Regeneração Extrema', 'Triplo Impacto', 'Barreira Intransponível'] },
     merlin:   { nome: 'Merlin', nomes: { m: 'Merlin', f: 'Merlin' }, unico: true, grupo: 'mago', evento: true, vida: 850, dano: 62, alcance: 10, cd: [0.9, 6.5, 9, 20], habs: ['Órbita Rochosa', 'Rocha Colossal', 'Prisão Gravitacional'] },
@@ -152,7 +155,7 @@
     const c = {};
     Object.keys(CLASSES).forEach(k => { c[k] = { xp: 0, estrelas: 0, protecao: false, vitorias: 0 }; });
     return {
-      nome: 'Jogador', clan: '', classe: null, genero: 'm', cor: '#9aa3a8', ouro: 120, ouroTotal: 0, danoTotal: 0,
+      nome: 'Jogador', clan: '', classe: null, genero: 'm', cor: '#9aa3a8', ouro: CONFIG.lojaHerois.ouroInicial, ouroTotal: 0, danoTotal: 0, herois: {},
       classes: c, passes: {}, mapa: 'mapa1', pontosRank: 0,
       inventario: { cura: 2, vel: 0, invis: 0, relogio: 0, cacador: 0 }
     };
@@ -160,7 +163,17 @@
   let P = perfilPadrao();
   try {
     const s = JSON.parse(global.localStorage.getItem(CHAVE) || 'null');
-    if (s) { P = Object.assign(perfilPadrao(), s); P.classes = Object.assign(perfilPadrao().classes, s.classes || {}); }
+    if (s) {
+      P = Object.assign(perfilPadrao(), s); P.classes = Object.assign(perfilPadrao().classes, s.classes || {});
+      // perfil de antes da loja de heróis: fica com os heróis que já jogou (e com o ouro que tinha)
+      if (!s.herois) {
+        P.herois = {};
+        Object.keys(P.classes).forEach(k => { const c = P.classes[k]; if (c && (c.xp > 0 || c.estrelas > 0)) P.herois[k] = true; });
+        if (s.classe) P.herois[s.classe] = true;
+        Object.keys(s.liberados || {}).forEach(k => { P.herois[k] = true; });
+        P.ouro = s.ouro === undefined ? 120 : s.ouro;
+      }
+    }
     P.viradaTemporada = aplicarTemporada(P);
   } catch (e) { /* sem armazenamento: começa do zero */ }
   let salvarT = null;
@@ -2759,8 +2772,9 @@
       jin_m: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
       jin_f: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
       gigante: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
-      phil: ['selecao', 'entrada', 'movimento', 'ataque', 'ataque3', 'agua', 'tubarao', 'hab1', 'hab2'],
+      phil: ['selecao', 'entrada', 'movimento', 'ataque', 'ataque3', 'agua', 'tubarao', 'hab1', 'hab2', 'hab3'],
       merlin: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
+      violet: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
       soldado_lava_m: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
       // Caçadora Sombria: a mesma voz para o homem e a mulher (a skin tem um modelo só)
       soldado_cacadora: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3']
@@ -3320,6 +3334,12 @@
       p.m.position.set(h.x + Math.cos(a) * o.raio, (1.0 + Math.sin(E.t * 2 + i) * 0.12) * esc + 0.2, h.z + Math.sin(a) * o.raio);
       p.m.rotation.x += dt * 0.7; p.m.rotation.y += dt * 0.5;
     });
+    // como os orbes do Cyclops: com inimigo perto, as pedras saem sozinhas, em ordem, uma atrás da outra
+    if (E.t >= (o.prox || 0)) {
+      const c = CONFIG.merlin.orbita, preso = h.alvoPreso && !h.alvoPreso.morto && dist(h.alvoPreso, h) <= c.alcance ? h.alvoPreso : null;
+      const alvo = preso || (h.ultimoAlvo && !h.ultimoAlvo.morto && dist(h.ultimoAlvo, h) <= c.alcance ? h.ultimoAlvo : alvoMaisPerto(h, c.alcance));
+      if (alvo && !(remoto(alvo) && invisivel(alvo))) merlinDispara(h, alvo);
+    }
   }
   // uma pedra sai da órbita, em ordem, e vai no inimigo
   function merlinDispara(h, alvo) {
@@ -5628,18 +5648,21 @@
   }
   function telaHeroi(primeiraVez) {
     if (!primeiraVez && E.heroi && !naPracaInicio(E.heroi)) { aviso('Para trocar de herói, volte à praça do começo do mapa'); return; }
-    // heróis de evento (Jin) aparecem logo depois da classe deles, como segunda opção; bloqueados ficam apagados
+    // cada herói aparece logo depois da classe dele; os que ainda não foram comprados mostram o preço
+    const preco = CONFIG.lojaHerois.preco, precoTxt = preco.toLocaleString('pt-BR');
     const ordem = [];
     Object.keys(CLASSES).filter(k => !CLASSES[k].grupo).forEach(k => { ordem.push(k); Object.keys(CLASSES).filter(j => CLASSES[j].grupo === k).forEach(j => ordem.push(j)); });
     const classes = ordem.map(k => {
       const c = P.classes[k] || { estrelas: 0 }, r = rankInfo(c.estrelas), livre = heroiLiberado(k), cl = CLASSES[k];
       const nomes = cl.nomes ? (cl.nomes.m === cl.nomes.f ? cl.nomes.m : cl.nomes.m + ' / ' + cl.nomes.f) : cl.nome;
       const titulo = cl.grupo ? `${CLASSES[cl.grupo].nome} · ${nomes}` : cl.nomes ? `${cl.nome} · ${nomes}` : cl.nome;
-      return `<button type="button" class="classe ${P.classe === k ? 'sel' : ''} ${livre ? '' : 'bloq'}" data-classe="${k}" ${livre ? '' : 'data-bloq="1"'}><b>${titulo}</b><small>${livre ? r.nome + ' ★ ' + r.estrelas : '🔒 Liberado em evento'}</small><small>${cl.habs.join(' · ')}</small></button>`;
+      return `<button type="button" class="classe ${P.classe === k ? 'sel' : ''} ${livre ? '' : 'bloq'}" data-classe="${k}" ${livre ? '' : 'data-bloq="1"'}><b>${titulo}</b><small>${livre ? r.nome + ' ★ ' + r.estrelas : '🪙 ' + precoTxt + ' de ouro'}</small><small>${cl.habs.join(' · ')}</small></button>`;
     }).join('');
     const cores = CORES.map(c => `<button type="button" class="cor ${P.cor === c ? 'sel' : ''}" data-cor="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('');
     let escolha = { classe: P.classe || 'soldado', genero: P.genero, cor: P.cor };
-    abrirModal(primeiraVez ? 'Escolha seu herói' : 'Trocar herói', `
+    const nenhum = !Object.keys(CLASSES).some(heroiLiberado);
+    abrirModal(nenhum ? 'Escolha seu primeiro herói' : primeiraVez ? 'Escolha seu herói' : 'Trocar herói', `
+      <p class="nota">Seu ouro: <b id="ouroHerois">${Math.floor(P.ouro).toLocaleString('pt-BR')}</b> · cada herói custa ${precoTxt} de ouro${nenhum ? '. Escolha com qual quer começar.' : '.'}</p>
       <div class="classes">${classes}</div>
       <div class="linha"><span>Versão</span><div class="botoes"><button type="button" class="acao fina ${escolha.genero === 'm' ? 'sel' : ''}" data-genero="m">Homem</button><button type="button" class="acao fina ${escolha.genero === 'f' ? 'sel' : ''}" data-genero="f">Mulher</button></div></div>
       <div class="linha"><span>Cor</span><div class="cores">${cores}</div></div>
@@ -5647,16 +5670,30 @@
       <button class="acao forte" id="bConfirmarHeroi" type="button">Jogar</button>`, el => {
       const marcar = (sel, attr, val) => el.querySelectorAll(sel).forEach(b => b.classList.toggle('sel', b.dataset[attr] === val));
       if (!P.classe) marcar('[data-classe]', 'classe', escolha.classe);
-      { const lin = el.querySelector('[data-genero]'); if (lin && CLASSES[escolha.classe]) lin.closest('.linha').hidden = !!CLASSES[escolha.classe].unico; }
+      const botao = el.querySelector('#bConfirmarHeroi');
+      // o botão diz o que vai acontecer: jogar com um herói seu, ou comprar este
+      const atualizar = () => {
+        const lin = el.querySelector('[data-genero]'); if (lin && CLASSES[escolha.classe]) lin.closest('.linha').hidden = !!CLASSES[escolha.classe].unico;
+        const meu = heroiLiberado(escolha.classe);
+        botao.textContent = meu ? 'Jogar' : `Comprar ${CLASSES[escolha.classe].nome} por ${precoTxt} e jogar`;
+        botao.disabled = !meu && P.ouro < preco;
+        if (botao.disabled) botao.textContent = `Faltam ${Math.ceil(preco - P.ouro).toLocaleString('pt-BR')} de ouro para ${CLASSES[escolha.classe].nome}`;
+      };
+      atualizar();
       el.querySelectorAll('[data-classe]').forEach(b => b.addEventListener('click', () => {
-        if (b.dataset.bloq) { aviso(CLASSES[b.dataset.classe].nome + ' é liberado em eventos especiais'); return; }
         escolha.classe = b.dataset.classe; marcar('[data-classe]', 'classe', escolha.classe);
         falaSelecao(escolha.classe, escolha.genero);
-        const lin = el.querySelector('[data-genero]'); if (lin) lin.closest('.linha').hidden = !!CLASSES[escolha.classe].unico;
+        atualizar();
       }));
       el.querySelectorAll('[data-genero]').forEach(b => b.addEventListener('click', () => { escolha.genero = b.dataset.genero; marcar('[data-genero]', 'genero', escolha.genero); }));
       el.querySelectorAll('[data-cor]').forEach(b => b.addEventListener('click', () => { escolha.cor = b.dataset.cor; marcar('[data-cor]', 'cor', escolha.cor); }));
-      el.querySelector('#bConfirmarHeroi').addEventListener('click', async () => {
+      botao.addEventListener('click', async () => {
+        if (!heroiLiberado(escolha.classe)) {
+          botao.disabled = true; botao.textContent = 'Comprando...';
+          const ok = await comprarHeroi(escolha.classe);
+          if (!ok) { atualizar(); return; }
+          aviso('Você comprou ' + CLASSES[escolha.classe].nome + '!');
+        }
         const mudouModelo = escolha.classe !== P.classe || escolha.genero !== P.genero;
         P.classe = escolha.classe; P.genero = escolha.genero; P.cor = escolha.cor; salvar();
         fecharModal();
@@ -5669,11 +5706,25 @@
     if (!primeiraVez) $('modalFechar').hidden = false; else $('modalFechar').hidden = true;
   }
 
-  // herói liberado? Os de evento precisam ter sido ganhos (o administrador tem todos)
+  // herói comprado? Online quem diz é o servidor (o administrador tem todos); offline, o perfil deste celular
   function heroiLiberado(k) {
-    const c = CLASSES[k]; if (!c) return false;
-    if (!c.evento) return true;
-    return gancho('temHeroi', k) === true || !!(P.liberados && P.liberados[k]);
+    if (!CLASSES[k]) return false;
+    const g = gancho('temHeroi', k);
+    if (g !== undefined) return g === true;
+    return !!((P.herois && P.herois[k]) || (P.liberados && P.liberados[k]));
+  }
+  // compra um herói (online o servidor confere e desconta o ouro)
+  async function comprarHeroi(k) {
+    const preco = CONFIG.lojaHerois.preco;
+    if (heroiLiberado(k)) return true;
+    if (P.ouro < preco) { aviso('Ouro insuficiente: ' + CLASSES[k].nome + ' custa ' + preco.toLocaleString('pt-BR') + ' de ouro'); return false; }
+    if (typeof G.comprarHeroi === 'function') {
+      try { await G.comprarHeroi(k); }
+      catch (e) { aviso(e && e.message ? e.message : 'Não foi possível comprar agora'); return false; }
+      hud(); return heroiLiberado(k);
+    }
+    P.ouro -= preco; P.herois = P.herois || {}; P.herois[k] = true; salvar(); hud();
+    return true;
   }
   function textoMira() { const b = temDOM && document.querySelector('[data-menu="mira"]'); if (b) b.textContent = 'Mira auxiliar: ' + (MIRA_AUX.ligada ? 'ligada' : 'desligada'); }
   // coluna de itens: arrasta pela alça para qualquer lugar e minimiza no "–" (fica salvo neste celular)
@@ -6016,8 +6067,8 @@
       ligarControles();
       $('carregando').hidden = true;
       relogio = new THREE.Clock();
-      // herói de evento que não está mais liberado: volta para a classe dele
-      if (P.classe && !heroiLiberado(P.classe)) P.classe = CLASSES[P.classe] && CLASSES[P.classe].grupo || 'soldado';
+      // herói que não é (mais) seu: vai para outro que você tem; sem nenhum, escolhe o primeiro
+      if (P.classe && !heroiLiberado(P.classe)) P.classe = Object.keys(CLASSES).find(heroiLiberado) || null;
       if (!P.classe) telaHeroi(true);
       else { await criarHeroi(); }
       // espera escolher o herói para começar a desenhar
@@ -6045,7 +6096,7 @@
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
       atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, visualRemoto, barbatana, alturaClasse, colete, esferaEscudo, CLASSES, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
-      telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, tocarFala, pastaVoz, nomeHeroi, SOM, abaixarMusica, musicaTocar, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
+      telaHeroi, comprarHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, tocarFala, pastaVoz, nomeHeroi, SOM, abaixarMusica, musicaTocar, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
     _t: { CONFIG, E, P, R, MIRA_AUX, CAMERA, heroiLiberado, jinModo, labRelogio, labPadrao, labEntrar, labSair, labRota, labAbrirBau, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }

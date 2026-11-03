@@ -67,7 +67,7 @@
         { id: 'paintball', nome: 'Maníaco do Paintball', aceitaCor: false, preco: 0 } ] }
     },
     generos: { m: 'Homem', f: 'Mulher' },
-    versaoArquivos: 57,
+    versaoArquivos: 58,
     // estados que todas as skins de uma classe pegam da animação nova (arquivos em assets/anims/<classe>_<skin>/)
     // (o parado da Vilkronomita das Sombras vale para todo o Soldado e todo o Jin)
     herdarSkins: { soldado: ['habilidade2', 'parado'], mago: ['extra_lancar_7', 'extra_lancar_4'] },
@@ -180,10 +180,10 @@
           { clipe: 'Weapon_Combo_2', golpes: [0.44, 0.67] }
         ] }
       },
-      // Gigante: anda mancando; corre de verdade só no Modo Turbo (o jogo baixa o limiarCorrer)
+      // Gigante: anda confiante (devagar); corre de verdade só no Modo Turbo (o jogo baixa o limiarCorrer)
       gigante: {
         limiarCorrer: 99,
-        parado: { clipe: 'Idle_02' }, andar: { clipe: 'Limping_Walk_3_inplace' }, correr: { clipe: 'Running' }, dano: { clipe: 'Hit_Reaction_1' }, morte: { clipe: 'Dead' },
+        parado: { clipe: 'Idle_02' }, andar: { clipe: 'Confident_Strut' }, correr: { clipe: 'Running' }, dano: { clipe: 'Hit_Reaction_1' }, morte: { clipe: 'Dead' },
         habilidade2: { clipe: 'Crouch_Pull_and_Throw', de: 0.05, ate: 0.8, duracao: 2.2 },
         habilidade3: { clipe: 'Excited_Walk_F', de: 0, ate: 0.42, duracao: 3.6 },
         ataque: { clipe: 'mage_soell_cast_4', duracao: 1.0, variacoes: [
@@ -208,7 +208,7 @@
       // Merlin: arremessos de pedra variados no básico
       merlin: {
         parado: { clipe: 'Idle_02' }, andar: { clipe: 'Walking' }, correr: { clipe: 'Running' }, dano: { clipe: 'Hit_Reaction' }, morte: { clipe: 'Dead' },
-        habilidade1: { clipe: 'Charged_Ground_Slam', de: 0.2, ate: 0.8, duracao: 1.1 },
+        habilidade1: { clipe: 'Charged_Ground_Slam', de: 0.25, ate: 0.75, duracao: 0.8 },
         habilidade2: { clipe: 'mage_soell_cast', duracao: 1.1 },
         habilidade3: { clipe: 'mage_soell_cast_1', de: 0.05, ate: 0.75, duracao: 1.5 },
         ataque: { clipe: 'mage_soell_cast_3', variacoes: [
@@ -217,8 +217,17 @@
           { clipe: 'mage_soell_cast_7', de: 0.1, ate: 0.6, golpe: 0.38, duracao: 0.8 }
         ] }
       },
-      // Violet: o arquivo com animações ainda não chegou; quando chegar, os clipes entram aqui
-      violet: {},
+      // Violet: a mão para cima (colete), gesto com as duas mãos (reflexo), lança no chão (circuitos)
+      violet: {
+        parado: { clipe: 'Idle_02' }, andar: { clipe: 'Walking' }, correr: { clipe: 'Running' }, dano: { clipe: 'Hit_Reaction' }, morte: { clipe: 'Dead' },
+        habilidade1: { clipe: 'mage_soell_cast', de: 0.05, ate: 0.75, duracao: 1.0 },
+        habilidade2: { clipe: 'mage_soell_cast_3', de: 0.0, ate: 0.7, duracao: 1.3 },
+        habilidade3: { clipe: 'mage_soell_cast_2', de: 0.1, ate: 0.72, duracao: 1.2 },
+        ataque: { clipe: 'mage_soell_cast_4', variacoes: [
+          { clipe: 'ataque', de: 0.0, ate: 0.6, golpe: 0.38, duracao: 0.8 },
+          { clipe: 'mage_soell_cast_7', de: 0.1, ate: 0.6, golpe: 0.38, duracao: 0.8 }
+        ] }
+      },
       suporte: { habilidade2: { duracao: 1.2 }, habilidade3: { clipe: 'habilidade1' } }
     },
 

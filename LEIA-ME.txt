@@ -89,15 +89,19 @@ Se o arquivo ainda não foi enviado, o jogo mostra o modelo padrão.
 
 HERÓIS NOVOS (v57)
 ------------------
-Rodar uma vez no Supabase (SQL Editor): supabase_v57.sql
-Todos são heróis de evento, como o Jin. Para liberar para alguém: menu ☰ > Jogadores > dar skin >
-classe do herói > skin "default". O administrador já tem todos.
+Rodar uma vez no Supabase (SQL Editor): supabase_v57.sql e depois supabase_v58.sql
+
+LOJA DE HERÓIS (v58): todos os heróis são vendidos por 15.000 de ouro (CONFIG.lojaHerois no jogo.js;
+no servidor, o preço fica na função comprar_heroi do supabase_v58.sql — mude nos dois lugares).
+Jogador novo começa com 15.000 de ouro e compra o primeiro herói. Quem já jogava fica com os heróis
+que já usou. Para dar um herói de presente: menu ☰ > Jogadores > dar skin > classe do herói >
+skin "default". O administrador já tem todos.
   Jin / Jeane (Soldado)  -> espada e escudo. Skins Soberano (azul) e Força Sombria (vermelha) com
                             espada e escudo próprios. Animações das skins: assets/anims/jin_<skin>/golpes.glb
-  Gigante (Atirador)     -> robô pequeno que manca. assets/chars/gigante_m_default.glb
+  Gigante (Atirador)     -> robô pequeno, anda confiante e devagar. assets/chars/gigante_m_default.glb
   Phil (Suporte)         -> tank tubarão. assets/chars/phil_m_default.glb (usa a espada padrão do Soldado)
   Merlin (Mago)          -> tatu pequeno das pedras. assets/chars/merlin_m_default.glb
-  Violet (Suporte)       -> elfa. FALTA o modelo com animações: assets/chars/violet_f_default.glb
+  Violet (Suporte)       -> elfa. assets/chars/violet_f_default.glb
 Os números de cada um ficam no começo do jogo.js (CONFIG.jin, CONFIG.gigante, CONFIG.phil,
 CONFIG.merlin, CONFIG.violet) e em CLASSES (vida, dano, alcance, recargas).
 Falas: assets/vozes/<pasta>/selecao.mp3, entrada.mp3, movimento.mp3, ataque.mp3, hab1.mp3, hab2.mp3, hab3.mp3
