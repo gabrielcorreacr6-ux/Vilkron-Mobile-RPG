@@ -336,14 +336,14 @@
       c: P.classe, g: P.genero, k: P.cor, s: (P.skinEquipada || {})[P.classe] || 'default',
       x: +h.x.toFixed(2), z: +h.z.toFixed(2), r: +h.rot.toFixed(2),
       v: Math.max(0, Math.round(h.vida)), vm: h.vidaMax, m: h.morto ? 1 : 0,
-      i: global.Jogo.poderes.invisivel ? 1 : 0, b: J.api.naMoita(h.x, h.z) ? 1 : 0, a: h.arena ? 1 : 0,
+      i: global.Jogo.poderes.invisivel ? 1 : 0, b: J.api.naMoita(h.x, h.z) ? 1 : 0, a: h.arena ? 1 : 0, tb: h.tubarao ? 1 : 0,
       st: ((P.classes || {})[P.classe] || {}).estrelas || 0
     };
   }
 
   function enviarPos(t) {
     const p = minhaPos(); if (!p || !canal) return;
-    const chave = [p.x, p.z, p.r, p.v, p.m, p.i, p.b, p.c, p.g, p.k, p.s, p.st].join('|');
+    const chave = [p.x, p.z, p.r, p.v, p.m, p.i, p.b, p.c, p.g, p.k, p.s, p.st, p.tb].join('|');
     // 5x por segundo quando algo muda; 1x por segundo parado (economiza a cota do Supabase)
     if (t < enviarEm || (chave === ultimoEnvio && t < enviarEm + 0.8)) return;
     enviarEm = t + 0.2; ultimoEnvio = chave;
@@ -366,7 +366,8 @@
         const A = J.api;
         r.ent = A.nova({
           tipo: 'remoto', uid: p.u, nick: p.n, num: p.num, classe: p.c, skin: p.s, time: Rede.aliado(p.u) ? 'jogador' : 'r_' + p.u,
-          obj, anim: global.Skins.animador(obj), x: p.x, z: p.z, rot: p.r, vida: p.v, vidaMax: p.vm, raio: 0.6
+          obj, anim: global.Skins.animador(obj), x: p.x, z: p.z, rot: p.r, vida: p.v, vidaMax: p.vm, raio: 0.6,
+          altura: A.alturaClasse ? A.alturaClasse(p.c) : 1.8, naoAfundaAgua: p.c === 'phil'
         });
         r.visual = visual; r.cor = p.k;
         r.rotulo = rotuloDom(p.u, p.n, true);
@@ -408,7 +409,7 @@
   function tirarEntidade(e) {
     const A = J.api, E = A.E;
     global.Skins.remover(e.obj);
-    [e.obj, e.barra, e.sombra, e.seloSprite].forEach(o => { if (o && o.parent) o.parent.remove(o); });
+    [e.obj, e.barra, e.sombra, e.seloSprite, e.fin].forEach(o => { if (o && o.parent) o.parent.remove(o); });
     E.entidades = E.entidades.filter(x => x !== e);
     A.E.entidades = E.entidades;
   }
@@ -445,9 +446,13 @@
       if (!e.morto) e.anim.mover(Math.hypot(e.x - ax, e.z - az) / Math.max(dt, 1e-3));
       if (e.escudo && e.escudoAte < E.t) e.escudo = 0;
       e.invisivelRede = !!p.i; e.naMoita = !!p.b;
+      // Phil dentro d'água: ninguém vê o corpo, só a barbatana de tubarão andando
+      const tb = !!p.tb && !e.morto;
+      if (tb !== !!e.tubarao) { e.tubarao = tb; if (J.api.barbatana) J.api.barbatana(e, tb); }
+      if (e.fin) { e.fin.position.set(e.x, 0.02 + Math.sin(E.t * 3) * 0.03, e.z); e.fin.rotation.y = e.rot; }
       const amigo = Rede.amigos.has(uid) || Rede.aliado(uid);
       // invisível (admin/moderador): só o admin vê, meio transparente. Moita: só amigos veem.
-      const ver = (!p.i || souAdmin) && (!p.b || amigo);
+      const ver = (!p.i || souAdmin) && (!p.b || amigo) && !e.tubarao;
       e.obj.visible = ver;
       if (e.obj.visible && p.i && souAdmin && !e._fantasma) { e._fantasma = true; e.obj.traverse(n => { if (n.isMesh && n.material) [].concat(n.material).forEach(m => { m.transparent = true; m.opacity = 0.4; }); }); }
       if (r.rotulo) {
@@ -465,13 +470,11 @@
   function receberAcao(a) {
     const r = Rede.remotos.get(a.u); if (!r || !r.ent || r.ent.morto) return;
     const e = r.ent; e.rot = a.a; r.p.r = a.a;
-    if (e.classe === 'jin') {
-      // Jin: Socos e Capoeira só trocam os golpes (sem animação própria)
-      if (e.anim.usarConjunto && a.s === 0 && (e.anim.conjunto || 'normal') !== (a.m || 'normal')) e.anim.usarConjunto(a.m || 'normal');
-      if (a.s === 0 || a.s === 3) e.anim.tocar(a.s === 0 ? 'ataque' : 'habilidade3');
-    } else e.anim.tocar(a.s === 0 ? 'ataque' : 'habilidade' + a.s);
+    e.anim.tocar(a.s === 0 ? 'ataque' : 'habilidade' + a.s);
     // só o desenho: o dano chega separado, mandado por quem atirou. As cores seguem a skin dele.
     const tm = J.api.tema(e);
+    // heróis novos (v57) têm desenho próprio para cada ação
+    if (J.api.visualRemoto && J.api.visualRemoto(e, a.s, a.a)) return;
     if (a.s === 0 && e.classe !== 'soldado' && e.classe !== 'jin') {
       const cls = global.Jogo.CLASSES[e.classe];
       setTimeout(() => { if (e.obj.parent) J.api.atirar(e, a.a, { soVisual: true, dano: 0, vel: e.classe === 'atirador' ? 24 : 16, restante: cls.alcance, cor: tm.principal, rastro: tm.brasa || tm.faisca || tm.principal, tamanho: 0.9 }); }, 250);
@@ -496,6 +499,10 @@
     if (a.t === 'cura') J.api.curar(h, h.vidaMax * 0.35);
     if (a.t === 'curaForte') J.api.curar(h, h.vidaMax * 0.5);
     if (a.t === 'escudo') { h.escudo = h.vidaMax * 0.4; h.escudoAte = E.t + 4; J.api.bolha(h, 4); }
+    // Violet: colete (defesa 20% por 5 s) e reflexo (cura 60% e devolve o dano por 6 s)
+    const CV = global.Jogo.CONFIG.violet;
+    if (a.t === 'colete' && CV) { h.defesaExtra = Math.max(h.defesaAte > E.t ? (h.defesaExtra || 0) : 0, CV.colete.defesa); h.defesaAte = E.t + CV.colete.dur; J.api.colete(h, CV.colete.dur, 0x39ff88); }
+    if (a.t === 'reflexo' && CV) { J.api.curar(h, h.vidaMax * CV.reflexo.cura); h.reflexoAte = E.t + CV.reflexo.dur; J.api.esferaEscudo(h, CV.reflexo.dur, 0x39ff88, () => h.reflexoAte > E.t); }
   }
 
   // stun, lentidão e corte de cura vindos de outro jogador
@@ -503,7 +510,7 @@
     if (!f || f.u === Rede.eu.id || !/^[a-z0-9_]{2,40}$/.test(f.p || '')) return;
     const r = Rede.remotos.get(f.u), h = J.api.E.heroi; if (!r || !r.ent || !h || Rede.chat.silenciados.has(f.u) || Rede.chat.bloqueados.has(f.u)) return;
     const d = Math.hypot(r.ent.x - h.x, r.ent.z - h.z); if (d > 26) return;
-    const i = /^hab[1-3]$/.test(f.i) ? f.i : Math.max(0, Math.min(30, f.i | 0));
+    const i = /^(hab[1-3]|selecao|entrada|movimento|ataque|ataque3|agua|tubarao)$/.test(f.i) ? f.i : Math.max(0, Math.min(30, f.i | 0));
     J.api.tocarFala(f.p, i, Math.max(0.15, 1 - d / 26));
   }
   function receberEfeito(a) {
@@ -559,8 +566,7 @@
     // fala do meu herói: quem está perto ouve a mesma (mais baixo de longe)
     G.fala = (pasta, i) => mandar('fala', { u: Rede.eu.id, p: pasta, i });
     G.acao = (slot, ang) => {
-      const h = J.api.E.heroi, m = h && h.classe === 'jin' && h.jinModo ? h.jinModo.nome : undefined;
-      mandar('acao', { u: Rede.eu.id, s: slot, a: +ang.toFixed(2), m });
+      mandar('acao', { u: Rede.eu.id, s: slot, a: +ang.toFixed(2) });
     };
     // baú do labirinto: o servidor confere o evento e entrega ouro/skin; XP e estrelas o jogo aplica
     G.premioLabirinto = async ciclo => {

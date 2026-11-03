@@ -66,11 +66,33 @@
       limitePorJogador: 0.10, janelaLimite: 10,
       // sem minions por perto, a torre mata o herói em 3 disparos: 20%, 60% e 120% da vida dele (ignora escudo e cura)
       sequencia: [0.2, 0.6, 1.2], esqueceSequencia: 4 },
-    // Jin: soco dá lentidão curta; chute voador atordoa; Socos (hab. 1) e Capoeira (hab. 2) trocam os golpes do ataque básico
-    jin: { soco: { dano: 1.0, slow: [0.35, 0.2] }, chute: { dano: 1.35, stun: 1.2 },
-      socos: { dur: 6, dano: 1.05, slow: [0.35, 2], alcance: 1.25 },
-      capoeira: { dur: 6, dano: 1.15, stun: 0.35, empurra: 1.6, alcance: 1.25 },
-      kungfu: { alcance: 3.2, avanco: 8, dano: 3.6, raio: 2.8, arremesso: 9 } },
+    // Jin (v57): espada e escudo. Hab. 1 aumenta o campo de ataque e +2% de vel. de ataque (7 s);
+    // hab. 2 blindagem +10% de defesa com escudo em volta (5 s); hab. 3 Asas da Guerra: larga o escudo, ganha asas de
+    // fumaça branca, mais alcance, mais vel. de ataque e 15% de crítico (7 s)
+    jin: { golpe: 1.0, abertura: 1.0,
+      formacao: { dur: 7, alcance: 1.4, velAtaque: 0.02 },
+      blindagem: { dur: 5, defesa: 0.10 },
+      asas: { dur: 7, alcance: 1.6, velAtaque: 0.25, critico: 0.15 } },
+    // Gigante (atirador robô): parafusos com 15% de crítico; anda devagar e mancando
+    gigante: { critico: 0.15,
+      turbo: { dur: 7, vel: 0.6 },
+      fumaca: { dur: 8, raioIni: 1.2, raio: 4.2, cresce: 2.5, stun: 2, alcance: 9 },
+      festa: { explosoes: 8, raio: 3.6, raioExplosao: 1.9, dano: 2.0, critico: 0.30, slow: [0.6, 1.5], stun: 3.5, recupera: 3 } },
+    // Phil (tank/suporte): 3º golpe é o giro (+100%); básico deixa lento 2 s; passiva do tubarão na água
+    phil: { slow: [0.3, 2], giro: 2.0, tubaraoDano: 0.15, tubaraoDur: 5,
+      regen: { dur: 8 },
+      pulos: { n: 3, intervalo: 2.33, raio: 3.2, stun: 2, dano: 0.6, avanco: 1.2 },
+      barreira: { dur: 5, largura: 4.6, altura: 2.6, distancia: 1.3, vel: 1.8, protege: 1.25 } },
+    // Merlin (mago tatu): pedras; Órbita Rochosa (7 s), Rocha Colossal (200%), Prisão Gravitacional (200%)
+    merlin: { basico: 0.75,
+      orbita: { dur: 7, n: 8, raio: 1.5, dano: 1.2, queima: 0.12, tiques: 4, intervalo: 0.28 },
+      colossal: { dano: 2.0, raio: 2.6, alcance: 10 },
+      prisao: { dano: 2.0, alcance: 10, segura: 2.6, pedras: 14 } },
+    // Violet (suporte elfa): fadas que cortam cura; colete (defesa 20%), reflexo (cura 60% + devolve 75%), circuitos (prende 2 s)
+    violet: { antiCura: [0.5, 3],
+      colete: { dur: 5, defesa: 0.20, raio: 7 },
+      reflexo: { dur: 6, cura: 0.6, devolve: 0.75, raio: 8 },
+      circuito: { segura: 2, antiCura: [0.5, 6], alcance: 14, vel: 9 } },
     arena: { inscricao: 150, minionsCada: 30, respawnBase: 30, respawnPasso: 20, respawnMax: 120 },
     loja: {
       cura:   { nome: 'Frasco de cura', preco: 30, desc: 'Recupera toda a vida.' },
@@ -88,7 +110,12 @@
     mago:     { nome: 'Mago', nomes: { m: 'Drake', f: 'Diany' }, vida: 850,  dano: 62, alcance: 9.5, cd: [1.0, 7, 12, 35],   habs: ['Círculo Arcano', 'Ilusão', 'Selo'] },
     atirador: { nome: 'Atirador', nomes: { m: 'Mike', f: 'Mia' }, vida: 900,  dano: 58, alcance: 12,  cd: [0.85, 12, 14, 20], habs: ['Aceleração', 'Explosão', 'Salto'] },
     // Jin: segundo herói do Soldado, liberado por evento (o administrador já tem)
-    jin:      { nome: 'Jin', nomes: { m: 'Jin', f: 'Jeane' }, grupo: 'soldado', evento: true, vida: 1250, dano: 58, alcance: 2.5, cd: [0.6, 12, 14, 16], habs: ['Socos', 'Capoeira', 'Kung Fu'] }
+    jin:      { nome: 'Jin', nomes: { m: 'Jin', f: 'Jeane' }, grupo: 'soldado', evento: true, vida: 1250, dano: 60, alcance: 2.8, cd: [0.55, 10, 14, 22], habs: ['Ampliar Formação', 'Blindagem', 'Asas da Guerra'] },
+    // heróis novos (v57): liberados em evento, como o Jin; "unico" = um modelo só (sem versão homem/mulher); vel = fator da velocidade
+    gigante:  { nome: 'Gigante', nomes: { m: 'Gigante', f: 'Gigante' }, unico: true, grupo: 'atirador', evento: true, vida: 900, dano: 58, alcance: 12, vel: 0.8, cd: [1.15, 8, 14, 30], habs: ['Modo Turbo', 'Granada de Fumaça', 'Festival de Explosões'] },
+    phil:     { nome: 'Phil', nomes: { m: 'Phil', f: 'Phil' }, unico: true, grupo: 'suporte', evento: true, vida: 1700, dano: 38, alcance: 2.9, vel: 0.95, cd: [0.8, 18, 16, 20], habs: ['Regeneração Extrema', 'Triplo Impacto', 'Barreira Intransponível'] },
+    merlin:   { nome: 'Merlin', nomes: { m: 'Merlin', f: 'Merlin' }, unico: true, grupo: 'mago', evento: true, vida: 850, dano: 62, alcance: 10, cd: [0.9, 6.5, 9, 20], habs: ['Órbita Rochosa', 'Rocha Colossal', 'Prisão Gravitacional'] },
+    violet:   { nome: 'Violet', nomes: { m: 'Violet', f: 'Violet' }, unico: true, grupo: 'suporte', evento: true, vida: 950, dano: 45, alcance: 11, cd: [1.0, 12, 18, 14], habs: ['Colete Florescente', 'Reflexo Vital', 'Circuito Aprisionador'] }
   };
   const CORES = ['#9aa3a8', '#c0392b', '#2e86de', '#27ae60', '#8e44ad', '#e67e22', '#f1c40f', '#ecf0f1'];
 
@@ -1309,7 +1336,7 @@
   function aliado(a, b) { return a.time === b.time || (ALIADOS[a.time] && ALIADOS[b.time]); }
   function inimigos(a, b) { return !aliado(a, b); }
   function invisivel(e) {
-    return e.invisAte > E.t || (e.tipo === 'heroi' && (naMoita(e.x, e.z) || PODERES.invisivel)) ||
+    return e.invisAte > E.t || e.tubarao || (e.tipo === 'heroi' && (naMoita(e.x, e.z) || PODERES.invisivel)) ||
       (remoto(e) && (e.naMoita || e.invisivelRede));
   }
   function lentidao(e) {
@@ -1375,7 +1402,7 @@
      Aparecem em cima do alvo e somem: dano físico em vermelho (Soldado, Jin, Atirador), mágico em roxo
      (Mago, Suporte); o dano que você leva aparece em branco. Sempre o valor bruto, nunca porcentagem. */
   const NUMEROS = { ativos: [], max: 40 };
-  const DANO_MAGICO = { mago: 1, suporte: 1 };
+  const DANO_MAGICO = { mago: 1, suporte: 1, phil: 1, merlin: 1, violet: 1 };
   function numeroDano(alvo, v, origem, opc) {
     if (!temDOM || !alvo || v < 0.5) return;
     const meu = origem && (origem.tipo === 'heroi' || origem.donoHeroi || (origem.tipo === 'clone' && origem.dono === E.heroi));
@@ -1415,6 +1442,12 @@
     if (!opc.verdadeiro && !remoto(alvo)) { const b = balanco(chaveBalanco(alvo)); if (b && b.defesa !== null && isFinite(b.defesa)) valor *= 1 - clamp(b.defesa, 0, 90) / 100; }
     if (!alvo || alvo.morto || alvo.invulAte > E.t) return 0;
     if (alvo.tipo === 'heroi' && (zonaSegura(alvo.x, alvo.z) || PODERES.imortal)) return 0;
+    // quem me atacou por último (os circuitos da Violet vão atrás dele)
+    if (alvo === E.heroi && origem && origem !== alvo && inimigos(origem, alvo)) { alvo.ultimoAgressor = origem; alvo.agressorEm = E.t; }
+    // Barreira Intransponível do Phil: nada que vem pela frente passa (nem o que atravessa paredes)
+    if (alvo === E.heroi && barreiraBloqueia(alvo, origem)) return 0;
+    // defesa extra de habilidade (Blindagem do Jin, Colete da Violet)
+    if (!remoto(alvo) && alvo.defesaAte > E.t && alvo.defesaExtra) valor *= 1 - clamp(alvo.defesaExtra, 0, 0.9);
     if (remoto(alvo) && (!deMim(origem) || PODERES.semVantagem || zonaSegura(alvo.x, alvo.z))) return 0;
     if (alvo.tipo === 'serpente' && !alvo.emerso) return 0;
     let v = valor;
@@ -1423,6 +1456,8 @@
       const b = bonus();
       v *= b.poder * (1 + E.buffDano);
       if (Math.random() < b.critico + (opc.critExtra || 0)) { v *= 1.5; opc._crit = true; }
+      // Phil saindo da água: +15% de dano por 5 s
+      if (E.heroi && E.heroi.tubaraoBuffAte > E.t) v *= 1 + CONFIG.phil.tubaraoDano;
       if ((alvo.tipo === 'mob' || alvo.tipo === 'minion' || alvo.tipo === 'serpente') && E.heroi.cacadorAte > E.t) v *= 1.5;
     }
     // defesa da torre: limite de dano por jogador numa janela de tempo
@@ -1453,7 +1488,18 @@
       const abs = Math.min(alvo.escudo, v); alvo.escudo -= abs; v -= abs;
     }
     alvo.vida -= v;
+    // Regeneração Extrema do Phil: a vida não cai por 8 s (enche de novo no mesmo quadro)
+    if (alvo.vidaCheiaAte > E.t && alvo.vida < 1) alvo.vida = 1;
     numeroDano(alvo, v, origem, opc);
+    // Reflexo Vital da Violet: o golpe volta para quem bateu, 25% mais fraco
+    if (alvo === E.heroi && alvo.reflexoAte > E.t && origem && origem !== alvo && !opc.refletido && v > 0 && inimigos(origem, alvo)) {
+      const volta = v * CONFIG.violet.reflexo.devolve;
+      if (remoto(origem)) { gancho('danoRemoto', origem, volta, { verdadeiro: true }); numeroDano(origem, volta, alvo, {}); }
+      else if (!origem.morto) causarDano(origem, volta, alvo, { verdadeiro: true, refletido: true, semReacao: true });
+      emitir('faisca', alvo.x, 1.2, alvo.z, { n: 8, cor: TEMAS.violet.padrao.cura, vel: 3, vida: 0.35 });
+    }
+    // Órbita Rochosa do Merlin: apanhou, uma pedra sai em quem bateu
+    if (alvo === E.heroi && alvo.orbita && origem && origem !== alvo && inimigos(origem, alvo)) merlinDispara(alvo, origem);
     if (deHeroi) {
       P.danoTotal += v;
       const rv = bonus().rouboVida;
@@ -1557,7 +1603,7 @@
   function deFrente(m) { if (R.camera && m.quaternion && R.camera.quaternion) m.quaternion.copy(R.camera.quaternion); }
   function projetilVisual(nome, cor, tam) {
     // esferas desenhadas (não somam luz: o preto aparece preto)
-    const desenhadas = { orbeNegra: () => [TX.orbeNegra(), 0xffffff], orbeNoite: () => [TX.orbeNoite(), 0xffffff], tintaRosa: () => [TX.bola(), 0xff5ab4], tintaAmarela: () => [TX.bola(), 0xffe14d] };
+    const desenhadas = { parafuso57: () => [TX57.parafuso(), 0xffffff], pedra57: () => [TX57.pedra(), 0xffffff], orbeNegra: () => [TX.orbeNegra(), 0xffffff], orbeNoite: () => [TX.orbeNoite(), 0xffffff], tintaRosa: () => [TX.bola(), 0xff5ab4], tintaAmarela: () => [TX.bola(), 0xffe14d] };
     if (desenhadas[nome]) {
       const [tex, c] = desenhadas[nome]();
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: c, transparent: true, depthWrite: false }));
@@ -1600,8 +1646,11 @@
       p.x += p.dx * passo; p.z += p.dz * passo; p.restante -= passo;
       p.obj.position.set(p.x, p.y, p.z);
       if (p.obj.userData.deFrente) deFrente(p.obj);
+      if (p.giraVisual && p.obj.material) p.obj.material.rotation += p.giraVisual * dt;
       if (p.rastro !== undefined) emitir('faisca', p.x, p.y, p.z, { n: 2, cor: p.rastro, vel: 0.35, vida: 0.3, subida: 0.2 });
       let acertou = null;
+      // barreira do Phil: projétil inimigo que bate nela some
+      if (barreiraCorta(p)) { emitir('faisca', p.x, p.y, p.z, { n: 10, cor: TEMAS.phil.padrao.barreira, vel: 3, vida: 0.3 }); E.mundo.remove(p.obj); E.projeteis.splice(i, 1); continue; }
       for (const e of (p.soVisual ? [] : E.entidades)) {
         if (e.morto || e === p.origem || !inimigos(e, p) || e.tipo === 'clone' && p.time === 'jogador') continue;
         if (remoto(e) && !deMim(p.origem)) continue;
@@ -1610,7 +1659,7 @@
       }
       if (acertou) {
         if (p.impacto !== undefined) emitir('faisca', p.x, p.y, p.z, { n: 12, cor: p.impacto, vel: 3, vida: 0.35, subida: 1.5, grav: 6 });
-        causarDano(acertou, p.dano, p.origem, { verdadeiro: p.verdadeiro });
+        causarDano(acertou, p.dano, p.origem, { verdadeiro: p.verdadeiro, critExtra: p.critExtra });
         if (p.efeito) p.efeito(acertou);
       }
       if (acertou || p.restante <= 0) {
@@ -1714,6 +1763,10 @@
                 // Soberano: golpes azuis e dourados; Força Sombria: vermelho com fumaça escura
                 soberano: { principal: 0x4da6ff, faisca: 0xd6ecff, poeira: 0x9fb4c8, brasa: 0x2f7bff, socos: 0x7fc4ff, capoeira: 0xffd27a },
                 forca_sombria: { principal: 0xff3030, faisca: 0xffb0a0, poeira: 0x2a1a1a, brasa: 0xb3001b, socos: 0xff4d4d, capoeira: 0x8b0000 } },
+    gigante:  { padrao: { principal: 0xffb020, faisca: 0xffe08a, fumaca: 0x8c8c8c, explosao: 0xff7a1a, brasa: 0xffd27a } },
+    phil:     { padrao: { principal: 0x5fd4ff, faisca: 0xcff4ff, agua: 0x3fa9e0, cura: 0x6dff9c, barreira: 0x59d8ff, poeira: 0xb8a68a } },
+    merlin:   { padrao: { principal: 0xc9a77c, faisca: 0xffe0b0, pedra: 0x8a7a66, brasa: 0xff7a1a, poeira: 0xa8916f, gravidade: 0xb26bff } },
+    violet:   { padrao: { principal: 0x39ff88, faisca: 0xc8ffd8, cura: 0x39ff88, brilho: 0xa6ffcf, circuito: 0x39ff88 } },
     suporte:  { padrao: { principal: 0xfff3b0, cura: 0x6dff9c, brilho: 0xffe08a, selo: 0xfff3b0, controle: 0xff6b6b },
                 ciber: { principal: 0x39ff88, cura: 0x39ff88, brilho: 0xa6ffcf, selo: 0x39ff88, controle: 0x39ff88 },
                 medicina: { principal: 0xff2a2a, cura: 0xff3b3b, brilho: 0xff8080, selo: 0xff2a2a, controle: 0xff2a2a } },
@@ -1828,18 +1881,21 @@
     if (velho) {
       Skins.remover(velho.obj); E.entidades = E.entidades.filter(e => e !== velho);
       // tudo que andava junto com o herói antigo sai junto (antes o selo de elo ficava flutuando sozinho)
-      [velho.obj, velho.barra, velho.sombra, velho.seloSprite, velho.marcaAlvo, velho.olho, velho.rastro && velho.rastro.mesh].forEach(o => { if (o && o.parent) o.parent.remove(o); });
+      [velho.obj, velho.barra, velho.sombra, velho.seloSprite, velho.marcaAlvo, velho.olho, velho.rastro && velho.rastro.mesh, velho.fin].forEach(o => { if (o && o.parent) o.parent.remove(o); });
+      if (velho.orbita) velho.orbita.pedras.forEach(p => { if (p.m.parent) p.m.parent.remove(p.m); });
     }
     const h = nova({
       tipo: 'heroi', time: 'jogador', classe: P.classe, skin: (P.skinEquipada || {})[P.classe] || 'padrao', obj, anim: Skins.animador(obj),
       x: velho ? velho.x : E.def.entrada[0], z: velho ? velho.z : E.def.entrada[1], rot: velho ? velho.rot : 0,
-      vida: cls.vida, vidaMax: cls.vida, raio: 0.6, vel: CONFIG.velHeroi,
-      cds: [0, 0, 0, 0], arena: velho ? velho.arena : null, cacadorAte: 0, velBonus: 0, velBonusAte: 0
+      vida: cls.vida, vidaMax: cls.vida, raio: 0.6, vel: CONFIG.velHeroi * (cls.vel || 1),
+      cds: [0, 0, 0, 0], arena: velho ? velho.arena : null, cacadorAte: 0, velBonus: 0, velBonusAte: 0,
+      altura: alturaClasse(P.classe), naoAfundaAgua: P.classe === 'phil'
     });
     E.heroi = h;
     hud();
     return h;
   }
+  function alturaClasse(k) { const c = Skins.CATALOGO.classes[k]; return (c && c.altura) || 1.8; }
   // Escolha do alvo do ataque básico:
   //  - arrastando o botão: o inimigo mais perto da linha mirada (até 35°)
   //  - só tocando: o alvo travado, senão herói inimigo, senão o mais perto
@@ -1906,7 +1962,7 @@
     const saltoLivre = h.classe === 'atirador' && slot === 3;      // o salto pode ser usado no meio de qualquer animação
     // habilidade corta o ataque básico (como nos MOBAs); só não corta outra habilidade
     if (h.anim && ['habilidade1', 'habilidade2', 'habilidade3'].indexOf(h.anim.estado) >= 0 && slot !== 0 && !saltoLivre) return false;
-    if (slot !== 0 && h.anim && h.anim.estado === 'ataque' && !saltoLivre) { h.anim.aoAcertar = null; if (h.classe !== 'jin' || slot === 3) h.anim.cancelar && h.anim.cancelar(); }
+    if (slot !== 0 && h.anim && h.anim.estado === 'ataque' && !saltoLivre) { h.anim.aoAcertar = null; h.anim.cancelar && h.anim.cancelar(); }
     const cls = CLASSES[h.classe];
     let ang = h.rot, alvo = null;
     if (slot === 0) {
@@ -1947,7 +2003,7 @@
 
   // velocidade de ataque do herói agora (estrelas + aceleração do atirador)
   function velAtaque(h) {
-    return bonus().velAtaque * (h && h.aceleradoAte > E.t ? 1 + CONFIG.atirador.aceleracao : 1);
+    return bonus().velAtaque * (h && h.aceleradoAte > E.t ? 1 + CONFIG.atirador.aceleracao : 1) * velExtraNovos(h);
   }
   function explosaoEnergia(h, x, z) {
     const c = CONFIG.atirador, tm = tema(h);
@@ -2697,15 +2753,47 @@
     // fala própria de cada habilidade (hab1.mp3, hab2.mp3, hab3.mp3): toca sempre que aperta
     habilidades: { soldado_m: [1, 2, 3], soldado_f: [1, 2, 3], jin_m: [1, 2, 3], jin_f: [1, 2, 3], mago_m: [1, 2, 3], mago_f: [1, 2, 3],
       atirador_m: [1, 2, 3], atirador_f: [1, 2, 3], suporte_m: [1, 2, 3], suporte_f: [1, 2, 3] },
+    // falas com nome (v57): assets/vozes/<pasta>/<nome>.mp3 — seleção, entrada, movimentação, ataque, hab1..hab3 e extras.
+    // A pasta pode ser <classe>_<skin>_<m|f>, <classe>_<skin> (vale para os dois), <classe>_<m|f> ou só <classe> (herói de um modelo só).
+    falas: {
+      jin_m: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
+      jin_f: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
+      gigante: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
+      phil: ['selecao', 'entrada', 'movimento', 'ataque', 'ataque3', 'agua', 'tubarao', 'hab1', 'hab2'],
+      merlin: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
+      soldado_lava_m: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
+      // Caçadora Sombria: a mesma voz para o homem e a mulher (a skin tem um modelo só)
+      soldado_cacadora: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3']
+    },
     intervalo: 7,                     // segundos mínimos entre uma fala e outra do mesmo herói
-    chance: { ataque: 0.07, habilidade: 0.4, ult: 0.85, abate: 0.9, abateMob: 0.3, entrar: 1 }
+    chance: { ataque: 0.07, habilidade: 0.4, ult: 0.85, abate: 0.9, abateMob: 0.3, entrar: 1 },
+    // chance das falas com nome (o grito do ataque básico sai às vezes; a movimentação quando começa a andar)
+    chanceFala: { selecao: 1, entrada: 1, movimento: 0.35, ataque: 0.15 }
   };
   const SOM = { falas: true, volume: 0.9, musica: true, volMusica: 0.3 };
   try { const v = JSON.parse(global.localStorage.getItem('vilkron_som') || 'null'); if (v) Object.assign(SOM, v); } catch (e) {}
   function pastaVoz(classe, genero, skin) {
-    const a = classe + '_' + (skin && skin !== 'default' && skin !== 'padrao' ? skin + '_' : '') + genero, b = classe + '_' + genero;
-    const tem = k => VOZES.lista[k] || VOZES.habilidades[k];
-    return tem(a) ? a : tem(b) ? b : null;
+    const sk = skin && skin !== 'default' && skin !== 'padrao' ? skin : null;
+    const tem = k => VOZES.lista[k] || VOZES.habilidades[k] || VOZES.falas[k];
+    const op = [sk && classe + '_' + sk + '_' + genero, sk && classe + '_' + sk, classe + '_' + genero, classe];
+    for (const k of op) if (k && tem(k)) return k;
+    return null;
+  }
+  function temFala(pasta, nome) {
+    const f = VOZES.falas[pasta];
+    if (f) return f.indexOf(nome) >= 0;
+    if (/^hab[1-3]$/.test(nome)) return !!(VOZES.habilidades[pasta] && VOZES.habilidades[pasta].indexOf(+nome[3]) >= 0);
+    return false;
+  }
+  // fala com nome, sempre (ex.: o giro do Phil, entrar na água); respeita só o "não falar por cima"
+  function falarFala(h, nome, forcar) {
+    if (!h || h.morto || !SOM.falas) return false;
+    const pasta = pastaVoz(h.classe, P.genero, (P.skinEquipada || {})[h.classe]);
+    if (!pasta || !temFala(pasta, nome)) return false;
+    if (!forcar && E.t < (h.gritoEm || 0)) return false;
+    h.gritoEm = E.t + 1.2; h.falaEm = E.t + VOZES.intervalo;
+    tocarFala(pasta, nome, 1); gancho('fala', pasta, nome);
+    return true;
   }
   const _audios = {};
   function tocarFala(pasta, idx, vol) {
@@ -2753,14 +2841,23 @@
     if (!h || h.morto || !SOM.falas) return;
     const pasta = pastaVoz(h.classe, P.genero, (P.skinEquipada || {})[h.classe]); if (!pasta) return;
     // habilidade com fala própria: o grito dela sai sempre
-    const proprias = VOZES.habilidades[pasta];
-    if (slot && proprias && proprias.indexOf(slot) >= 0) {
+    if (slot && temFala(pasta, 'hab' + slot)) {
       if (E.t < (h.gritoEm || 0)) return;
       h.gritoEm = E.t + 1.2; h.falaEm = E.t + VOZES.intervalo;
       tocarFala(pasta, 'hab' + slot, 1); gancho('fala', pasta, 'hab' + slot);
       return;
     }
-    if (!VOZES.lista[pasta]) return;
+    // falas com nome: entrada na batalha, movimentação, grito do ataque básico, seleção
+    const nome = { entrar: 'entrada', mover: 'movimento', ataque: 'ataque', selecao: 'selecao' }[momento];
+    if (nome && temFala(pasta, nome)) {
+      if (nome !== 'selecao' && nome !== 'entrada' && E.t < (h.falaEm || 0)) return;
+      if (Math.random() > (VOZES.chanceFala[nome] || 0.3)) return;
+      h.falaEm = E.t + VOZES.intervalo; h.gritoEm = E.t + 1.2;
+      tocarFala(pasta, nome, 1);
+      if (nome !== 'selecao') gancho('fala', pasta, nome);
+      return;
+    }
+    if (VOZES.falas[pasta] || !VOZES.lista[pasta]) return;
     if (E.t < (h.falaEm || 0) || Math.random() > (VOZES.chance[momento] || 0.3)) return;
     h.falaEm = E.t + VOZES.intervalo;
     const n = VOZES.lista[pasta];
@@ -2768,27 +2865,6 @@
     h.ultimaFala = i;
     tocarFala(pasta, i, 1);
     gancho('fala', pasta, i);
-  }
-  // um golpe do Jin (soco, chute ou capoeira) com o efeito de cada modo; nas sequências de socos cada acerto vale metade
-  function golpeJin(h, g, modo) {
-    const c = CONFIG.jin, tipo = (g && g.tipo) || 'soco', tm = tema(h), parte = g && g.golpes && g.golpes.length > 1 ? 0.5 : 1;
-    const alc = CLASSES.jin.alcance * (modo === 'socos' ? c.socos.alcance : modo === 'capoeira' ? c.capoeira.alcance : 1) + (tipo === 'soco' ? 0 : 0.4);
-    const frente = [h.x + Math.sin(h.rot) * 1.1, h.z + Math.cos(h.rot) * 1.1];
-    let acertou = 0;
-    cone(h, h.rot, alc, tipo === 'capoeira' ? 1.3 : 0.9, e => {
-      acertou++;
-      if (modo === 'socos') { causarDano(e, CLASSES.jin.dano * c.socos.dano * parte, h); controlar(e, { slow: c.socos.slow }); }
-      else if (modo === 'capoeira') {
-        causarDano(e, CLASSES.jin.dano * c.capoeira.dano, h);
-        const a = Math.atan2(e.x - h.x, e.z - h.z);
-        controlar(e, { stun: c.capoeira.stun, empurrar: [Math.sin(a) * c.capoeira.empurra, Math.cos(a) * c.capoeira.empurra] });
-      } else if (tipo === 'chute') { causarDano(e, CLASSES.jin.dano * c.chute.dano, h); controlar(e, { stun: c.chute.stun }); }
-      else { causarDano(e, CLASSES.jin.dano * c.soco.dano, h); controlar(e, { slow: c.soco.slow }); }
-      emitir('faisca', e.x, 1.1, e.z, { n: tipo === 'soco' ? 8 : 14, cor: modo === 'socos' ? tm.socos : modo === 'capoeira' ? tm.capoeira : tm.faisca, vel: 3.5, subida: 2, grav: 9, vida: 0.35 });
-    });
-    // impacto no ar mesmo sem acertar: um "pof" curto na frente
-    emitir('media', frente[0], tipo === 'soco' ? 1.2 : 0.9, frente[1], { n: acertou ? 6 : 3, cor: modo === 'socos' ? tm.socos : modo === 'capoeira' ? tm.capoeira : tm.principal, vel: 1.4, vida: 0.22 });
-    if (tipo !== 'soco') anelEfeito(frente[0], frente[1], modo === 'capoeira' ? 1.6 : 1.1, modo === 'capoeira' ? tm.capoeira : tm.principal, 0.3, true);
   }
   const HABILIDADES = {
     soldado: [
@@ -2923,75 +2999,763 @@
       },
       // Salto: teleporta para onde mirou (2 pulos em até 15 s)
       (h, ang, mira) => ultAtirador(h, ang, mira)
-    ],
-    // Jin: socos e chute voador; Socos e Capoeira trocam o estilo do básico; Kung Fu arremessa
-    jin: [
-      (h, ang) => {
-        const modo = jinModo(h), vel = bonus().velAtaque;
-        h.anim.tocar('ataque', { velocidade: vel, aoAcertar: () => {
-          const g = h.anim.golpeAtual ? h.anim.golpeAtual() : null;
-          golpeJin(h, g, modo);
-          // sequência de socos: os outros golpes da mesma animação também acertam
-          if (g && g.golpes && g.golpes.length > 1) g.golpes.slice(1).forEach(f => agendar((f - g.golpes[0]) * g.dur / vel, () => {
-            if (!h.morto && h.anim.estado === 'ataque' && h.anim.golpeAtual() === g) golpeJin(h, g, modo);
-          }));
-        } });
-        // cada golpe tem o seu tempo: o próximo só sai quando este termina
-        const g = h.anim.golpeAtual ? h.anim.golpeAtual() : null;
-        if (g && g.dur) h.cds[0] = E.t + Math.max(CLASSES.jin.cd[0], g.dur * 0.92) / velAtaque(h);
-      },
-      // Socos: 6 s das três sequências de socos; cada soco deixa lento por 2 s
-      (h) => jinTrocarModo(h, 'socos', CONFIG.jin.socos.dur),
-      // Capoeira: 6 s de gingados; cada golpe atordoa um pouco e empurra para frente
-      (h) => jinTrocarModo(h, 'capoeira', CONFIG.jin.capoeira.dur),
-      // Kung Fu: segura o inimigo durante a sequência e no fim arremessa longe com explosão
-      (h, ang, mira, alvo) => {
-        const c = CONFIG.jin.kungfu, tm = tema(h);
-        // pega o inimigo escolhido (ou o mais perto) até ~8 m: o Jin avança até ele num salto rápido
-        const presa = alvo && !alvo.morto && dist(alvo, h) <= c.avanco + alvo.raio ? alvo : alvoMaisPerto(h, c.avanco);
-        if (presa) {
-          const a = Math.atan2(presa.x - h.x, presa.z - h.z), d = dist(presa, h), parar = presa.raio + 1.1;
-          if (d > parar) {
-            const passos = 6;
-            for (let i = 1; i <= passos; i++) emitir('media', h.x + Math.sin(a) * (d - parar) * i / passos, 0.6, h.z + Math.cos(a) * (d - parar) * i / passos, { n: 2, cor: tm.brasa, vel: 0.6, vida: 0.35 });
-            h.x += Math.sin(a) * (d - parar); h.z += Math.cos(a) * (d - parar); empurrarSolidos(h);
+    ]
+  };
+  // (Jin antigo: modos Socos/Capoeira) — o Jin novo não troca de modo; fica para quem ainda chama
+  function jinModo() { return 'normal'; }
+  /* ======================= v57: JIN REFORMULADO E HERÓIS NOVOS =======================
+     Jin/Jeane (espada e escudo), Gigante (atirador robô), Phil (tank tubarão), Merlin (mago tatu), Violet (suporte elfa).
+     Os números ficam em CONFIG.jin, CONFIG.gigante, CONFIG.phil, CONFIG.merlin e CONFIG.violet. */
+
+  // ---------- utilidades visuais ----------
+  // esfera de escudo que segue alguém (sem gastar o "escudo" de vida)
+  function esferaEscudo(e, dur, cor, enquanto) {
+    const sh = R.Fx && R.Fx.escudo(cor);
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1.15 * (e.altura || 1.8) / 1.8, 28, 18),
+      sh || new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.renderOrder = 9; E.mundo.add(m);
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt; m.position.set(e.x, (e.altura || 1.8) * 0.55 + (e.voo || 0), e.z);
+      const k = Math.min(1, this.t / 0.15) * Math.min(1, Math.max(0, (dur - this.t) / 0.4));
+      if (sh) sh.uniforms.vida.value = k; else m.material.opacity = 0.25 * k;
+      if (this.t > dur || e.morto || (enquanto && !enquanto()) || !e.obj || !e.obj.parent) { E.mundo.remove(m); return true; }
+    } });
+  }
+  // arremessado para cima: sobe e cai (só desenho; quem controla o tempo preso é o stun)
+  function levantar(e, altura, dur) {
+    if (!e || remoto(e) || e.tipo === 'torre' || e.tipo === 'serpente') return;
+    const t0 = E.t;
+    E.efeitos.push({ atualizar() {
+      const k = (E.t - t0) / dur;
+      if (k >= 1 || e.morto) { e.voo = 0; return true; }
+      e.voo = altura * 4 * k * (1 - k);
+    } });
+  }
+  // marca no chão que some devagar (cratera, queimado)
+  function marcaChao(x, z, r, cor, dur, opac, aditiva) {
+    const m = camada(new THREE.CircleGeometry(r, 32), new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: opac || 0.6, depthWrite: false, blending: aditiva ? THREE.AdditiveBlending : THREE.NormalBlending }), x, z, 0.08);
+    m.renderOrder = 6;
+    E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; m.material.opacity = (opac || 0.6) * Math.min(1, Math.max(0, (dur - this.t) / 0.8)); if (this.t > dur) { E.mundo.remove(m); return true; } } });
+    return m;
+  }
+  // explosão "de verdade": clarão laranja, fogo, fumaça escura e pedras
+  function explosao(x, z, r, cor) {
+    cor = cor || 0xff7a1a;
+    anelEfeito(x, z, r, cor, 0.45, true);
+    discoEfeito(x, z, r * 0.8, 0xffb347, 0.3);
+    emitir('grande', x, 0.8, z, { n: 8, cor, vel: 2.4, subida: 1.5, vida: 0.4 });
+    emitir('media', x, 0.6, z, { n: 26, cor: 0xffd27a, vel: 5, subida: 3, vida: 0.45, arrasto: 2 });
+    emitir('faisca', x, 0.6, z, { n: 26, cor: 0xffe08a, vel: 7, subida: 4, grav: 12, vida: 0.55 });
+    particulas(x, z, { n: 10, cor: 0x3a3330, tam: 1.3, cresce: 2.6, velH: r * 1.4, velV: 2.2, gravidade: -0.4, vida: 1.1, raio: 0.6, opacidade: 0.7, y: 0.6 });
+    pedras(x, z, 5, 0x5d5148, 5);
+    tremer(x, z, 0.35, 0.3);
+  }
+  // pedra de verdade (malha), para as habilidades do Merlin
+  const _matPedra = {};
+  function malhaPedra(tam, cor) {
+    const c = cor || 0x8a7a66;
+    if (!_matPedra[c]) _matPedra[c] = new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+    const geo = new THREE.DodecahedronGeometry(tam, 0);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) { const k = 0.8 + Math.random() * 0.35; pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * (0.75 + Math.random() * 0.3), pos.getZ(i) * k); }
+    geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, _matPedra[c]); m.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+    return m;
+  }
+  // texturas desenhadas dos projéteis novos
+  const TX57 = {
+    parafuso: () => texSkin('parafuso57', 128, 128, g => {
+      g.translate(64, 64); g.rotate(-Math.PI / 4);
+      const grd = g.createLinearGradient(0, -12, 0, 12); grd.addColorStop(0, '#f2f2f2'); grd.addColorStop(0.5, '#9aa0a6'); grd.addColorStop(1, '#55595e');
+      g.fillStyle = grd; g.fillRect(-34, -9, 62, 18);
+      g.strokeStyle = '#3b3f44'; g.lineWidth = 3;
+      for (let x = -30; x < 26; x += 8) { g.beginPath(); g.moveTo(x, -10); g.lineTo(x + 6, 10); g.stroke(); }
+      g.beginPath(); g.moveTo(28, -9); g.lineTo(44, 0); g.lineTo(28, 9); g.closePath(); g.fillStyle = '#c9cdd1'; g.fill(); g.stroke();
+      g.fillStyle = '#d9b04a'; g.strokeStyle = '#6b5418'; g.lineWidth = 3;
+      g.beginPath(); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; g.lineTo(-40 + Math.cos(a) * 15, Math.sin(a) * 15); } g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#3b3f44'; g.fillRect(-42, -2, 4, 13); g.fillRect(-46, -2, 12, 4);
+    }),
+    pedra: () => texSkin('pedra57', 128, 128, g => {
+      const grd = g.createRadialGradient(54, 50, 6, 64, 64, 52); grd.addColorStop(0, '#c9b89c'); grd.addColorStop(0.6, '#8a7a66'); grd.addColorStop(1, '#4a4038');
+      g.fillStyle = grd; g.beginPath();
+      const pts = [[64, 10], [100, 26], [116, 62], [102, 100], [64, 118], [26, 104], [12, 64], [28, 24]];
+      pts.forEach(([x, y], i) => { const j = (Math.sin(i * 7.3) * 6); i ? g.lineTo(x + j, y - j) : g.moveTo(x + j, y - j); }); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(40,32,26,0.7)'; g.lineWidth = 3; g.beginPath(); g.moveTo(40, 40); g.lineTo(62, 66); g.lineTo(86, 58); g.moveTo(62, 66); g.lineTo(58, 94); g.stroke();
+    })
+  };
+
+  // ---------- Barreira do Phil (usada também no dano e nos projéteis) ----------
+  function barreiraAtiva(e) { return e && e.barreira && e.barreira.ate > E.t && !e.morto; }
+  function barreiraBloqueia(h, origem) {
+    if (!barreiraAtiva(h) || !origem || origem === h) return false;
+    const a = Math.atan2(origem.x - h.x, origem.z - h.z), d = Math.abs(Math.atan2(Math.sin(a - h.rot), Math.cos(a - h.rot)));
+    if (d > CONFIG.phil.barreira.protege) return false;
+    emitir('faisca', h.x + Math.sin(h.rot) * CONFIG.phil.barreira.distancia, 1.3, h.z + Math.cos(h.rot) * CONFIG.phil.barreira.distancia, { n: 10, cor: TEMAS.phil.padrao.barreira, vel: 2.5, vida: 0.3 });
+    return true;
+  }
+  // projétil inimigo atravessando a linha da barreira (do Phil local ou de um Phil remoto aliado)
+  function barreiraCorta(p) {
+    if (p.soVisual) return false;
+    for (const e of E.entidades) {
+      if (!barreiraAtiva(e) || aliado(e, p)) continue;
+      const c = CONFIG.phil.barreira, cx = e.x + Math.sin(e.rot) * c.distancia, cz = e.z + Math.cos(e.rot) * c.distancia;
+      const lx = Math.cos(e.rot), lz = -Math.sin(e.rot);           // direção da parede (de lado)
+      const dx = p.x - cx, dz = p.z - cz;
+      const lado = Math.abs(dx * lx + dz * lz), frente = dx * Math.sin(e.rot) + dz * Math.cos(e.rot);
+      if (lado < c.largura / 2 && Math.abs(frente) < 0.45) return true;
+    }
+    return false;
+  }
+  function barreiraVisual(e, dur) {
+    const c = CONFIG.phil.barreira, cor = TEMAS.phil.padrao.barreira;
+    const g = new THREE.Group();
+    const geo = new THREE.CylinderGeometry(c.largura * 0.75, c.largura * 0.75, c.altura, 24, 1, true, -0.62, 1.24);
+    const parede = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+    parede.position.set(0, c.altura / 2, c.distancia - c.largura * 0.75); parede.renderOrder = 10; g.add(parede);
+    const borda = new THREE.Mesh(new THREE.CylinderGeometry(c.largura * 0.75 + 0.02, c.largura * 0.75 + 0.02, 0.08, 24, 1, true, -0.62, 1.24),
+      new THREE.MeshBasicMaterial({ color: 0xe6fbff, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+    borda.position.copy(parede.position); borda.position.y = c.altura; g.add(borda);
+    const baixo = borda.clone(); baixo.position.y = 0.05; g.add(baixo);
+    E.mundo.add(g);
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt; g.position.set(e.x, 0, e.z); g.rotation.y = e.rot;
+      const k = Math.min(1, this.t / 0.2) * Math.min(1, Math.max(0, (dur - this.t) / 0.3));
+      parede.material.opacity = (0.26 + 0.08 * Math.sin(this.t * 9)) * k; borda.material.opacity = baixo.material.opacity = 0.9 * k;
+      if (Math.random() < 0.5) { const s = (Math.random() - 0.5) * c.largura; emitir('faisca', e.x + Math.sin(e.rot) * c.distancia + Math.cos(e.rot) * s, Math.random() * c.altura, e.z + Math.cos(e.rot) * c.distancia - Math.sin(e.rot) * s, { n: 1, cor, vel: 0.2, subida: 0.6, vida: 0.4 }); }
+      if (this.t > dur || e.morto || !e.obj || !e.obj.parent) { E.mundo.remove(g); return true; }
+    } });
+  }
+
+  // ---------- Jin: asas de fumaça branca ----------
+  const _vAsa = THREE.Vector3 ? new THREE.Vector3() : null;
+  function asasFumaca(e, dur, enquanto) {
+    let acc = 0;
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt; acc += dt * 120;
+      const esc = (e.altura || 1.8) / 1.8;
+      let bx = e.x, by = 1.35 * esc + (e.voo || 0), bz = e.z;
+      if (e.obj && Skins.posicaoOsso && Skins.posicaoOsso(e.obj, 'spine2', _vAsa)) { bx = _vAsa.x; by = _vAsa.y; bz = _vAsa.z; }
+      const tras = [-Math.sin(e.rot), -Math.cos(e.rot)], lado = [Math.cos(e.rot), -Math.sin(e.rot)];
+      const bate = Math.sin(this.t * 5) * 0.12;
+      while (acc >= 1) {
+        acc -= 1;
+        const s = Math.random() < 0.5 ? 1 : -1, u = Math.random();                 // u: da raiz (0) à ponta (1) da asa
+        const abre = (0.25 + u * 1.25) * esc, sobe = (Math.sin(u * Math.PI * 0.9) * 0.55 + u * 0.25 + bate * u) * esc;
+        const x = bx + lado[0] * abre * s + tras[0] * (0.22 + u * 0.18) * esc, z = bz + lado[1] * abre * s + tras[1] * (0.22 + u * 0.18) * esc;
+        emitir(u > 0.55 && Math.random() < 0.35 ? 'grande' : 'media', x, by + sobe - Math.random() * 0.35 * u * esc, z, { n: 1, cor: 0xdfe6ee, vel: 0.12, subida: 0.1, vida: 0.4 + Math.random() * 0.25 });
+      }
+      if (this.t > dur || e.morto || (enquanto && !enquanto()) || !e.obj || !e.obj.parent) return true;
+    } });
+  }
+
+  // ---------- Jin: golpe de espada ----------
+  // velocidade de ataque extra das habilidades do Jin (somam)
+  function velExtraNovos(h) {
+    if (!h || h.classe !== 'jin') return 1;
+    return 1 + (h.jinFormacaoAte > E.t ? CONFIG.jin.formacao.velAtaque : 0) + (h.jinAsasAte > E.t ? CONFIG.jin.asas.velAtaque : 0);
+  }
+  function jinAlcance(h) {
+    const c = CONFIG.jin; let m = 1;
+    if (h.jinFormacaoAte > E.t) m *= c.formacao.alcance;
+    if (h.jinAsasAte > E.t) m *= c.asas.alcance;
+    return CLASSES.jin.alcance * m;
+  }
+  function golpeEspadaJin(h, ang) {
+    const tm = tema(h), asas = h.jinAsasAte > E.t, alc = jinAlcance(h);
+    cone(h, ang, alc, CONFIG.jin.abertura * (h.jinFormacaoAte > E.t ? 1.25 : 1), e => {
+      causarDano(e, CLASSES.jin.dano * CONFIG.jin.golpe, h, { critExtra: asas ? CONFIG.jin.asas.critico : 0 });
+      emitir('faisca', e.x, 1.1, e.z, { n: 10, cor: asas ? 0xffffff : tm.faisca, vel: 3.5, subida: 2, grav: 9, vida: 0.4 });
+    });
+    corteVisual(h, ang, asas ? 0xffffff : tm.principal);
+    if (alc > 3.2) anelEfeito(h.x + Math.sin(ang) * alc * 0.5, h.z + Math.cos(ang) * alc * 0.5, alc * 0.45, asas ? 0xffffff : tm.principal, 0.25, true);
+  }
+
+  // ---------- Gigante ----------
+  function gigantePasso(h) {
+    const turbo = h.turboAte > E.t;
+    if (h.anim) h.anim.limiarCorrer = turbo ? 2.5 : 99;
+  }
+  function nuvemFumaca(h, x, z) {
+    const c = CONFIG.gigante.fumaca, cor = tema(h).fumaca, dentro = new Set();
+    let acc = 0;
+    anelEfeito(x, z, c.raioIni, 0xbdbdbd, 0.5, true);
+    particulas(x, z, { n: 10, cor: 0xb0b0b0, tam: 1.2, cresce: 2.2, velH: 3, velV: 1.2, gravidade: 0.3, vida: 1.2, raio: 0.4, opacidade: 0.75, y: 0.4 });
+    const nuvem = { x, z, ate: E.t + c.dur, raio: c.raioIni };
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt;
+      const k = Math.min(1, this.t / c.cresce);
+      nuvem.raio = c.raioIni + (c.raio - c.raioIni) * (1 - Math.pow(1 - k, 2));
+      const sumindo = this.t > c.dur - 1.2;
+      // fumaça saindo aos poucos e se espalhando
+      acc += dt * (sumindo ? 6 : 16 + k * 10);
+      while (acc >= 1) {
+        acc -= 1;
+        const a = Math.random() * 6.283, rr = nuvem.raio * Math.sqrt(Math.random()) * 0.85;
+        particulas(x + Math.cos(a) * rr, z + Math.sin(a) * rr, { n: 1, cor: Math.random() < 0.5 ? cor : 0xa6a6a6, tam: 1.4 + k, cresce: 1.9, velH: 0.5, velV: 0.35, gravidade: -0.05, vida: 2.2, raio: 0.3, opacidade: sumindo ? 0.35 : 0.6, y: 0.4 + Math.random() * 0.9 });
+      }
+      // quem entra na fumaça fica atordoado 2 s (sem limite de alvos; cada entrada conta de novo)
+      if (!sumindo || this.t < c.dur) {
+        const agora = new Set();
+        E.entidades.forEach(e => {
+          if (e.morto || !inimigos(e, h) || e === h || e.tipo === 'torre' || e.tipo === 'clone') return;
+          if (remoto(e) && !deMim(h)) return;
+          if (Math.hypot(e.x - x, e.z - z) > nuvem.raio + e.raio) return;
+          agora.add(e);
+          if (!dentro.has(e)) { controlar(e, { stun: c.stun }); emitir('faisca', e.x, 1.6, e.z, { n: 6, cor: 0xdddddd, vel: 1, vida: 0.4 }); }
+        });
+        dentro.clear(); agora.forEach(e => dentro.add(e));
+      }
+      if (this.t > c.dur) return true;
+    } });
+  }
+  function festivalExplosoes(h, dur) {
+    const c = CONFIG.gigante.festa, cx = h.x, cz = h.z;
+    // aviso no chão: a roda onde as explosões caem
+    avisoChao(cx, cz, c.raio + c.raioExplosao, 0xff7a1a, 0.6);
+    for (let i = 0; i < c.explosoes; i++) {
+      const a = i / c.explosoes * Math.PI * 2, x = cx + Math.cos(a) * c.raio, z = cz + Math.sin(a) * c.raio;
+      agendar(0.35 + i * (dur - 0.6) / c.explosoes, () => {
+        explosao(x, z, c.raioExplosao, tema(h).explosao);
+        // o chão fica destruído ali e volta 3 s depois do fim da animação
+        const resta = Math.max(0.5, dur - (0.35 + i * (dur - 0.6) / c.explosoes)) + c.recupera;
+        marcaChao(x, z, c.raioExplosao * 0.95, 0x1d1714, resta, 0.78);
+        marcaChao(x, z, c.raioExplosao * 0.5, 0xff5a10, Math.min(resta, 1.6), 0.45, true);
+        rachaduras(x, z, c.raioExplosao * 1.15, resta);
+        for (let k = 0; k < 2; k++) labareda(x + (Math.random() - 0.5) * 1.2, z + (Math.random() - 0.5) * 1.2, 0xff7a1a, 0.8 + Math.random() * 0.5, Math.min(resta, 2.5));
+        area(x, z, c.raioExplosao, h, e => {
+          causarDano(e, CLASSES.gigante.dano * c.dano, h, { critExtra: c.critico });
+          controlar(e, { slow: c.slow });
+          // lento primeiro, depois atordoado (5 s no total)
+          const alvo = e; agendar(c.slow[1], () => { if (!alvo.morto) controlar(alvo, { stun: c.stun }); });
+        });
+      });
+    }
+  }
+
+  // ---------- Phil ----------
+  function barbatana(e, ligar) {
+    if (!ligar) { if (e.fin) { E.mundo.remove(e.fin); e.fin = null; } return; }
+    if (e.fin) return;
+    const forma = new THREE.Shape(); forma.moveTo(-0.38, 0); forma.quadraticCurveTo(-0.05, 0.25, 0.12, 0.72); forma.quadraticCurveTo(0.18, 0.3, 0.42, 0); forma.lineTo(-0.38, 0);
+    const geo = new THREE.ExtrudeGeometry(forma, { depth: 0.06, bevelEnabled: false });
+    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x4a5965, emissive: 0x1a2630 }));
+    m.scale.setScalar(1.5); m.position.x = -0.045; m.rotation.y = Math.PI / 2;
+    const g = new THREE.Group(); g.add(m); E.mundo.add(g); e.fin = g;
+  }
+  function atualizarBarbatana(e, dt) {
+    if (!e.fin) return;
+    e.fin.position.set(e.x, 0.02 + Math.sin(E.t * 3) * 0.03, e.z); e.fin.rotation.y = e.rot;
+    if ((e.ondaEm || 0) < E.t) { e.ondaEm = E.t + 0.45; anelEfeito(e.x, e.z, 0.8, 0xbfe8ff, 0.6, true); emitir('faisca', e.x, 0.1, e.z, { n: 3, cor: 0xcfefff, vel: 0.8, subida: 0.8, grav: 5, vida: 0.4 }); }
+  }
+  function philPasso(h, dt) {
+    const c = CONFIG.phil;
+    // Regeneração Extrema: a vida fica cheia
+    if (h.vidaCheiaAte > E.t && !h.morto) h.vida = h.vidaMax;
+    // passiva do tubarão
+    const naAguaAgora = !h.morto && naAgua(h.x, h.z) && !(h.barreira && h.barreira.ate > E.t);
+    if (naAguaAgora && !h.tubarao) {
+      h.tubarao = true; h.anim.tocar('mergulho');
+      efeitoGolpeAgua(h.x, h.z, 1.6);
+      falarFala(h, 'agua', true);
+      agendar(0.55, () => { if (h.tubarao && h.anim) { h.anim.corpo.visible = false; h.anim.armasOcultas = true; barbatana(h, true); } });
+    } else if (!naAguaAgora && h.tubarao) {
+      h.tubarao = false; barbatana(h, false);
+      if (h.anim) { h.anim.corpo.visible = true; h.anim.armasOcultas = false; if (!h.morto) h.anim.tocar('rolar'); }
+      if (!h.morto) {
+        h.tubaraoBuffAte = E.t + c.tubaraoDur;
+        efeitoGolpeAgua(h.x, h.z, 1.2);
+        aura(h, tema(h).agua, c.tubaraoDur, 18, false, () => h.tubaraoBuffAte > E.t);
+        falarFala(h, 'tubarao', true);
+      }
+    }
+    if (h.tubarao) atualizarBarbatana(h, dt);
+    // barreira: anda sozinho para a frente, devagar, empurrando quem está na frente
+    const b = h.barreira;
+    if (b) {
+      if (b.ate <= E.t || h.morto) { h.barreira = null; if (h.anim) h.anim.baseForcada = null; }
+      else if (!preso(h)) {
+        const dir = Entrada.mag > 0.12 ? Math.atan2(Entrada.x, Entrada.z) : h.rot;
+        h.rot = girarPara(h.rot, dir, dt * 2.2);
+        const v = c.barreira.vel * lentidao(h) * dt;
+        h.x += Math.sin(h.rot) * v; h.z += Math.cos(h.rot) * v;
+        const fx = h.x + Math.sin(h.rot) * c.barreira.distancia, fz = h.z + Math.cos(h.rot) * c.barreira.distancia;
+        E.entidades.forEach(e => {
+          if (e.morto || !inimigos(e, h) || e.tipo === 'torre' || e.tipo === 'serpente') return;
+          const dx = e.x - fx, dz = e.z - fz, lado = dx * Math.cos(h.rot) - dz * Math.sin(h.rot), frente = dx * Math.sin(h.rot) + dz * Math.cos(h.rot);
+          if (Math.abs(lado) < c.barreira.largura / 2 && frente > -0.6 && frente < e.raio + 0.3) {
+            if (remoto(e)) { if ((e.empurradoEm || 0) < E.t) { e.empurradoEm = E.t + 0.4; controlar(e, { empurrar: [Math.sin(h.rot) * 1.2, Math.cos(h.rot) * 1.2], empurrarT: 0.35 }); } }
+            else { const p = e.raio + 0.3 - frente; e.x += Math.sin(h.rot) * p; e.z += Math.cos(h.rot) * p; }
           }
-          h.rot = a; controlar(presa, { stun: CATALOGO_DUR_KUNGFU() + 0.3 });
+        });
+      }
+    }
+  }
+  function philPulo(h, i) {
+    const c = CONFIG.phil.pulos, tm = tema(h);
+    if (h.morto || !h.philPulos || h.philPulos.id !== i.id) return;
+    h.anim.tocar('habilidade2', { momento: 0.66, aoAcertar: () => {
+      const ang = h.rot;
+      h.x += Math.sin(ang) * c.avanco; h.z += Math.cos(ang) * c.avanco; empurrarSolidos(h);
+      efeitoPisao(h.x, h.z, c.raio);
+      anelEfeito(h.x, h.z, c.raio, tm.principal, 0.45, true);
+      area(h.x, h.z, c.raio, h, e => {
+        causarDano(e, CLASSES.phil.dano * c.dano, h);
+        levantar(e, 1.3, 0.6);
+        // atordoa 2 s; acerto de novo soma mais 2 s (até 3 vezes)
+        if (remoto(e)) controlar(e, { stun: c.stun });
+        else { e.philStun = (e.philStunAte > E.t ? (e.philStun || 0) : 0) + 1; e.philStunAte = E.t + c.intervalo * 1.5; if (e.philStun <= 3) e.stunAte = Math.max(e.stunAte || 0, E.t) + c.stun; }
+      });
+    } });
+  }
+
+  // ---------- Merlin ----------
+  function merlinPasso(h, dt) {
+    const o = h.orbita; if (!o) return;
+    if (o.ate <= E.t || h.morto) { o.pedras.forEach(p => E.mundo.remove(p.m)); h.orbita = null; return; }
+    o.giro += dt * 0.9;
+    const esc = (h.altura || 1.8) / 1.8;
+    o.pedras.forEach((p, i) => {
+      if (p.saiu) return;
+      const a = o.giro + i / o.n * Math.PI * 2;
+      p.m.position.set(h.x + Math.cos(a) * o.raio, (1.0 + Math.sin(E.t * 2 + i) * 0.12) * esc + 0.2, h.z + Math.sin(a) * o.raio);
+      p.m.rotation.x += dt * 0.7; p.m.rotation.y += dt * 0.5;
+    });
+  }
+  // uma pedra sai da órbita, em ordem, e vai no inimigo
+  function merlinDispara(h, alvo) {
+    const o = h.orbita; if (!o || !alvo || alvo.morto) return;
+    if (E.t < (o.prox || 0)) return;
+    const p = o.pedras.find(x => !x.saiu); if (!p) return;
+    o.prox = E.t + CONFIG.merlin.orbita.intervalo;
+    p.saiu = true; E.mundo.remove(p.m);
+    const c = CONFIG.merlin.orbita, tm = tema(h), x0 = p.m.position.x, z0 = p.m.position.z;
+    const ang = Math.atan2(alvo.x - x0, alvo.z - z0);
+    const pr = atirar(h, ang, { alvo, x: x0, z: z0, y: p.m.position.y, raio: 0.8, vel: 17, restante: 16, dano: CLASSES.merlin.dano * c.dano, visual: 'pedra57', cor: 0xffffff, tamanho: 1.1, rastro: tm.poeira,
+      impacto: tm.brasa, efeito: e => queimar(h, e) });
+    if (o.pedras.every(x => x.saiu)) o.ate = E.t;
+  }
+  // queimação: alguns tiques de dano com fogo
+  function queimar(h, e) {
+    const c = CONFIG.merlin.orbita;
+    for (let k = 1; k <= c.tiques; k++) agendar(k * 0.5, () => {
+      if (e.morto) return;
+      causarDano(e, CLASSES.merlin.dano * c.queima, h, { semReacao: true });
+      emitir('faisca', e.x, 1, e.z, { n: 6, cor: 0xff7a1a, vel: 0.6, subida: 2, vida: 0.4, raio: 0.3 });
+    });
+  }
+  // pedra que sai do chão, sobe e é arremessada num arco até o alvo
+  function rochaColossal(h, alvo, px, pz) {
+    const c = CONFIG.merlin.colossal, tm = tema(h), m = malhaPedra(0.55, 0x7d6e5c);
+    const x0 = h.x + Math.sin(h.rot) * 0.9, z0 = h.z + Math.cos(h.rot) * 0.9;
+    m.position.set(x0, -0.4, z0); m.scale.setScalar(0.3); E.mundo.add(m);
+    rachaduras(x0, z0, 1.2, 2);
+    particulas(x0, z0, { n: 8, cor: tm.poeira, tam: 0.9, cresce: 2, velH: 2, velV: 1.4, gravidade: 2, vida: 0.7, raio: 0.4, opacidade: 0.7 });
+    let t = 0, voa = null;
+    E.efeitos.push({ atualizar(dt) {
+      t += dt;
+      if (!voa) {
+        const k = Math.min(1, t / 0.55);
+        m.position.y = -0.4 + k * 2.9; m.scale.setScalar(0.3 + k * 0.9); m.rotation.y += dt * 2;
+        if (k >= 1) { const tx = alvo && !alvo.morto ? alvo.x : px, tz = alvo && !alvo.morto ? alvo.z : pz; voa = { t: 0, x0: m.position.x, z0: m.position.z, tx, tz, T: Math.max(0.35, Math.hypot(tx - m.position.x, tz - m.position.z) / 18) }; }
+        return;
+      }
+      voa.t += dt; const k = Math.min(1, voa.t / voa.T);
+      if (alvo && !alvo.morto) { voa.tx = alvo.x; voa.tz = alvo.z; }
+      m.position.set(voa.x0 + (voa.tx - voa.x0) * k, 2.5 * (1 - k) + Math.sin(k * Math.PI) * 1.2 + 0.3, voa.z0 + (voa.tz - voa.z0) * k);
+      m.rotation.x += dt * 6;
+      if (k >= 1) {
+        E.mundo.remove(m);
+        explosao(voa.tx, voa.tz, c.raio, 0xff9a3a);
+        pedras(voa.tx, voa.tz, 8, 0x7d6e5c, 6);
+        rachaduras(voa.tx, voa.tz, c.raio, 2.5);
+        area(voa.tx, voa.tz, c.raio, h, e => causarDano(e, CLASSES.merlin.dano * c.dano, h));
+        return true;
+      }
+    } });
+  }
+  // Prisão Gravitacional: pedras vêm uma a uma, formam uma bola em volta do alvo, que levita e é esmagado
+  function prisaoGravitacional(h, alvo) {
+    const c = CONFIG.merlin.prisao, tm = tema(h);
+    const segura = c.segura, n = c.pedras, raio = 0.95 * Math.max(1, alvo.raio / 0.6);
+    controlar(alvo, { stun: segura + 0.4 });
+    if (!remoto(alvo)) levantarSegurando(alvo, 1.3, segura);
+    const pedras57 = [];
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.283, d = 3 + Math.random() * 2.5;
+      const m = malhaPedra(0.24 + Math.random() * 0.12, i % 3 ? 0x8a7a66 : 0x6f6253);
+      const sx = alvo.x + Math.cos(a) * d, sz = alvo.z + Math.sin(a) * d; m.position.set(sx, 0, sz); m.visible = false; E.mundo.add(m);
+      // ponto da esfera (distribuição em espiral)
+      const yy = 1 - 2 * (i + 0.5) / n, rr = Math.sqrt(1 - yy * yy), th = i * 2.399;
+      pedras57.push({ m, sx, sz, ox: Math.cos(th) * rr * raio, oy: yy * raio, oz: Math.sin(th) * rr * raio, chega: 0.08 * i + 0.35 });
+    }
+    discoEfeito(alvo.x, alvo.z, 1.6, tm.gravidade, segura);
+    let t = 0;
+    E.efeitos.push({ atualizar(dt) {
+      t += dt;
+      const cx = alvo.x, cz = alvo.z, cy = 1.0 + (alvo.voo || 0), aperta = t > segura - 0.5 ? 1 - Math.min(1, (t - (segura - 0.5)) / 0.4) * 0.35 : 1;
+      pedras57.forEach(p => {
+        const k = Math.max(0, Math.min(1, (t - (p.chega - 0.35)) / 0.35));
+        if (k <= 0) return;
+        p.m.visible = true;
+        const gx = cx + p.ox * aperta, gy = cy + p.oy * aperta, gz = cz + p.oz * aperta;
+        p.m.position.set(p.sx + (gx - p.sx) * k, Math.sin(k * Math.PI) * 1.2 + gy * k, p.sz + (gz - p.sz) * k);
+        p.m.rotation.y += dt * 2;
+        if (k >= 1 && !p.bateu) { p.bateu = true; emitir('faisca', gx, gy, gz, { n: 4, cor: tm.poeira, vel: 1.5, vida: 0.3 }); }
+      });
+      if (Math.random() < 0.4) emitir('faisca', cx, cy, cz, { n: 1, cor: tm.gravidade, vel: 1.4, vida: 0.4, raio: 1.2 });
+      if (t >= segura) {
+        pedras57.forEach(p => E.mundo.remove(p.m));
+        pedras(cx, cz, 12, 0x7d6e5c, 7);
+        anelEfeito(cx, cz, 2.2, tm.gravidade, 0.45, true);
+        emitir('media', cx, cy, cz, { n: 30, cor: tm.poeira, vel: 4, subida: 1, vida: 0.5, arrasto: 2 });
+        tremer(cx, cz, 0.4, 0.3);
+        if (!alvo.morto) causarDano(alvo, CLASSES.merlin.dano * c.dano, h);
+        return true;
+      }
+    } });
+  }
+  function levantarSegurando(e, altura, dur) {
+    const t0 = E.t;
+    E.efeitos.push({ atualizar() {
+      const t = E.t - t0;
+      if (t >= dur || e.morto) { e.voo = 0; return true; }
+      e.voo = altura * Math.min(1, t / 0.5) * (t > dur - 0.25 ? (dur - t) / 0.25 : 1) + Math.sin(t * 6) * 0.05;
+    } });
+  }
+
+  // ---------- Violet ----------
+  function colete(e, dur, cor) {
+    // colete verde florescente: um anel brilhante em volta do tronco + faíscas
+    const esc = (e.altura || 1.8) / 1.8;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.42 * esc, 0.36 * esc, 0.62 * esc, 20, 1, true),
+      new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+    m.renderOrder = 10; E.mundo.add(m);
+    E.efeitos.push({ t: 0, atualizar(dt) {
+      this.t += dt; m.position.set(e.x, 1.15 * esc + (e.voo || 0), e.z); m.rotation.y = e.rot || 0;
+      m.material.opacity = (0.35 + 0.12 * Math.sin(this.t * 8)) * Math.min(1, this.t / 0.2) * Math.min(1, Math.max(0, (dur - this.t) / 0.3));
+      if (Math.random() < 0.35) emitir('faisca', e.x, 0.9 * esc, e.z, { n: 1, cor, vel: 0.3, subida: 1, vida: 0.5, raio: 0.4 });
+      if (this.t > dur || e.morto || !e.obj || !e.obj.parent) { E.mundo.remove(m); return true; }
+    } });
+  }
+  // circuitos no chão que vão andando (em ângulos retos, como uma placa) até o inimigo
+  function circuitos(h, alvo) {
+    const c = CONFIG.violet.circuito, cor = tema(h).circuito;
+    const mat = new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending });
+    const trilhas = [];
+    for (let k = 0; k < 3; k++) trilhas.push({ x: h.x, z: h.z, segs: [], desvio: (k - 1) * 0.6 });
+    let t = 0, chegou = false;
+    const passoSeg = 0.55;
+    E.efeitos.push({ atualizar(dt) {
+      t += dt;
+      if (!chegou) {
+        const tx = alvo.x, tz = alvo.z;
+        let algum = false;
+        trilhas.forEach(tr => {
+          let anda = c.vel * dt;
+          while (anda > 0) {
+            const dx = tx - tr.x, dz = tz - tr.z, d = Math.hypot(dx, dz);
+            if (d < 0.5) { algum = true; break; }
+            // segue em linhas retas no eixo de maior distância, com desvios (cara de circuito)
+            if (!tr.dir || tr.resta <= 0) {
+              const ex = Math.abs(dx) > Math.abs(dz);
+              tr.dir = Math.random() < 0.3 ? (ex ? [0, Math.sign(dz + tr.desvio) || 1] : [Math.sign(dx + tr.desvio) || 1, 0]) : (ex ? [Math.sign(dx), 0] : [0, Math.sign(dz)]);
+              tr.resta = passoSeg + Math.random() * 0.6;
+              const no = camada(new THREE.CircleGeometry(0.11, 10), mat.clone(), tr.x, tr.z, 0.1); no.renderOrder = 7; tr.segs.push(no);
+            }
+            const p = Math.min(anda, tr.resta, d);
+            const seg = camada(new THREE.PlaneGeometry(p + 0.02, 0.07), mat.clone(), tr.x + tr.dir[0] * p / 2, tr.z + tr.dir[1] * p / 2, 0.1);
+            seg.rotation.z = Math.atan2(tr.dir[1], tr.dir[0]) * -1; seg.renderOrder = 7; tr.segs.push(seg);
+            tr.x += tr.dir[0] * p; tr.z += tr.dir[1] * p; tr.resta -= p; anda -= p;
+          }
+          if (Math.random() < 0.6) emitir('faisca', tr.x, 0.15, tr.z, { n: 1, cor, vel: 0.4, subida: 0.6, vida: 0.3 });
+        });
+        if (algum || alvo.morto || t > 4) {
+          chegou = true; t = 0;
+          if (!alvo.morto) {
+            controlar(alvo, { stun: c.segura, antiCura: c.antiCura });
+            circuloRunas(alvo.x, alvo.z, 1.4, cor, c.segura);
+            for (let q = 0; q < 6; q++) { const a = q / 6 * 6.283; emitir('faisca', alvo.x + Math.cos(a) * 0.9, 0.2, alvo.z + Math.sin(a) * 0.9, { n: 4, cor, vel: 0.2, subida: 2.4, vida: 0.7 }); }
+            anelEfeito(alvo.x, alvo.z, 1.2, cor, 0.5, false);
+          }
         }
-        aura(h, tm.brasa, CATALOGO_DUR_KUNGFU(), 26, true);
-        h.anim.tocar('habilidade3', { momento: 0.9, aoAcertar: () => {
-          const x = presa && !presa.morto ? presa.x : h.x + Math.sin(h.rot) * 1.8, z = presa && !presa.morto ? presa.z : h.z + Math.cos(h.rot) * 1.8;
-          anelEfeito(x, z, c.raio, tm.principal, 0.5, true);
-          emitir('media', x, 1, z, { n: 40, cor: tm.brasa, vel: 6, subida: 3, vida: 0.6, arrasto: 2 });
-          emitir('faisca', x, 1, z, { n: 30, cor: tm.faisca, vel: 7, subida: 4, grav: 10, vida: 0.5 });
-          particulas(x, z, { n: 10, cor: tm.poeira, tam: 1.2, cresce: 2.5, velH: 5, velV: 1, gravidade: 1, vida: 0.7, raio: 1.5, opacidade: 0.6 });
-          E.tremor = { ate: E.t + 0.35, forca: 0.35, dur: 0.35 };
-          area(x, z, c.raio, h, e => {
-            const principal = e === presa;
-            causarDano(e, CLASSES.jin.dano * (principal ? c.dano : c.dano * 0.45), h);
-            const a = Math.atan2(e.x - h.x, e.z - h.z), d = principal ? c.arremesso : c.arremesso * 0.35;
-            controlar(e, { stun: principal ? 0.9 : 0.3, empurrar: [Math.sin(a) * d, Math.cos(a) * d], empurrarT: principal ? 0.6 : 0.35 });
+      }
+      // as trilhas brilham e somem
+      const k = chegou ? Math.max(0, 1 - t / 1.6) : 1;
+      trilhas.forEach(tr => tr.segs.forEach(sg => { sg.material.opacity = 0.95 * k * (0.75 + 0.25 * Math.sin(E.t * 14 + sg.position.x)); }));
+      if (chegou && t > 1.6) { trilhas.forEach(tr => tr.segs.forEach(sg => E.mundo.remove(sg))); return true; }
+    } });
+  }
+
+  // ---------- passo de cada herói novo (chamado todo quadro pelo meu herói) ----------
+  function passoHeroiNovo(h, dt) {
+    if (h.classe === 'gigante') gigantePasso(h);
+    else if (h.classe === 'phil') philPasso(h, dt);
+    else if (h.classe === 'merlin') merlinPasso(h, dt);
+    else if (h.classe === 'jin' && h.anim) h.anim.semEscudo = h.jinAsasAte > E.t;
+  }
+
+  // ---------- habilidades ----------
+  const HAB_NOVOS = {
+    jin: [
+      // ataque básico: cada toque é um golpe do combo de espada e escudo (os 4 combos se alternam)
+      (h, ang) => {
+        h.anim.tocar('ataque', { velocidade: velAtaque(h), aoAcertar: () => golpeEspadaJin(h, h.rot) });
+      },
+      // Ampliar Formação: campo de ataque maior e +2% de velocidade de ataque por 7 s
+      (h) => {
+        const c = CONFIG.jin.formacao, tm = tema(h);
+        h.anim.tocar('habilidade1');
+        h.jinFormacaoAte = E.t + c.dur;
+        anelEfeito(h.x, h.z, jinAlcance(h), tm.principal, 0.6, true);
+        emitir('media', h.x, 1, h.z, { n: 20, cor: tm.principal, vel: 3, subida: 1.2, vida: 0.5, arrasto: 3 });
+        aura(h, tm.principal, c.dur, 16, true, () => h.jinFormacaoAte > E.t);
+      },
+      // Blindagem: +10% de defesa e um escudo em volta por 5 s
+      (h) => {
+        const c = CONFIG.jin.blindagem, tm = tema(h);
+        h.anim.tocar('habilidade2');
+        h.defesaExtra = Math.max(h.defesaAte > E.t ? (h.defesaExtra || 0) : 0, c.defesa); h.defesaAte = E.t + c.dur;
+        esferaEscudo(h, c.dur, tm.principal, () => h.defesaAte > E.t);
+        emitir('faisca', h.x, 1, h.z, { n: 24, cor: tm.faisca, vel: 3, subida: 1.5, vida: 0.5 });
+      },
+      // Asas da Guerra: larga o escudo, asas de fumaça branca, mais alcance, mais velocidade e 15% de crítico por 7 s
+      (h) => {
+        const c = CONFIG.jin.asas;
+        h.anim.tocar('habilidade3');
+        h.jinAsasAte = E.t + c.dur;
+        asasFumaca(h, c.dur, () => h.jinAsasAte > E.t);
+        particulas(h.x, h.z, { n: 14, cor: 0xf2f5f8, tam: 1.1, cresce: 2.4, velH: 3, velV: 2.4, gravidade: -0.2, vida: 0.9, raio: 0.5, opacidade: 0.75, y: 1 });
+        anelEfeito(h.x, h.z, 2.2, 0xffffff, 0.6, true);
+        tremer(h.x, h.z, 0.2, 0.25);
+      }
+    ],
+    gigante: [
+      // parafuso: não é dos mais rápidos, mas tem 15% de crítico
+      (h) => {
+        h.anim.tocar('ataque', { velocidade: velAtaque(h), aoAcertar: () => {
+          const tm = tema(h);
+          atirar(h, h.rot, { alvo: h.ultimoAlvo, raio: 0.8, vel: 20, restante: CLASSES.gigante.alcance + 1.5, dano: CLASSES.gigante.dano, visual: 'parafuso57', cor: 0xffffff, tamanho: 0.85,
+            rastro: tm.faisca, impacto: tm.principal, critExtra: CONFIG.gigante.critico, giraVisual: 14 });
+        } });
+      },
+      // Modo Turbo: corre (de verdade) por 7 s
+      (h) => {
+        const c = CONFIG.gigante.turbo, tm = tema(h);
+        h.velBonus = c.vel; h.velBonusAte = E.t + c.dur; h.turboAte = E.t + c.dur;
+        anelEfeito(h.x, h.z, 1.4, tm.principal, 0.5, true);
+        emitir('faisca', h.x, 0.4, h.z, { n: 26, cor: tm.principal, vel: 3, subida: 2, vida: 0.5 });
+        E.efeitos.push({ t: 0, atualizar(dt) { this.t += dt; if (h.anim && h.anim.velMov > 0.5 && Math.random() < 0.6) { emitir('media', h.x - Math.sin(h.rot) * 0.5, 0.5, h.z - Math.cos(h.rot) * 0.5, { n: 1, cor: 0x9a9a9a, vel: 0.4, subida: 0.6, vida: 0.5 }); emitir('faisca', h.x, 0.6, h.z, { n: 1, cor: tm.brasa, vel: 1.2, vida: 0.25 }); } if (this.t > c.dur || h.morto) return true; } });
+      },
+      // Granada de Fumaça: ajoelha e lança; quem entra na fumaça fica atordoado 2 s (8 s, sem dano)
+      (h, ang, mira, alvo) => {
+        const c = CONFIG.gigante.fumaca;
+        const d = mira ? clamp(mira.dist, 2, c.alcance) : alvo ? Math.min(dist(alvo, h), c.alcance) : 6;
+        const x = h.x + Math.sin(ang) * d, z = h.z + Math.cos(ang) * d;
+        h.travadoAte = E.t + 1.4;
+        h.anim.tocar('habilidade2', { momento: 0.72, aoAcertar: () => {
+          // granada voando em arco
+          const g = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshLambertMaterial({ color: 0x4a5a3a }));
+          const x0 = h.x + Math.sin(h.rot) * 0.5, z0 = h.z + Math.cos(h.rot) * 0.5; g.position.set(x0, 1, z0); E.mundo.add(g);
+          let t = 0; const T = 0.25 + d / 16;
+          E.efeitos.push({ atualizar(dt) {
+            t += dt; const k = Math.min(1, t / T);
+            g.position.set(x0 + (x - x0) * k, 1 + Math.sin(k * Math.PI) * 1.8 - k * 0.85, z0 + (z - z0) * k);
+            emitir('faisca', g.position.x, g.position.y, g.position.z, { n: 1, cor: 0xcccccc, vel: 0.2, vida: 0.3 });
+            if (k >= 1) { E.mundo.remove(g); nuvemFumaca(h, x, z); return true; }
+          } });
+        } });
+      },
+      // Festival de Explosões: comemora pulando (imortal e parado), 8 explosões em roda
+      (h) => {
+        const dur = (Skins.CATALOGO.habilidades.gigante.habilidade3 || {}).duracao || 3.6;
+        h.invulAte = E.t + dur; h.travadoAte = E.t + dur;
+        h.anim.tocar('habilidade3');
+        esferaEscudo(h, dur, 0xffd27a);
+        festivalExplosoes(h, dur);
+      }
+    ],
+    phil: [
+      // espada: 2 golpes e o 3º é o giro (+100%); todo golpe deixa lento 2 s
+      (h, ang) => {
+        h.anim.tocar('ataque', { velocidade: velAtaque(h), aoAcertar: () => {
+          const g = h.anim.golpeAtual ? h.anim.golpeAtual() : null, giro = !!(g && g.golpes && g.golpes.length > 1);
+          const bate = () => {
+            if (h.morto) return;
+            const tm = tema(h), c = CONFIG.phil;
+            const fn = e => {
+              causarDano(e, CLASSES.phil.dano * (giro ? c.giro : 1) / (giro ? g.golpes.length : 1), h);
+              controlar(e, { slow: c.slow });
+              emitir('faisca', e.x, 1.1, e.z, { n: 10, cor: tm.faisca, vel: 3.5, subida: 2, grav: 9, vida: 0.4 });
+            };
+            if (giro) { area(h.x, h.z, CLASSES.phil.alcance + 0.4, h, fn); anelEfeito(h.x, h.z, CLASSES.phil.alcance + 0.4, tm.principal, 0.35, true); }
+            else { cone(h, h.rot, CLASSES.phil.alcance, 1.0, fn); corteVisual(h, h.rot, tm.principal); }
+          };
+          bate();
+          if (giro) {
+            falarFala(h, 'ataque3', true);
+            g.golpes.slice(1).forEach(f => agendar((f - g.golpes[0]) * g.dur / velAtaque(h), () => { if (h.anim.estado === 'ataque' && h.anim.golpeAtual() === g) bate(); }));
+          }
+        } });
+        const g = h.anim.golpeAtual ? h.anim.golpeAtual() : null;
+        if (g && g.dur) h.cds[0] = E.t + Math.max(CLASSES.phil.cd[0], g.dur * 0.9) / velAtaque(h);
+      },
+      // Regeneração Extrema: 8 s com a vida sempre cheia
+      (h) => {
+        const c = CONFIG.phil.regen, tm = tema(h);
+        h.anim.tocar('habilidade1');
+        h.vidaCheiaAte = E.t + c.dur; h.vida = h.vidaMax;
+        colunaLuz(h.x, h.z, tm.cura, 0.8, 0.9);
+        anelEfeito(h.x, h.z, 1.8, tm.cura, 0.6, true);
+        aura(h, tm.cura, c.dur, 22, false, () => h.vidaCheiaAte > E.t);
+      },
+      // Triplo Impacto: 3 pulos em 7 s; cada queda arremessa e atordoa quem está perto
+      (h) => {
+        const c = CONFIG.phil.pulos, id = { id: Math.random() };
+        h.philPulos = id; h.travadoAte = E.t + c.n * c.intervalo - 0.1;
+        for (let i = 0; i < c.n; i++) agendar(i * c.intervalo, () => philPulo(h, id));
+      },
+      // Barreira Intransponível: barreira grande na frente; anda para a frente devagar, empurrando
+      (h) => {
+        const c = CONFIG.phil.barreira;
+        h.barreira = { ate: E.t + c.dur };
+        if (h.anim) h.anim.baseForcada = 'empurrar';
+        barreiraVisual(h, c.dur);
+      }
+    ],
+    merlin: [
+      // pedras variadas (dano baixo); se a Órbita estiver ativa, o acerto solta uma pedra grande
+      (h) => {
+        h.anim.tocar('ataque', { velocidade: velAtaque(h), aoAcertar: () => {
+          const tm = tema(h);
+          atirar(h, h.rot, { alvo: h.ultimoAlvo, raio: 0.8, vel: 16, restante: CLASSES.merlin.alcance + 1.5, dano: CLASSES.merlin.dano * CONFIG.merlin.basico, visual: 'pedra57', cor: 0xffffff, tamanho: 0.6,
+            rastro: tm.poeira, impacto: tm.faisca, efeito: e => { if (h.orbita) merlinDispara(h, e); } });
+        } });
+      },
+      // Órbita Rochosa: 8 rochas sobem do chão e giram em volta por 7 s
+      (h) => {
+        const c = CONFIG.merlin.orbita, tm = tema(h);
+        if (h.orbita) h.orbita.pedras.forEach(p => { if (!p.saiu) E.mundo.remove(p.m); });
+        h.anim.tocar('habilidade1', { momento: 0.5, aoAcertar: () => {
+          const o = h.orbita = { ate: E.t + c.dur, n: c.n, raio: c.raio * ((h.altura || 1.8) / 1.8 + 0.25), giro: 0, pedras: [] };
+          for (let i = 0; i < c.n; i++) { const m = malhaPedra(0.2, i % 2 ? 0x8a7a66 : 0x7a6c5a); E.mundo.add(m); o.pedras.push({ m }); }
+          rachaduras(h.x, h.z, 1.8, 2.5);
+          particulas(h.x, h.z, { n: 12, cor: tm.poeira, tam: 0.8, cresce: 2, velH: 2.5, velV: 1.2, gravidade: 2, vida: 0.7, raio: 1, opacidade: 0.7 });
+          tremer(h.x, h.z, 0.25, 0.25);
+        } });
+      },
+      // Rocha Colossal: arranca uma pedra grande do chão e joga (200%, explosiva)
+      (h, ang, mira, alvo) => {
+        const c = CONFIG.merlin.colossal;
+        const d = mira ? clamp(mira.dist, 2, c.alcance) : alvo ? dist(alvo, h) : 7;
+        const px = h.x + Math.sin(ang) * d, pz = h.z + Math.cos(ang) * d;
+        h.anim.tocar('habilidade2', { momento: 0.3, aoAcertar: () => rochaColossal(h, mira ? null : alvo, px, pz) });
+      },
+      // Prisão Gravitacional: as pedras prendem o inimigo escolhido numa bola, ele levita e é esmagado (200%)
+      (h, ang, mira, alvo) => {
+        const c = CONFIG.merlin.prisao;
+        let presa = alvo && !alvo.morto && dist(alvo, h) <= c.alcance + alvo.raio ? alvo : null;
+        if (!presa) {
+          // mirou: o inimigo mais perto da linha
+          let melhor = null, nota = Infinity;
+          E.entidades.forEach(e => { if (e.morto || !inimigos(e, h) || e.tipo === 'clone' || e.tipo === 'torre' || (remoto(e) && invisivel(e))) return; const dd = dist(e, h); if (dd > c.alcance + e.raio) return; const da = Math.abs(Math.atan2(Math.sin(Math.atan2(e.x - h.x, e.z - h.z) - ang), Math.cos(Math.atan2(e.x - h.x, e.z - h.z) - ang))); const n = da * 6 + dd * 0.3; if (da < 0.8 && n < nota) { nota = n; melhor = e; } });
+          presa = melhor;
+        }
+        h.anim.tocar('habilidade3', { momento: 0.45, aoAcertar: () => { if (presa && !presa.morto) prisaoGravitacional(h, presa); else aviso('Nenhum inimigo ao alcance da Prisão Gravitacional'); } });
+      }
+    ],
+    violet: [
+      // fadas florescentes: dano mágico à distância e cortam a cura de quem acertam
+      (h) => {
+        h.anim.tocar('ataque', { velocidade: velAtaque(h), momento: 0.5, aoAcertar: () => {
+          const tm = tema(h);
+          atirar(h, h.rot, { alvo: h.ultimoAlvo, raio: 0.8, vel: 15, restante: CLASSES.violet.alcance + 1.5, dano: CLASSES.violet.dano, cor: tm.principal, tamanho: 0.75,
+            rastro: tm.brilho, impacto: tm.principal, efeito: e => { controlar(e, { antiCura: CONFIG.violet.antiCura }); emitir('faisca', e.x, 1.4, e.z, { n: 8, cor: tm.brilho, vel: 1.2, subida: 1.5, vida: 0.6 }); } });
+        } });
+      },
+      // Colete Florescente: ela e os aliados perto ganham 20% de defesa por 5 s
+      (h) => {
+        const c = CONFIG.violet.colete, tm = tema(h);
+        h.anim.tocar('habilidade1', { momento: 0.4, aoAcertar: () => {
+          anelEfeito(h.x, h.z, c.raio, tm.principal, 0.7, true);
+          E.entidades.forEach(e => {
+            if (e.morto || !aliado(e, h) || e.tipo === 'torre' || dist(e, h) > c.raio) return;
+            if (e !== h && e.tipo !== 'remoto' && e.tipo !== 'heroi') return;
+            if (remoto(e)) gancho('apoioRemoto', e, 'colete');
+            else { e.defesaExtra = Math.max(e.defesaAte > E.t ? (e.defesaExtra || 0) : 0, c.defesa); e.defesaAte = E.t + c.dur; }
+            colete(e, c.dur, tm.principal);
           });
+        } });
+      },
+      // Reflexo Vital: cura 60% da vida de todos e devolve 75% do dano recebido por 6 s
+      (h) => {
+        const c = CONFIG.violet.reflexo, tm = tema(h);
+        h.anim.tocar('habilidade2', { momento: 0.5, aoAcertar: () => {
+          emitir('media', h.x, 1.3, h.z, { n: 20, cor: tm.cura, vel: 0.8, vida: 0.6 });
+          anelEfeito(h.x, h.z, c.raio, tm.cura, 0.8, true);
+          E.entidades.forEach(e => {
+            if (e.morto || !aliado(e, h) || e.tipo === 'torre' || dist(e, h) > c.raio) return;
+            if (e !== h && e.tipo !== 'remoto') return;
+            if (remoto(e)) gancho('apoioRemoto', e, 'reflexo');
+            else { curar(e, e.vidaMax * c.cura); e.reflexoAte = E.t + c.dur; }
+            colunaLuz(e.x, e.z, tm.cura, 0.8, 0.6);
+            esferaEscudo(e, c.dur, tm.cura, () => remoto(e) || e.reflexoAte > E.t);
+          });
+        } });
+      },
+      // Circuito Aprisionador: os circuitos andam pelo chão até quem a atacou; prendem 2 s e cortam 50% da cura
+      (h, ang, mira, alvo) => {
+        const c = CONFIG.violet.circuito;
+        const agr = h.ultimoAgressor && !h.ultimoAgressor.morto && E.entidades.indexOf(h.ultimoAgressor) >= 0 && E.t - (h.agressorEm || 0) < 12 && dist(h.ultimoAgressor, h) < c.alcance ? h.ultimoAgressor : null;
+        const presa = agr || (alvo && !alvo.morto && dist(alvo, h) < c.alcance ? alvo : alvoMaisPerto(h, c.alcance));
+        h.anim.tocar('habilidade3', { momento: 0.5, aoAcertar: () => {
+          anelEfeito(h.x, h.z, 1.4, tema(h).circuito, 0.5, true);
+          if (presa && !presa.morto) circuitos(h, presa); else aviso('Ninguém por perto para os circuitos prenderem');
         } });
       }
     ]
   };
-  function CATALOGO_DUR_KUNGFU() { const c = Skins.CATALOGO.habilidades.jin; return (c && c.habilidade3 && c.habilidade3.duracao) || 2.2; }
-  // modo do Jin agora: 'normal', 'socos' ou 'capoeira'
-  function jinModo(h) {
-    if (h.jinModo && E.t >= h.jinModo.ate) { h.jinModo = null; if (h.anim.usarConjunto) h.anim.usarConjunto('normal'); }
-    return h.jinModo ? h.jinModo.nome : 'normal';
+  Object.assign(HABILIDADES, HAB_NOVOS);
+
+  // desenho das ações dos heróis novos em jogadores de outros celulares (o dano chega separado)
+  function visualRemoto(e, slot, ang) {
+    const tm = tema(e), c = e.classe;
+    if (c === 'jin') {
+      if (slot === 1) { e.jinFormacaoAte = E.t + CONFIG.jin.formacao.dur; aura(e, tm.principal, CONFIG.jin.formacao.dur, 14); }
+      if (slot === 2) esferaEscudo(e, CONFIG.jin.blindagem.dur, tm.principal);
+      if (slot === 3) { e.jinAsasAte = E.t + CONFIG.jin.asas.dur; asasFumaca(e, CONFIG.jin.asas.dur); if (e.anim) { e.anim.semEscudo = true; agendar(CONFIG.jin.asas.dur, () => { if (e.anim) e.anim.semEscudo = false; }); } }
+      return true;
+    }
+    if (c === 'gigante') {
+      if (slot === 0) agendar(0.25, () => { if (e.obj.parent) atirar(e, ang, { soVisual: true, dano: 0, vel: 20, restante: CLASSES.gigante.alcance, visual: 'parafuso57', cor: 0xffffff, tamanho: 0.85, rastro: tm.faisca, giraVisual: 14 }); });
+      if (slot === 1 && e.anim) { e.anim.limiarCorrer = 2.5; agendar(CONFIG.gigante.turbo.dur, () => { if (e.anim) e.anim.limiarCorrer = 99; }); }
+      if (slot === 3) { const dur = (Skins.CATALOGO.habilidades.gigante.habilidade3 || {}).duracao || 3.6; esferaEscudo(e, dur, 0xffd27a); }
+      return true;
+    }
+    if (c === 'phil') {
+      if (slot === 3) { barreiraVisual(e, CONFIG.phil.barreira.dur); e.barreira = { ate: E.t + CONFIG.phil.barreira.dur }; if (e.anim) { e.anim.baseForcada = 'empurrar'; agendar(CONFIG.phil.barreira.dur, () => { if (e.anim) e.anim.baseForcada = null; }); } }
+      if (slot === 1) aura(e, tm.cura, CONFIG.phil.regen.dur, 16);
+      if (slot === 2) for (let i = 0; i < CONFIG.phil.pulos.n; i++) agendar(i * CONFIG.phil.pulos.intervalo, () => { if (e.anim && !e.morto) e.anim.tocar('habilidade2'); agendar(1.4, () => efeitoPisao(e.x, e.z, CONFIG.phil.pulos.raio)); });
+      return true;
+    }
+    if (c === 'merlin') {
+      if (slot === 0) agendar(0.3, () => { if (e.obj.parent) atirar(e, ang, { soVisual: true, dano: 0, vel: 16, restante: CLASSES.merlin.alcance, visual: 'pedra57', cor: 0xffffff, tamanho: 0.6, rastro: tm.poeira }); });
+      if (slot === 1) { rachaduras(e.x, e.z, 1.8, 2.5); aura(e, tm.poeira, CONFIG.merlin.orbita.dur, 10); }
+      return true;
+    }
+    if (c === 'violet') {
+      if (slot === 0) agendar(0.3, () => { if (e.obj.parent) atirar(e, ang, { soVisual: true, dano: 0, vel: 15, restante: CLASSES.violet.alcance, cor: tm.principal, tamanho: 0.75, rastro: tm.brilho }); });
+      if (slot === 1) colete(e, CONFIG.violet.colete.dur, tm.principal);
+      if (slot === 2) esferaEscudo(e, CONFIG.violet.reflexo.dur, tm.cura);
+      return true;
+    }
+    return false;
   }
-  function jinTrocarModo(h, nome, dur) {
-    const tm = tema(h), cor = nome === 'socos' ? tm.socos : tm.capoeira;
-    // um modo cancela o outro: ligar Capoeira desliga Socos (e vice-versa)
-    const modo = h.jinModo = { nome, ate: E.t + dur };
-    if (h.anim.usarConjunto) h.anim.usarConjunto(nome);
-    h.cds[0] = E.t + 0.1;
-    anelEfeito(h.x, h.z, 1.8, cor, 0.5, true);
-    emitir('media', h.x, 1, h.z, { n: 24, cor, vel: 3, subida: 1.5, vida: 0.5, arrasto: 3 });
-    aura(h, cor, dur, 22, true, () => h.jinModo === modo);
+  // a fala de seleção do herói (tocada só aqui, ao escolher)
+  function falaSelecao(classe, genero) {
+    const pasta = pastaVoz(classe, genero, (P.skinEquipada || {})[classe]);
+    if (pasta && temFala(pasta, 'selecao') && SOM.falas) tocarFala(pasta, 'selecao', 1);
   }
+
   function corteVisual(h, ang, cor) {
     // marca do golpe: só aparece para quem ataca (não vai para a rede), fina, no chão e bem apagada
     const m = new THREE.Mesh(new THREE.RingGeometry(2.55, 2.8, 24, 1, -0.9, 1.8),
@@ -4518,18 +5282,22 @@
         }
         // Jin: depois que o golpe acertou, andar corta o resto da animação (não fica preso no chute)
         if (h.classe === 'jin' && Entrada.mag > 0.12 && h.anim && h.anim.estado === 'ataque' && !h.anim.aoAcertar && h.anim.cancelar) h.anim.cancelar();
-        if (!h.investida && !ocupadoHeroi(h) && Entrada.mag > 0.12) {
+        if (!h.investida && !ocupadoHeroi(h) && !barreiraAtiva(h) && Entrada.mag > 0.12) {
           const dir = Math.atan2(Entrada.x, Entrada.z);
+          // fala de movimentação quando volta a andar depois de um tempo parado
+          if (!h.andando && E.t - (h.paradoDesde || 0) > 3) falar(h, 'mover');
+          h.andando = true;
           // atirando: o corpo fica virado para o alvo enquanto as pernas andam
           h.rot = girarPara(h.rot, dir, dt * 12);
           vel = h.vel * Entrada.mag * lentidao(h);
           h.x += Math.sin(dir) * vel * dt; h.z += Math.cos(dir) * vel * dt;
         }
+        if (Entrada.mag <= 0.12 && h.andando) { h.andando = false; h.paradoDesde = E.t; }
         if (Entrada.atacando && E.t >= h.cds[0]) usar(0, Entrada.miraAtaque !== null ? { ang: Entrada.miraAtaque, dist: 10 } : null);
         h.anim.mover(vel);
       }
       moverEmpurrao(h, dt);
-      if (h.classe === 'jin') jinModo(h);
+      passoHeroiNovo(h, dt);
       h.x = clamp(h.x, -E.def.tam[0] / 2, E.def.tam[0] / 2);
       h.z = clamp(h.z, -E.def.tam[1] / 2, E.def.tam[1] / 2);
       empurrarSolidos(h);
@@ -4578,7 +5346,7 @@
         // dentro do rio/lago o corpo afunda até as coxas (a água cobre as pernas)
         const fundo = !e.morto && !e.naoAfundaAgua && e.tipo !== 'clone' && naAgua(e.x, e.z) ? CONFIG.afundarAgua * (e.altura || 1.8) / 1.8 : 0;
         e.afundado = (e.afundado || 0) + (fundo - (e.afundado || 0)) * Math.min(1, dt * 6);
-        e.obj.position.set(e.x, -e.afundado + (e.paredeY || 0), e.z); e.obj.rotation.y = e.rot;
+        e.obj.position.set(e.x, -e.afundado + (e.paredeY || 0) + (e.voo || 0), e.z); e.obj.rotation.y = e.rot;
         if (e.paredeRol !== undefined) e.obj.rotation.z = e.paredeRol;
         if (e.afundado > 0.2 && (e.respingoEm || 0) < E.t && (e.anim && e.anim.velMov > 0.3)) {
           e.respingoEm = E.t + 0.35;
@@ -4865,7 +5633,8 @@
     Object.keys(CLASSES).filter(k => !CLASSES[k].grupo).forEach(k => { ordem.push(k); Object.keys(CLASSES).filter(j => CLASSES[j].grupo === k).forEach(j => ordem.push(j)); });
     const classes = ordem.map(k => {
       const c = P.classes[k] || { estrelas: 0 }, r = rankInfo(c.estrelas), livre = heroiLiberado(k), cl = CLASSES[k];
-      const titulo = cl.grupo ? `${CLASSES[cl.grupo].nome} · ${cl.nomes ? cl.nomes.m + ' / ' + cl.nomes.f : cl.nome}` : cl.nomes ? `${cl.nome} · ${cl.nomes.m} / ${cl.nomes.f}` : cl.nome;
+      const nomes = cl.nomes ? (cl.nomes.m === cl.nomes.f ? cl.nomes.m : cl.nomes.m + ' / ' + cl.nomes.f) : cl.nome;
+      const titulo = cl.grupo ? `${CLASSES[cl.grupo].nome} · ${nomes}` : cl.nomes ? `${cl.nome} · ${nomes}` : cl.nome;
       return `<button type="button" class="classe ${P.classe === k ? 'sel' : ''} ${livre ? '' : 'bloq'}" data-classe="${k}" ${livre ? '' : 'data-bloq="1"'}><b>${titulo}</b><small>${livre ? r.nome + ' ★ ' + r.estrelas : '🔒 Liberado em evento'}</small><small>${cl.habs.join(' · ')}</small></button>`;
     }).join('');
     const cores = CORES.map(c => `<button type="button" class="cor ${P.cor === c ? 'sel' : ''}" data-cor="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('');
@@ -4878,9 +5647,12 @@
       <button class="acao forte" id="bConfirmarHeroi" type="button">Jogar</button>`, el => {
       const marcar = (sel, attr, val) => el.querySelectorAll(sel).forEach(b => b.classList.toggle('sel', b.dataset[attr] === val));
       if (!P.classe) marcar('[data-classe]', 'classe', escolha.classe);
+      { const lin = el.querySelector('[data-genero]'); if (lin && CLASSES[escolha.classe]) lin.closest('.linha').hidden = !!CLASSES[escolha.classe].unico; }
       el.querySelectorAll('[data-classe]').forEach(b => b.addEventListener('click', () => {
         if (b.dataset.bloq) { aviso(CLASSES[b.dataset.classe].nome + ' é liberado em eventos especiais'); return; }
         escolha.classe = b.dataset.classe; marcar('[data-classe]', 'classe', escolha.classe);
+        falaSelecao(escolha.classe, escolha.genero);
+        const lin = el.querySelector('[data-genero]'); if (lin) lin.closest('.linha').hidden = !!CLASSES[escolha.classe].unico;
       }));
       el.querySelectorAll('[data-genero]').forEach(b => b.addEventListener('click', () => { escolha.genero = b.dataset.genero; marcar('[data-genero]', 'genero', escolha.genero); }));
       el.querySelectorAll('[data-cor]').forEach(b => b.addEventListener('click', () => { escolha.cor = b.dataset.cor; marcar('[data-cor]', 'cor', escolha.cor); }));
@@ -4891,6 +5663,7 @@
         if (!E.heroi || mudouModelo) { await criarHeroi(); }
         else Skins.trocarCor(E.heroi.obj, P.cor);
         hud();
+        if (mudouModelo && E.heroi) falar(E.heroi, 'selecao');
       });
     });
     if (!primeiraVez) $('modalFechar').hidden = false; else $('modalFechar').hidden = true;
@@ -5120,10 +5893,7 @@
       F.push({ tipo: 'circulo', r, cor, frente: d });
     };
     const projetil = () => F.push({ tipo: 'faixa', larg: 1.6, comp: cls.alcance + 1.5, ponta: 1, cor: COR_MIRA.dano });
-    const jinCone = modo => {
-      const cj = CONFIG.jin, mult = modo === 'socos' ? cj.socos.alcance : modo === 'capoeira' ? cj.capoeira.alcance : 1;
-      F.push({ tipo: 'cone', r: cls.alcance * mult + (modo === 'socos' ? 0 : 0.4), ab: modo === 'capoeira' ? 1.3 : 0.9, cor: COR_MIRA.dano });
-    };
+    const jinCone = () => F.push({ tipo: 'cone', r: jinAlcance(h), ab: CONFIG.jin.abertura * (h.jinFormacaoAte > E.t ? 1.25 : 1), cor: COR_MIRA.dano });
     if (slot === 'relogio') { ponto(longe(3, 12), 5, COR_MIRA.item, 12); return F; }
     slot = Number(slot);
     if (c === 'soldado') {
@@ -5148,10 +5918,34 @@
       else if (slot === 2) F.push({ tipo: 'circulo', r: 6, cor: COR_MIRA.apoio });
       else F.push({ tipo: 'circulo', r: CONFIG.ultimate.suporte.raio, cor: COR_MIRA.dano });
     } else if (c === 'jin') {
-      if (slot === 0) jinCone(jinModo(h));
-      else if (slot === 1) jinCone('socos');
-      else if (slot === 2) jinCone('capoeira');
-      else { const k = CONFIG.jin.kungfu; ponto(longe(1.8, k.avanco), k.raio, COR_MIRA.dano, k.avanco); }
+      if (slot === 0) jinCone();
+      else if (slot === 1) F.push({ tipo: 'cone', r: CLASSES.jin.alcance * CONFIG.jin.formacao.alcance, ab: CONFIG.jin.abertura * 1.25, cor: COR_MIRA.apoio });
+      else if (slot === 2) F.push({ tipo: 'circulo', r: 1.3, cor: COR_MIRA.apoio });
+      else F.push({ tipo: 'cone', r: CLASSES.jin.alcance * CONFIG.jin.asas.alcance, ab: CONFIG.jin.abertura, cor: COR_MIRA.apoio });
+    } else if (c === 'gigante') {
+      const cg = CONFIG.gigante;
+      if (slot === 0) projetil();
+      else if (slot === 1) F.push({ tipo: 'circulo', r: 1.4, cor: COR_MIRA.apoio });
+      else if (slot === 2) ponto(longe(2, cg.fumaca.alcance), cg.fumaca.raio, COR_MIRA.dano, cg.fumaca.alcance);
+      else F.push({ tipo: 'circulo', r: cg.festa.raio + cg.festa.raioExplosao, cor: COR_MIRA.dano });
+    } else if (c === 'phil') {
+      const cp = CONFIG.phil;
+      if (slot === 0) F.push({ tipo: 'cone', r: cls.alcance, ab: 1.0, cor: COR_MIRA.dano });
+      else if (slot === 1) F.push({ tipo: 'circulo', r: 1.4, cor: COR_MIRA.apoio });
+      else if (slot === 2) F.push({ tipo: 'circulo', r: cp.pulos.raio, cor: COR_MIRA.dano });
+      else F.push({ tipo: 'faixa', larg: cp.barreira.largura, comp: cp.barreira.distancia + 0.4, ponta: 1, cor: COR_MIRA.apoio });
+    } else if (c === 'merlin') {
+      const cm = CONFIG.merlin;
+      if (slot === 0) projetil();
+      else if (slot === 1) F.push({ tipo: 'circulo', r: cm.orbita.raio + 0.6, cor: COR_MIRA.apoio });
+      else if (slot === 2) ponto(longe(2, cm.colossal.alcance), cm.colossal.raio, COR_MIRA.dano, cm.colossal.alcance);
+      else ponto(longe(2, cm.prisao.alcance), 1.2, COR_MIRA.dano, cm.prisao.alcance);
+    } else if (c === 'violet') {
+      const cv = CONFIG.violet;
+      if (slot === 0) projetil();
+      else if (slot === 1) F.push({ tipo: 'circulo', r: cv.colete.raio, cor: COR_MIRA.apoio });
+      else if (slot === 2) F.push({ tipo: 'circulo', r: cv.reflexo.raio, cor: COR_MIRA.apoio });
+      else F.push({ tipo: 'circulo', r: cv.circuito.alcance, cor: COR_MIRA.dano, so: 'borda', borda: 0.06 });
     }
     return F;
   }
@@ -5250,7 +6044,7 @@
     CONFIG, CLASSES, CORES, iniciar, rankingServidor: null, ajustes: null, ganchos: G, poderes: PODERES,
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
-      atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
+      atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, visualRemoto, barbatana, alturaClasse, colete, esferaEscudo, CLASSES, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
       telaHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, tocarFala, pastaVoz, nomeHeroi, SOM, abaixarMusica, musicaTocar, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela

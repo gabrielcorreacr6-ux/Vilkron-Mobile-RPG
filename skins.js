@@ -47,19 +47,33 @@
         { id: 'anubis', nome: 'Vontade de Anubis', aceitaCor: false, preco: 0 },
         { id: 'noturna', nome: 'Chamas Noturna', aceitaCor: false, preco: 0 } ] },
       // Jin: segundo herói do Soldado (não é skin). Luta de mãos e pés, sem arma.
+      // Jin reformulado (v57): espada e escudo; cada skin tem a sua espada e o seu escudo
       jin:      { nome: 'Jin', corPadrao: '#c0392b', skins: [
         { id: 'default', nome: 'Padrão', aceitaCor: false, preco: 0 },
-        { id: 'soberano', nome: 'Soberano', aceitaCor: false, preco: 0 },
-        { id: 'forca_sombria', nome: 'Força Sombria', aceitaCor: false, preco: 0 } ] },
+        { id: 'soberano', nome: 'Soberano', aceitaCor: false, preco: 0, armas: { padrao: 'espada_jin_azul', escudo: 'escudo_jin_azul' } },
+        { id: 'forca_sombria', nome: 'Força Sombria', aceitaCor: false, preco: 0, armas: { padrao: 'espada_jin_vermelha', escudo: 'escudo_jin_vermelho' } } ] },
+      // heróis novos (v57): um modelo só (não têm versão homem/mulher); altura = tamanho no jogo (os outros têm 1,8 m)
+      gigante:  { nome: 'Gigante', corPadrao: '#d68910', altura: 1.3, modeloUnico: { default: 'm' }, skins: [
+        { id: 'default', nome: 'Padrão', aceitaCor: false, preco: 0 } ] },
+      phil:     { nome: 'Phil', corPadrao: '#3fc1b0', altura: 1.95, modeloUnico: { default: 'm' }, skins: [
+        { id: 'default', nome: 'Padrão', aceitaCor: false, preco: 0 } ] },
+      merlin:   { nome: 'Merlin', corPadrao: '#8e44ad', altura: 1.3, modeloUnico: { default: 'm' }, skins: [
+        { id: 'default', nome: 'Padrão', aceitaCor: false, preco: 0 } ] },
+      violet:   { nome: 'Violet', corPadrao: '#3fc1b0', modeloUnico: { default: 'f' }, skins: [
+        { id: 'default', nome: 'Padrão', aceitaCor: false, preco: 0 } ] },
       atirador: { nome: 'Atirador', corPadrao: '#d68910', skins: [
         { id: 'default', nome: 'Padrão', aceitaCor: true, preco: 0 },
         { id: 'cosmos', nome: 'Atirador do Cosmos', aceitaCor: false, preco: 0 },
         { id: 'paintball', nome: 'Maníaco do Paintball', aceitaCor: false, preco: 0 } ] }
     },
     generos: { m: 'Homem', f: 'Mulher' },
+    versaoArquivos: 57,
     // estados que todas as skins de uma classe pegam da animação nova (arquivos em assets/anims/<classe>_<skin>/)
     // (o parado da Vilkronomita das Sombras vale para todo o Soldado e todo o Jin)
-    herdarSkins: { soldado: ['habilidade2', 'parado'], jin: ['parado', 'Punch_Combo_2'], mago: ['extra_lancar_7', 'extra_lancar_4'] },
+    herdarSkins: { soldado: ['habilidade2', 'parado'], mago: ['extra_lancar_7', 'extra_lancar_4'] },
+    // skins que trocam TODAS as animações por um arquivo só, já ajustado ao esqueleto da skin
+    // (assets/anims/<classe>_<skin>/<arquivo>.glb). O Jin novo: espada e escudo também nas skins.
+    animsSkins: { jin: 'golpes' },
     // realce das skins (cores mais vivas): metal máximo e quanto a textura acende sozinha
     // realce: cada textura é ajustada sozinha (escura sobe, clara fica como está); o brilho próprio é pequeno para o branco não estourar
     realceSkins: { metal: 0.3, brilho: 0.12, noite: 0.08, brilhoCor: 0.75, alvoLuz: 0.3, alvoCor: 0.4, maxGanho: 1.5, maxCor: 1.7, contraste: 1.15 },
@@ -152,32 +166,59 @@
       ] } },
       // golem é pesado: golpes mais lentos que os dos heróis
       golem: { ataque: { duracao: 1.6 }, habilidade1: { duracao: 1.8 } },
-      // Jin: o ataque básico tem conjuntos de golpes; as habilidades 1 e 2 trocam o conjunto.
-      // de/ate = pedaço da animação; golpe = momento do acerto dentro do pedaço; duracao = segundos no jogo
+      // Jin (v57): espada e escudo. O básico alterna os 4 combos (cada toque = um golpe do combo).
+      // golpes = frações da animação em que a espada acerta (medidas no próprio arquivo)
       jin: {
-        habilidade3: { clipe: 'Kung_Fu_Punch', de: 0.12, ate: 0.64, duracao: 2.2 },
-        ataque: { clipe: 'Punch_Combo', conjuntos: {
-          normal: [
-            { clipe: 'Punch_Combo', de: 0.0, ate: 0.32, golpe: 0.7, tipo: 'soco', duracao: 0.6 },
-            { clipe: 'Rising_Flying_Kick', golpe: 0.62, tipo: 'chute', duracao: 0.95 },
-            { clipe: 'Punch_Combo_1', de: 0.33, ate: 0.5, golpe: 0.3, tipo: 'soco', duracao: 0.5 },
-            { clipe: 'Rising_Flying_Kick', golpe: 0.62, tipo: 'chute', duracao: 0.95 }
-          ],
-          // Socos: as três sequências de socos inteiras, uma depois da outra (cada uma acerta 3 vezes)
-          socos: [
-            { clipe: 'Punch_Combo', de: 0.05, ate: 0.8, golpe: 0.24, golpes: [0.24, 0.48, 0.85], tipo: 'soco', duracao: 1.1 },
-            { clipe: 'Punch_Combo_1', de: 0.15, ate: 0.68, golpe: 0.21, golpes: [0.21, 0.43, 0.85], tipo: 'soco', duracao: 1.0 },
-            { clipe: 'Punch_Combo_2', de: 0.05, ate: 0.5, golpe: 0.16, golpes: [0.16, 0.48, 0.84], tipo: 'soco', duracao: 1.1 }
-          ],
-          capoeira: [
-            { clipe: 'Sweeping_Kick', de: 0.2, ate: 0.75, golpe: 0.42, tipo: 'capoeira', duracao: 0.9 },
-            { clipe: 'Lunge_Spin_Kick', de: 0.15, golpe: 0.55, tipo: 'capoeira', duracao: 0.9 },
-            { clipe: 'Roundhouse_Kick', de: 0.15, ate: 0.8, golpe: 0.57, tipo: 'capoeira', duracao: 1.0 },
-            { clipe: 'Sweep_Kick', de: 0.3, ate: 0.75, golpe: 0.55, tipo: 'capoeira', duracao: 1.0 },
-            { clipe: 'Backflip_Sweep_Kick', de: 0.55, ate: 0.95, golpe: 0.55, tipo: 'capoeira', duracao: 1.0 }
-          ]
-        } }
+        parado: { clipe: 'Idle_02' }, andar: { clipe: 'Walking' }, correr: { clipe: 'Running' }, dano: { clipe: 'Hit_Reaction' }, morte: { clipe: 'Dead' },
+        habilidade1: { clipe: 'Combat_Stance', duracao: 0.7 },
+        habilidade2: { clipe: 'Combat_Stance', duracao: 0.7 },
+        habilidade3: { clipe: 'Combat_Stance', duracao: 0.7 },
+        ataque: { clipe: 'Double_Combo_Attack', combos: [
+          { clipe: 'ataque', golpes: [0.22, 0.42] },
+          { clipe: 'Triple_Combo_Attack', golpes: [0.17, 0.35, 0.52] },
+          { clipe: 'Weapon_Combo', golpes: [0.15, 0.34] },
+          { clipe: 'Weapon_Combo_2', golpes: [0.44, 0.67] }
+        ] }
       },
+      // Gigante: anda mancando; corre de verdade só no Modo Turbo (o jogo baixa o limiarCorrer)
+      gigante: {
+        limiarCorrer: 99,
+        parado: { clipe: 'Idle_02' }, andar: { clipe: 'Limping_Walk_3_inplace' }, correr: { clipe: 'Running' }, dano: { clipe: 'Hit_Reaction_1' }, morte: { clipe: 'Dead' },
+        habilidade2: { clipe: 'Crouch_Pull_and_Throw', de: 0.05, ate: 0.8, duracao: 2.2 },
+        habilidade3: { clipe: 'Excited_Walk_F', de: 0, ate: 0.42, duracao: 3.6 },
+        ataque: { clipe: 'mage_soell_cast_4', duracao: 1.0, variacoes: [
+          { clipe: 'ataque', golpe: 0.23, duracao: 1.0 },
+          { clipe: 'mage_soell_cast_6', de: 0.1, ate: 0.75, golpe: 0.37, duracao: 1.0 }
+        ] }
+      },
+      // Phil: 2 golpes curtos e o 3º é o giro longo; não tem "parado" no arquivo: segura a pose de guarda do começo do golpe
+      phil: {
+        parado: { clipe: 'Charged_Slash', de: 0, ate: 0.012 }, andar: { clipe: 'Walking' }, correr: { clipe: 'Running' }, dano: { clipe: 'Hit_Reaction_1' }, morte: { clipe: 'Dead' },
+        habilidade1: { clipe: 'Charged_Ground_Slam', de: 0.25, ate: 0.75, duracao: 0.9 },
+        habilidade2: { clipe: 'Jump_with_Arms_and_Legs_Open', duracao: 2.2 },
+        empurrar: { clipe: 'Walk_Fight_Forward' },
+        mergulho: { clipe: 'Run_and_Jump', de: 0.25, duracao: 1.0 },
+        rolar: { clipe: 'Roll_Dodge_1', duracao: 0.9 },
+        ataque: { clipe: 'Charged_Slash', variacoes: [
+          { clipe: 'ataque', de: 0.2, ate: 0.85, golpe: 0.5, duracao: 0.7 },
+          { clipe: 'Charged_Upward_Slash', de: 0.12, ate: 0.6, golpe: 0.44, duracao: 0.75 },
+          { clipe: 'Reaping_Swing', de: 0.3, ate: 0.85, golpe: 0.25, golpes: [0.25, 0.47, 0.75], duracao: 1.5, giro: true }
+        ] }
+      },
+      // Merlin: arremessos de pedra variados no básico
+      merlin: {
+        parado: { clipe: 'Idle_02' }, andar: { clipe: 'Walking' }, correr: { clipe: 'Running' }, dano: { clipe: 'Hit_Reaction' }, morte: { clipe: 'Dead' },
+        habilidade1: { clipe: 'Charged_Ground_Slam', de: 0.2, ate: 0.8, duracao: 1.1 },
+        habilidade2: { clipe: 'mage_soell_cast', duracao: 1.1 },
+        habilidade3: { clipe: 'mage_soell_cast_1', de: 0.05, ate: 0.75, duracao: 1.5 },
+        ataque: { clipe: 'mage_soell_cast_3', variacoes: [
+          { clipe: 'ataque', de: 0.1, ate: 0.6, golpe: 0.34, duracao: 0.8 },
+          { clipe: 'mage_soell_cast_4', de: 0.0, ate: 0.55, golpe: 0.42, duracao: 0.75 },
+          { clipe: 'mage_soell_cast_7', de: 0.1, ate: 0.6, golpe: 0.38, duracao: 0.8 }
+        ] }
+      },
+      // Violet: o arquivo com animações ainda não chegou; quando chegar, os clipes entram aqui
+      violet: {},
       suporte: { habilidade2: { duracao: 1.2 }, habilidade3: { clipe: 'habilidade1' } }
     },
 
@@ -188,6 +229,9 @@
       espada:  { modo: 'empunhar' },
       espada_lava: { modo: 'empunhar' }, espada_cacadora: { modo: 'empunhar' }, machado_vilkronomita: { modo: 'empunhar' },
       espada_viking: { modo: 'empunhar' }, katana_samurai: { modo: 'empunhar' },
+      // Jin: espada na mão direita e escudo no antebraço esquerdo (modo 'escudo')
+      espada_jin: { modo: 'empunhar' }, espada_jin_azul: { modo: 'empunhar' }, espada_jin_vermelha: { modo: 'empunhar' },
+      escudo_jin: { modo: 'escudo' }, escudo_jin_azul: { modo: 'escudo' }, escudo_jin_vermelho: { modo: 'escudo' },
       cajado:  { modo: 'vertical' },
       rifle:   { modo: 'frente' },
       pistola: { modo: 'frente' }
@@ -196,11 +240,12 @@
     armasDaClasse: {
       soldado:  { padrao: 'espada' },
       suporte:  { padrao: 'cajado' },
-      jin:      {}
+      jin:      { padrao: 'espada_jin', escudo: 'escudo_jin' },
+      phil:     { padrao: 'espada' }
     },
     animacoes: {
       humanoide: [],   // ex.: ['parado','andar','correr','dano','morte']
-      suporte: [], soldado: [], mago: [], atirador: [], jin: [],
+      suporte: [], soldado: [], mago: [], atirador: [], jin: [], gigante: [], phil: [], merlin: [], violet: [],
       maestro: [], veterano: [], barao: [], golem: [], dragao: [],
       minion: []
     },
@@ -281,7 +326,8 @@
       const ext = url.split('.').pop().toLowerCase();
       const Loader = ext === 'fbx' ? THREE.FBXLoader : THREE.GLTFLoader;
       if (!Loader) return resolve(null);
-      new Loader().load(url,
+      // ?v= troca quando os arquivos mudam (o navegador não fica com o modelo antigo guardado)
+      new Loader().load(url + (CATALOGO.versaoArquivos ? '?v=' + CATALOGO.versaoArquivos : ''),
         r => resolve(ext === 'fbx' ? { scene: r, animations: r.animations || [] } : r),
         undefined, () => resolve(null));
     });
@@ -518,7 +564,7 @@
   }
 
   /* ================= ANIMAÇÃO ================= */
-  const UMA_VEZ = { ataque: 1, habilidade1: 1, habilidade2: 1, habilidade3: 1, dano: 1, morte: 1 };
+  const UMA_VEZ = { ataque: 1, habilidade1: 1, habilidade2: 1, habilidade3: 1, dano: 1, morte: 1, mergulho: 1, rolar: 1 };
   const DURACAO = { ataque: 0.45, habilidade1: 0.7, habilidade2: 0.7, habilidade3: 0.7, dano: 0.3, morte: 0.8 };
   // nomes comuns de clipes embutidos no modelo -> estado do jogo
   const APELIDOS = [
@@ -690,6 +736,8 @@
     mover(velocidade) {
       this.velMov = velocidade;
       this.base = velocidade < 0.05 ? 'parado' : (velocidade >= this.limiarCorrer ? 'correr' : 'andar');
+      // base forçada por uma habilidade (ex.: Phil empurrando a barreira anda sempre do mesmo jeito)
+      if (this.baseForcada && this.acoes[this.baseForcada]) this.base = this.baseForcada;
       // terminou o golpe do combo e começou a andar: solta a guarda e anda normal (antes deslizava na pose do golpe)
       if (velocidade >= 0.3 && this.comboAtivo && this.estado !== 'ataque' && !this.morto && this.acaoAtual === this.comboAtivo.acao) {
         this.comboAtivo.ate = 0; this.comboAtivo = null; this.estado = null;
@@ -1114,6 +1162,7 @@
     raiz.userData.skin = info;
     const anim = new Animador(raiz, corpo, tipoAnim, altura);
     anim.config = CATALOGO.habilidades[info.classe || info.id] || null;
+    if (anim.config && anim.config.limiarCorrer) anim.limiarCorrer = anim.config.limiarCorrer;
     raiz.userData.animador = anim;
     ATIVOS.add(anim);
     if (gltf) clipesEmbutidos(anim, gltf.animations);
@@ -1226,16 +1275,23 @@
       gltf = await carregarModelo(`${BASE}chars/${o.classe}_${o.genero}_default`);
     }
     let corpo;
+    const altura = def.altura || ALTURA_HEROI;
+    // skin com todas as animações num arquivo à parte (ajustado ao esqueleto dela): troca as do modelo
+    const arqAnims = gltf && skin.id !== 'default' && CATALOGO.animsSkins[o.classe];
+    if (arqAnims) {
+      const r = await carregarArquivo(`${BASE}anims/${o.classe}_${genArq === 'f' ? 'f_' : ''}${skin.id}/${arqAnims}.glb`);
+      if (r && r.animations && r.animations.length) gltf = Object.assign({}, gltf, { animations: r.animations });
+    }
     if (gltf) {
       corpo = clonar(gltf);
-      normalizar(corpo, ALTURA_HEROI);
+      normalizar(corpo, altura);
       if (skin.aceitaCor) aplicarCor(corpo, cor);
       realcarCores(corpo);
     } else {
-      corpo = boneco(ALTURA_HEROI, def.corPadrao, cor);
+      corpo = boneco(altura, def.corPadrao, cor);
     }
-    const info = { tipo: 'personagem', classe: o.classe, genero: o.genero, skin: skin.id, cor };
-    const raiz = montar(corpo, info, 'humanoide', ALTURA_HEROI, gltf,
+    const info = { tipo: 'personagem', classe: o.classe, genero: o.genero, skin: skin.id, cor, altura };
+    const raiz = montar(corpo, info, 'humanoide', altura, gltf,
       [`${o.classe}_${o.genero}`, o.classe, 'humanoide']);
     const armas = skin.armas || CATALOGO.armasDaClasse[o.classe];
     if (gltf && armas && !o.semArmas) carregarArmas(raiz.userData.animador, armas);   // em segundo plano
@@ -1393,9 +1449,10 @@
   }
 
   function montarArma(anim, nome, gltf) {
+    const def = CATALOGO.armas[nome] || { modo: 'empunhar' };
+    if (def.modo === 'escudo') return montarEscudo(anim, nome, gltf, def);
     const mao = acharOsso(anim.corpo, 'righthand');
     if (!mao) return null;
-    const def = CATALOGO.armas[nome] || { modo: 'empunhar' };
     const modelo = clonar(gltf);
     modelo.traverse(n => {
       if (!n.isMesh) return;
@@ -1439,6 +1496,29 @@
       extremos = [a, b];
     }
     return { nome, obj: suporte, mao, modo: def.modo, ponta, extremos };
+  }
+
+  // Escudo no antebraço esquerdo: a face fica para fora (lado do dorso da mão), o comprimento acompanha o braço
+  function montarEscudo(anim, nome, gltf, def) {
+    const mao = acharOsso(anim.corpo, 'lefthand');
+    if (!mao) return null;
+    const modelo = clonar(gltf);
+    modelo.traverse(n => { if (n.isMesh) (Array.isArray(n.material) ? n.material : [n.material]).forEach(m => { if (m) m.userData.semTinta = true; }); });
+    const suporte = new THREE.Group(); suporte.name = 'arma_' + nome; suporte.add(modelo); mao.add(suporte);
+    const filho = f => mao.children.find(c => limpo(c.name).endsWith(f));
+    const ind = filho('lefthandindex1') || filho('lefthandmiddle1'), min = filho('lefthandpinky1') || filho('lefthandring1');
+    let meio = new THREE.Vector3(0, 0.09, 0), atravessa = new THREE.Vector3(1, 0, 0);
+    if (ind && min) { meio = ind.position.clone().add(min.position).multiplyScalar(0.5); atravessa = ind.position.clone().sub(min.position).normalize(); }
+    const Y = meio.clone().normalize();                                            // ao longo da mão/braço
+    const Z = new THREE.Vector3().crossVectors(atravessa, Y).normalize().multiplyScalar(def.lado || 1);   // para fora da palma
+    const X = new THREE.Vector3().crossVectors(Y, Z).normalize();
+    suporte.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
+    if (def.giro) suporte.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), def.giro));
+    // posição na escala do osso: a mão tem ~0,09 m até os dedos; o "afasta" é em metros reais (ajustado em _atualizarArmas)
+    suporte.userData.base = meio.clone().multiplyScalar(def.noBraco === undefined ? 0.2 : def.noBraco);
+    suporte.userData.fora = Z.clone(); suporte.userData.afasta = def.afasta === undefined ? 0.07 : def.afasta;
+    suporte.position.copy(suporte.userData.base);
+    return { nome, obj: suporte, mao, modo: 'escudo', ponta: 0, extremos: null };
   }
 
   // base e ponta da arma na mão agora (no mundo): a ponta é a extremidade mais longe da mão
@@ -1502,6 +1582,7 @@
         anim.armas[nome] = a;
       }
       if (chave === 'padrao') anim.armaPadrao = nome;
+      else if (chave === 'escudo') anim.escudoNome = nome;
       else { anim.trocasArma = anim.trocasArma || {}; anim.trocasArma[chave] = nome; }
     }
   }
@@ -1510,8 +1591,16 @@
     if (!this.armas) return;
     const quer = (this.trocasArma && this.trocasArma[this.estado]) || this.armaPadrao;
     let alguma = false;
-    Object.keys(this.armas).forEach(n => { this.armas[n].obj.visible = (n === quer); if (n === quer) alguma = true; });
-    if (!alguma) return;
+    // semEscudo: o Jin larga o escudo nas Asas da Guerra; armasOcultas: some tudo (Phil dentro d'água)
+    const esc = this.escudoNome && !this.semEscudo && !this.armasOcultas ? this.armas[this.escudoNome] : null;
+    Object.keys(this.armas).forEach(n => { this.armas[n].obj.visible = (n === quer && !this.armasOcultas) || (esc && n === this.escudoNome); if (n === quer) alguma = true; });
+    if (esc) {
+      this.raiz.updateMatrixWorld(true);
+      esc.mao.getWorldScale(_va); this.raiz.getWorldScale(_vb);
+      esc.obj.scale.set(_vb.x / _va.x, _vb.y / _va.y, _vb.z / _va.z);
+      const u = esc.obj.userData; esc.obj.position.copy(u.base).addScaledVector(u.fora, u.afasta / _va.x * _vb.x / (this.raiz.scale.x || 1));
+    }
+    if (!alguma || this.armasOcultas) return;
     const a = this.armas[quer];
     this.raiz.updateMatrixWorld(true);
     // tamanho real em metros, qualquer que seja a escala dos ossos

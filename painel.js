@@ -11,7 +11,7 @@
   const doc = global.document;
   const $ = id => doc.getElementById(id);
   const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const CLASSES_NOMES = { soldado: 'Soldado', jin: 'Jin (Soldado)', suporte: 'Suporte', mago: 'Mago', atirador: 'Atirador' };
+  const CLASSES_NOMES = { soldado: 'Soldado', jin: 'Jin (Soldado)', suporte: 'Suporte', phil: 'Phil (Suporte)', violet: 'Violet (Suporte)', mago: 'Mago', merlin: 'Merlin (Mago)', atirador: 'Atirador', gigante: 'Gigante (Atirador)' };
   const dataBR = d => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
   const ateBR = d => (!d || String(d).indexOf('infinity') >= 0 || new Date(d).getFullYear() > 9000) ? 'para sempre' : 'até ' + dataBR(d);
 
@@ -549,7 +549,7 @@
   // sugestões de skins já cadastradas (o campo continua aceitando qualquer nome)
   const listaSkins = () => `<datalist id="dlSkins">${Object.keys(CLASSES_NOMES).map(c => ((global.Skins.CATALOGO.classes[c] || {}).skins || [])
     .filter(k => k.id !== 'default').map(k => `<option value="${k.id}">${CLASSES_NOMES[c]} · ${esc(k.nome || k.id)}</option>`).join('')).join('')}
-    <option value="default">Herói de evento: escolha a classe Jin e use "default" para liberar o herói</option></datalist>`;
+    <option value="default">Herói de evento: escolha a classe (Jin, Gigante, Phil, Merlin ou Violet) e use "default" para liberar o herói</option></datalist>`;
   const selClasse = (id) => `<select id="${id}" class="campo">${Object.keys(CLASSES_NOMES).map(c => `<option value="${c}">${CLASSES_NOMES[c]}</option>`).join('')}</select>`;
   const formBan = `
     <div class="form">

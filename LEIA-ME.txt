@@ -87,6 +87,21 @@ Ex.: soldado_m_dourado.glb e soldado_f_dourado.glb -> skin "dourado" do Soldado.
 Skin de soldado nunca aparece para mago, suporte ou atirador.
 Se o arquivo ainda não foi enviado, o jogo mostra o modelo padrão.
 
+HERÓIS NOVOS (v57)
+------------------
+Rodar uma vez no Supabase (SQL Editor): supabase_v57.sql
+Todos são heróis de evento, como o Jin. Para liberar para alguém: menu ☰ > Jogadores > dar skin >
+classe do herói > skin "default". O administrador já tem todos.
+  Jin / Jeane (Soldado)  -> espada e escudo. Skins Soberano (azul) e Força Sombria (vermelha) com
+                            espada e escudo próprios. Animações das skins: assets/anims/jin_<skin>/golpes.glb
+  Gigante (Atirador)     -> robô pequeno que manca. assets/chars/gigante_m_default.glb
+  Phil (Suporte)         -> tank tubarão. assets/chars/phil_m_default.glb (usa a espada padrão do Soldado)
+  Merlin (Mago)          -> tatu pequeno das pedras. assets/chars/merlin_m_default.glb
+  Violet (Suporte)       -> elfa. FALTA o modelo com animações: assets/chars/violet_f_default.glb
+Os números de cada um ficam no começo do jogo.js (CONFIG.jin, CONFIG.gigante, CONFIG.phil,
+CONFIG.merlin, CONFIG.violet) e em CLASSES (vida, dano, alcance, recargas).
+Falas: assets/vozes/<pasta>/selecao.mp3, entrada.mp3, movimento.mp3, ataque.mp3, hab1.mp3, hab2.mp3, hab3.mp3
+
 ARTE QUE AINDA FALTA (o jogo usa forma provisória até o arquivo existir)
 --------------------------------------------------------------------------
 assets/mobs/   maestro_default.glb, veterano_default.glb, dragao_default.glb,
