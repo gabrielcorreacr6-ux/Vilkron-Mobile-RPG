@@ -510,7 +510,7 @@
     if (!f || f.u === Rede.eu.id || !/^[a-z0-9_]{2,40}$/.test(f.p || '')) return;
     const r = Rede.remotos.get(f.u), h = J.api.E.heroi; if (!r || !r.ent || !h || Rede.chat.silenciados.has(f.u) || Rede.chat.bloqueados.has(f.u)) return;
     const d = Math.hypot(r.ent.x - h.x, r.ent.z - h.z); if (d > 26) return;
-    const i = /^(hab[1-3]|selecao|entrada|movimento|ataque|ataque3|agua|tubarao)$/.test(f.i) ? f.i : Math.max(0, Math.min(30, f.i | 0));
+    const i = /^(hab[1-3]|ult|selecao|entrada|movimento2?|ataque[23]?|agua|tubarao|eliminacao|morte|vitoria|provocacao)$/.test(f.i) ? f.i : Math.max(0, Math.min(30, f.i | 0));
     J.api.tocarFala(f.p, i, Math.max(0.15, 1 - d / 26));
   }
   function receberEfeito(a) {
@@ -538,6 +538,7 @@
       if (r.ouro) { P.ouro += r.ouro; P.ouroTotal += r.ouro; base += r.ouro; }
       if (r.xp) J.api.ganhar(r.xp, 0, false);
       const nome = (Rede.remotos.get(a.vitima) || {}).p;
+      if (J.api.falarMomento) J.api.falarMomento('abate');
       if (r.tipo !== 'repetido') J.api.aviso('Você derrubou ' + (nome ? nome.n : 'um jogador') + ' · +' + (r.xp || 0) + ' XP · +' + (r.ouro || 0) + ' ouro');
     } catch (e) { console.warn('pvp', e.message); }
   }

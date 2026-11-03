@@ -67,8 +67,8 @@
       // sem minions por perto, a torre mata o herói em 3 disparos: 20%, 60% e 120% da vida dele (ignora escudo e cura)
       sequencia: [0.2, 0.6, 1.2], esqueceSequencia: 4 },
     // Jin (v57): espada e escudo. Hab. 1 aumenta o campo de ataque e +2% de vel. de ataque (7 s);
-    // hab. 2 blindagem +10% de defesa com escudo em volta (5 s); hab. 3 Asas da Guerra: larga o escudo, ganha asas de
-    // fumaça branca, mais alcance, mais vel. de ataque e 15% de crítico (7 s)
+    // hab. 2 blindagem +10% de defesa com escudo em volta (5 s); hab. 3 Asas da Guerra: larga o escudo, o corpo solta
+    // fumaça como metal quente, mais alcance, mais vel. de ataque e 15% de crítico (7 s)
     jin: { golpe: 1.0, abertura: 1.0,
       formacao: { dur: 7, alcance: 1.4, velAtaque: 0.02 },
       blindagem: { dur: 5, defesa: 0.10 },
@@ -1569,6 +1569,7 @@
       } else if (!E.def.pvpLivre) perderEstrela();
       e.renasceEm = E.t + espera;
       aviso('Você caiu. Volta em ' + Math.round(espera) + ' s');
+      falar(e, 'morte');
       if (remoto(origem)) gancho('mortoPorJogador', origem);
     } else if (e.tipo === 'clone') {
       e.removerEm = E.t + 0.5;
@@ -2010,7 +2011,10 @@
     }
     HABILIDADES[h.classe][slot](h, ang, mira, alvo);
     gancho('acao', slot, ang);
-    falar(h, slot === 0 ? 'ataque' : slot === 3 ? 'ult' : 'habilidade', slot);
+    // 1º golpe num jogador inimigo (de tempos em tempos): provoca
+    let momentoFala = slot === 0 ? 'ataque' : slot === 3 ? 'ult' : 'habilidade';
+    if (slot === 0 && alvo && remoto(alvo) && E.t > (h.provocarEm || 0)) { h.provocarEm = E.t + 45; momentoFala = 'provocar'; }
+    falar(h, momentoFala, slot);
     return true;
   }
 
@@ -2776,13 +2780,19 @@
       merlin: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
       violet: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
       soldado_lava_m: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3'],
+      // Último Vikeng e Samurai: falas extras (ataque2/movimento2 se alternam com ataque/movimento; "ult" se
+      // alterna com hab3 no 4º botão), eliminação, morte, vitória na arena e provocação (1º golpe num jogador inimigo)
+      soldado_viking: ['selecao', 'entrada', 'ataque', 'ataque2', 'hab1', 'hab2', 'hab3', 'ult', 'eliminacao', 'morte', 'vitoria', 'provocacao'],
+      soldado_samurai: ['selecao', 'entrada', 'movimento', 'movimento2', 'ataque', 'ataque2', 'hab1', 'hab2', 'hab3', 'ult', 'eliminacao', 'morte', 'vitoria', 'provocacao'],
       // Caçadora Sombria: a mesma voz para o homem e a mulher (a skin tem um modelo só)
       soldado_cacadora: ['selecao', 'entrada', 'movimento', 'ataque', 'hab1', 'hab2', 'hab3']
     },
     intervalo: 7,                     // segundos mínimos entre uma fala e outra do mesmo herói
     chance: { ataque: 0.07, habilidade: 0.4, ult: 0.85, abate: 0.9, abateMob: 0.3, entrar: 1 },
     // chance das falas com nome (o grito do ataque básico sai às vezes; a movimentação quando começa a andar)
-    chanceFala: { selecao: 1, entrada: 1, movimento: 0.35, ataque: 0.15 }
+    chanceFala: { selecao: 1, entrada: 1, movimento: 0.35, ataque: 0.15, eliminacao: 0.9, morte: 1, vitoria: 1, provocacao: 1 },
+    // fala que também vale no lugar de outra (o 4º botão pode dizer a fala da habilidade 3 ou a da ultimate)
+    alternativas: { hab3: ['ult'] }
   };
   const SOM = { falas: true, volume: 0.9, musica: true, volMusica: 0.3 };
   try { const v = JSON.parse(global.localStorage.getItem('vilkron_som') || 'null'); if (v) Object.assign(SOM, v); } catch (e) {}
@@ -2793,9 +2803,18 @@
     for (const k of op) if (k && tem(k)) return k;
     return null;
   }
+  // escolhe uma das versões da fala (ataque, ataque2...; hab3 ou ult), sem repetir a última
+  const _ultimaVariante = {};
+  function variante(pasta, nome) {
+    const f = VOZES.falas[pasta]; if (!f) return nome;
+    const ops = f.filter(n => n === nome || (n.indexOf(nome) === 0 && /^\d+$/.test(n.slice(nome.length))) || (VOZES.alternativas[nome] || []).indexOf(n) >= 0);
+    if (ops.length <= 1) return ops[0] || nome;
+    const k = pasta + '/' + nome, livres = ops.filter(n => n !== _ultimaVariante[k]);
+    return (_ultimaVariante[k] = livres[Math.floor(Math.random() * livres.length)]);
+  }
   function temFala(pasta, nome) {
     const f = VOZES.falas[pasta];
-    if (f) return f.indexOf(nome) >= 0;
+    if (f) return f.indexOf(nome) >= 0 || (VOZES.alternativas[nome] || []).some(n => f.indexOf(n) >= 0);
     if (/^hab[1-3]$/.test(nome)) return !!(VOZES.habilidades[pasta] && VOZES.habilidades[pasta].indexOf(+nome[3]) >= 0);
     return false;
   }
@@ -2806,7 +2825,8 @@
     if (!pasta || !temFala(pasta, nome)) return false;
     if (!forcar && E.t < (h.gritoEm || 0)) return false;
     h.gritoEm = E.t + 1.2; h.falaEm = E.t + VOZES.intervalo;
-    tocarFala(pasta, nome, 1); gancho('fala', pasta, nome);
+    const v = variante(pasta, nome);
+    tocarFala(pasta, v, 1); gancho('fala', pasta, v);
     return true;
   }
   const _audios = {};
@@ -2852,25 +2872,31 @@
   }
   // o meu herói fala (às vezes); quem estiver perto ouve a mesma fala
   function falar(h, momento, slot) {
-    if (!h || h.morto || !SOM.falas) return;
+    if (!h || (h.morto && momento !== 'morte') || !SOM.falas) return;
     const pasta = pastaVoz(h.classe, P.genero, (P.skinEquipada || {})[h.classe]); if (!pasta) return;
     // habilidade com fala própria: o grito dela sai sempre
     if (slot && temFala(pasta, 'hab' + slot)) {
       if (E.t < (h.gritoEm || 0)) return;
       h.gritoEm = E.t + 1.2; h.falaEm = E.t + VOZES.intervalo;
-      tocarFala(pasta, 'hab' + slot, 1); gancho('fala', pasta, 'hab' + slot);
+      const v = variante(pasta, 'hab' + slot);
+      tocarFala(pasta, v, 1); gancho('fala', pasta, v);
       return;
     }
-    // falas com nome: entrada na batalha, movimentação, grito do ataque básico, seleção
-    const nome = { entrar: 'entrada', mover: 'movimento', ataque: 'ataque', selecao: 'selecao' }[momento];
+    // falas com nome: entrada, movimentação, grito do ataque, seleção, eliminação, morte, vitória, provocação
+    const nome = { entrar: 'entrada', mover: 'movimento', ataque: 'ataque', selecao: 'selecao', abate: 'eliminacao', abateMob: 'eliminacao',
+      morte: 'morte', vitoria: 'vitoria', provocar: 'provocacao' }[momento];
     if (nome && temFala(pasta, nome)) {
-      if (nome !== 'selecao' && nome !== 'entrada' && E.t < (h.falaEm || 0)) return;
-      if (Math.random() > (VOZES.chanceFala[nome] || 0.3)) return;
+      const sempre = { selecao: 1, entrada: 1, morte: 1, vitoria: 1 };
+      if (!sempre[nome] && E.t < (h.falaEm || 0)) return;
+      if (Math.random() > (momento === 'abateMob' ? VOZES.chance.abateMob : (VOZES.chanceFala[nome] || 0.3))) return;
       h.falaEm = E.t + VOZES.intervalo; h.gritoEm = E.t + 1.2;
-      tocarFala(pasta, nome, 1);
-      if (nome !== 'selecao') gancho('fala', pasta, nome);
+      const v = variante(pasta, nome);
+      tocarFala(pasta, v, 1);
+      if (nome !== 'selecao') gancho('fala', pasta, v);
       return;
     }
+    // provocação sem fala própria: vira o grito normal do ataque
+    if (momento === 'provocar') return falar(h, 'ataque', slot);
     if (VOZES.falas[pasta] || !VOZES.lista[pasta]) return;
     if (E.t < (h.falaEm || 0) || Math.random() > (VOZES.chance[momento] || 0.3)) return;
     h.falaEm = E.t + VOZES.intervalo;
@@ -3142,21 +3168,29 @@
 
   // ---------- Jin: asas de fumaça branca ----------
   const _vAsa = THREE.Vector3 ? new THREE.Vector3() : null;
+  // Jin nas Asas da Guerra: o corpo solta fumaça branca, como metal quente (sem asas)
+  const OSSOS_QUENTES = ['spine2', 'spine1', 'neck', 'leftarm', 'rightarm', 'leftforearm', 'rightforearm', 'leftshoulder', 'rightshoulder', 'leftupleg', 'rightupleg'];
   function asasFumaca(e, dur, enquanto) {
-    let acc = 0;
+    let acc = 0, accBrasa = 0;
     E.efeitos.push({ t: 0, atualizar(dt) {
-      this.t += dt; acc += dt * 120;
-      const esc = (e.altura || 1.8) / 1.8;
-      let bx = e.x, by = 1.35 * esc + (e.voo || 0), bz = e.z;
-      if (e.obj && Skins.posicaoOsso && Skins.posicaoOsso(e.obj, 'spine2', _vAsa)) { bx = _vAsa.x; by = _vAsa.y; bz = _vAsa.z; }
-      const tras = [-Math.sin(e.rot), -Math.cos(e.rot)], lado = [Math.cos(e.rot), -Math.sin(e.rot)];
-      const bate = Math.sin(this.t * 5) * 0.12;
-      while (acc >= 1) {
+      this.t += dt; acc += dt * 16; accBrasa += dt * 6;
+      const esc = (e.altura || 1.8) / 1.8, visivel = !e.obj || e.obj.visible !== false;
+      const ponto = () => {
+        const osso = OSSOS_QUENTES[Math.floor(Math.random() * OSSOS_QUENTES.length)];
+        if (e.obj && Skins.posicaoOsso && Skins.posicaoOsso(e.obj, osso, _vAsa)) return [_vAsa.x + (Math.random() - 0.5) * 0.18 * esc, _vAsa.y, _vAsa.z + (Math.random() - 0.5) * 0.18 * esc];
+        return [e.x + (Math.random() - 0.5) * 0.5 * esc, (0.6 + Math.random() * 0.9) * esc + (e.voo || 0), e.z + (Math.random() - 0.5) * 0.5 * esc];
+      };
+      while (visivel && acc >= 1) {
         acc -= 1;
-        const s = Math.random() < 0.5 ? 1 : -1, u = Math.random();                 // u: da raiz (0) à ponta (1) da asa
-        const abre = (0.25 + u * 1.25) * esc, sobe = (Math.sin(u * Math.PI * 0.9) * 0.55 + u * 0.25 + bate * u) * esc;
-        const x = bx + lado[0] * abre * s + tras[0] * (0.22 + u * 0.18) * esc, z = bz + lado[1] * abre * s + tras[1] * (0.22 + u * 0.18) * esc;
-        emitir(u > 0.55 && Math.random() < 0.35 ? 'grande' : 'media', x, by + sobe - Math.random() * 0.35 * u * esc, z, { n: 1, cor: 0xdfe6ee, vel: 0.12, subida: 0.1, vida: 0.4 + Math.random() * 0.25 });
+        const [x, y, z] = ponto();
+        // fiapos de fumaça que sobem devagar, crescem e somem
+        particulas(x, z, { n: 1, cor: Math.random() < 0.6 ? 0xe9edf1 : 0xc9cfd5, tam: 0.22 * esc, cresce: 3.2, velH: 0.12, velV: 0.9 + Math.random() * 0.5, gravidade: -0.4, vida: 1.0 + Math.random() * 0.5, opacidade: 0.42, y });
+      }
+      while (visivel && accBrasa >= 1) {
+        accBrasa -= 1;
+        const [x, y, z] = ponto();
+        // brilho de calor bem fraco saindo junto
+        emitir('faisca', x, y, z, { n: 1, cor: 0xffd9a0, vel: 0.15, subida: 0.8, vida: 0.45 });
       }
       if (this.t > dur || e.morto || (enquanto && !enquanto()) || !e.obj || !e.obj.parent) return true;
     } });
@@ -3538,7 +3572,7 @@
         esferaEscudo(h, c.dur, tm.principal, () => h.defesaAte > E.t);
         emitir('faisca', h.x, 1, h.z, { n: 24, cor: tm.faisca, vel: 3, subida: 1.5, vida: 0.5 });
       },
-      // Asas da Guerra: larga o escudo, asas de fumaça branca, mais alcance, mais velocidade e 15% de crítico por 7 s
+      // Asas da Guerra: larga o escudo, solta fumaça como se estivesse quente, mais alcance, mais velocidade e 15% de crítico por 7 s
       (h) => {
         const c = CONFIG.jin.asas;
         h.anim.tocar('habilidade3');
@@ -5131,7 +5165,7 @@
         a.fimEm = E.t + 10;
         const eu = E.heroi && E.heroi.arena === a;
         aviso('Arena ' + (a.indice + 1) + ': vitória do time ' + venceu + (eu ? (venceu === 'azul' ? ' · você venceu!' : ' · você perdeu') : ''));
-        if (eu && venceu === 'azul') { ganhar(120, 200, true); P.pontosRank += 5; }
+        if (eu && venceu === 'azul') { ganhar(120, 200, true); P.pontosRank += 5; falar(E.heroi, 'vitoria'); }
         if (eu) gancho('arenaFim', venceu === E.heroi.time);
       }
     });
@@ -6096,7 +6130,7 @@
     api: {
       get P() { return P; }, E, R, aviso, abrirModal, fecharModal, hud, salvar, ganhar, criarHeroi, nova, textoSprite,
       atirar, causarDano, bolha, anelEfeito, curar, controlar, emitir, aura, fumaca, tema, TEMAS, visualRemoto, barbatana, alturaClasse, colete, esferaEscudo, CLASSES, rankInfo, bonus, aplicarPerfil, carregarMapa, zonaSegura, naMoita, invisivel,
-      telaHeroi, comprarHeroi, telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, tocarFala, pastaVoz, nomeHeroi, SOM, abaixarMusica, musicaTocar, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
+      telaHeroi, comprarHeroi, falarMomento: m => falar(E.heroi, m), telaRanking, perfilPadrao, dist, selo, balao, teleportar, fotoMapa, heroiLiberado, tocarFala, pastaVoz, nomeHeroi, SOM, abaixarMusica, musicaTocar, labRelogio, labAtivo, labEntrar, xpProximaEstrela, temporadaAtual, aplicarTemporada
     },
     // usado nos testes sem tela
     _t: { CONFIG, E, P, R, MIRA_AUX, CAMERA, heroiLiberado, jinModo, labRelogio, labPadrao, labEntrar, labSair, labRota, labAbrirBau, mapaDeInicio, noCaminho, rotaPeloCaminho, naPracaInicio, xpProximaEstrela, aplicarTemporada, temporadaAtual, selo, passo, carregarMapa, criarHeroi, usar, usarItem, comprar, comprarPasse, viajar, inscreverArena, naAgua, naMoita, zonaSegura, causarDano, Entrada, rankInfo, bonus, ganhar, iniciarCena }

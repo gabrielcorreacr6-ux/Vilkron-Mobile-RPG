@@ -67,7 +67,7 @@
         { id: 'paintball', nome: 'Maníaco do Paintball', aceitaCor: false, preco: 0 } ] }
     },
     generos: { m: 'Homem', f: 'Mulher' },
-    versaoArquivos: 58,
+    versaoArquivos: 59,
     // estados que todas as skins de uma classe pegam da animação nova (arquivos em assets/anims/<classe>_<skin>/)
     // (o parado da Vilkronomita das Sombras vale para todo o Soldado e todo o Jin)
     herdarSkins: { soldado: ['habilidade2', 'parado'], mago: ['extra_lancar_7', 'extra_lancar_4'] },
@@ -169,6 +169,8 @@
       // Jin (v57): espada e escudo. O básico alterna os 4 combos (cada toque = um golpe do combo).
       // golpes = frações da animação em que a espada acerta (medidas no próprio arquivo)
       jin: {
+        // os combos começam com o quadril deslocado: trava no lugar em pé (antes o golpe puxava o corpo para trás)
+        quadrilNoRepouso: true,
         parado: { clipe: 'Idle_02' }, andar: { clipe: 'Walking' }, correr: { clipe: 'Running' }, dano: { clipe: 'Hit_Reaction' }, morte: { clipe: 'Dead' },
         habilidade1: { clipe: 'Combat_Stance', duracao: 0.7 },
         habilidade2: { clipe: 'Combat_Stance', duracao: 0.7 },
@@ -632,7 +634,7 @@
       const cfgC = this.config && this.config[estado];
       const c = cfgC && (cfgC.de !== undefined || cfgC.ate !== undefined) ? recortar(clip, cfgC.de || 0, cfgC.ate === undefined ? 1 : cfgC.ate) : clip.clone();
       c.name = estado;
-      noLugar(c);
+      noLugar(c, this._refQuadril());
       const acao = this.mixer.clipAction(c);
       if (UMA_VEZ[estado]) { acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true; }
       this.acoes[estado] = acao;
@@ -645,6 +647,17 @@
     }
 
     tem(estado) { return !!this.acoes[estado]; }
+
+    // quadril em pé do modelo (lido antes de qualquer animação mexer nele); só para quem pede na config
+    _refQuadril() {
+      if (!(this.config && this.config.quadrilNoRepouso)) return null;
+      if (this._rq === undefined) {
+        let b = null;
+        this.corpo.traverse(n => { if (!b && n.isBone && /hips$/i.test(n.name)) b = n; });
+        this._rq = b ? { x: b.position.x, z: b.position.z } : null;
+      }
+      return this._rq;
+    }
 
     // troca o conjunto de golpes do ataque básico (Jin: normal, socos, capoeira)
     usarConjunto(nome) {
@@ -664,7 +677,7 @@
       if (!this.varAtaque) this.varAtaque = [{ acao: this.acoes.ataque, escala: this.escalas.ataque }];
       let c = (v.de !== undefined || v.ate !== undefined) ? recortar(clip, v.de || 0, v.ate === undefined ? 1 : v.ate) : clip.clone();
       c.name = 'ataque_v' + this.varAtaque.length;
-      noLugar(c);
+      noLugar(c, this._refQuadril());
       const acao = this.mixer.clipAction(c);
       acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true;
       this.varAtaque.push({ acao, escala: c.duration > 0 ? c.duration / (v.duracao || CATALOGO.duracoes.ataque) : 1, golpe: v.golpe, golpes: v.golpes, tipo: v.tipo, clipe: v.clipe, dur: v.duracao || CATALOGO.duracoes.ataque });
@@ -676,7 +689,7 @@
     adicionarCombo(clip, cfg) {
       if (!this.mixer || !clipeServe(this.corpo, clip)) return false;
       const c = clip.clone(); c.name = 'combo_' + (this.combos ? this.combos.length : 0);
-      noLugar(c);
+      noLugar(c, this._refQuadril());
       const acao = this.mixer.clipAction(c);
       acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true;
       let golpes = cfg.golpes || [0.5];
@@ -733,7 +746,7 @@
       if (!this.mixer || !clipeServe(this.corpo, clip)) return false;
       const c = clip.clone(); c.name = 'ataque_andando';
       if (soCima) c.tracks = c.tracks.filter(t => /spine|neck|head|shoulder|arm|hand/i.test(THREE.PropertyBinding.parseTrackName(t.name).nodeName || ''));
-      noLugar(c);
+      noLugar(c, this._refQuadril());
       if (!c.tracks.length) return false;
       const acao = this.mixer.clipAction(c);
       acao.setLoop(THREE.LoopOnce, 1); acao.clampWhenFinished = true;
@@ -1155,10 +1168,12 @@
   }
 
   // Tira o deslocamento do quadril para frente/lados: o jogo é quem move o boneco
-  function noLugar(clip) {
+  // ref: posição do quadril em pé (do próprio modelo). Sem ref, usa o 1º quadro do clipe — num golpe que
+  // começa com o corpo deslocado (ex.: combos do Jin) isso deixava o boneco inteiro para trás do lugar dele.
+  function noLugar(clip, ref) {
     clip.tracks.forEach(t => {
       if (!/hips\.position$/i.test(t.name) || t.getValueSize() !== 3) return;
-      const v = t.values, x0 = v[0], z0 = v[2];
+      const v = t.values, x0 = ref ? ref.x : v[0], z0 = ref ? ref.z : v[2];
       t.values = v.slice();
       for (let i = 0; i < t.values.length; i += 3) { t.values[i] = x0; t.values[i + 2] = z0; }
     });
