@@ -67,7 +67,7 @@
         { id: 'paintball', nome: 'Maníaco do Paintball', aceitaCor: false, preco: 0 } ] }
     },
     generos: { m: 'Homem', f: 'Mulher' },
-    versaoArquivos: 59,
+    versaoArquivos: 60,
     // estados que todas as skins de uma classe pegam da animação nova (arquivos em assets/anims/<classe>_<skin>/)
     // (o parado da Vilkronomita das Sombras vale para todo o Soldado e todo o Jin)
     herdarSkins: { soldado: ['habilidade2', 'parado'], mago: ['extra_lancar_7', 'extra_lancar_4'] },

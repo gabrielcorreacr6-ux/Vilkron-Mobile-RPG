@@ -46,7 +46,17 @@ button { font: inherit; color: inherit; }
   display: flex; gap: 8px; align-items: flex-start; pointer-events: none; }
 #bMenu { pointer-events: auto; width: 40px; height: 44px; display: grid; place-items: center; cursor: pointer; padding: 0; }
 #bMenu i { display: block; width: 5px; height: 5px; border-radius: 50%; background: var(--texto); box-shadow: 0 -9px 0 var(--texto), 0 9px 0 var(--texto); }
-#painel { padding: 6px 10px; min-width: 0; flex: 1; max-width: 420px; }
+#painel { padding: 6px 10px; min-width: 0; flex: 1; max-width: 420px; pointer-events: auto; cursor: pointer; position: relative; }
+#painel::after { content: "▾"; position: absolute; right: 8px; top: 6px; font-size: 11px; color: var(--apagado); }
+#painel.aberto::after { content: "▴"; }
+#hudElos { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--linha); font-size: 11px; max-height: 52vh; overflow-y: auto; }
+#hudElos .eloResumo { font-size: 12px; margin-bottom: 5px; }
+#hudElos .eloLinha { display: flex; align-items: center; gap: 6px; padding: 3px 5px; border-radius: 6px; }
+#hudElos .eloLinha i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+#hudElos .eloLinha span { font-weight: 700; min-width: 86px; }
+#hudElos .eloLinha small { color: var(--apagado); }
+#hudElos .eloLinha.atual { background: rgba(255,255,255,0.08); outline: 1px solid var(--linha); }
+#hudElos .eloNota { color: var(--apagado); margin-top: 5px; line-height: 1.35; }
 #hudMapa { font-family: var(--hud); font-weight: 700; letter-spacing: 0.04em; font-size: 14px; }
 #hudRank { font-size: 12px; color: var(--apagado); }
 #hudRank b { color: var(--ouro); }
@@ -243,6 +253,7 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
     <div id="hudRank"></div>
     <div class="vida"><div id="hudVida"></div><div id="hudVidaTxt"></div></div>
     <div id="hudTags"></div>
+    <div id="hudElos" hidden></div>
   </div>
   <div id="ouro" class="caixa"><span id="hudOuro">0</span></div>
 </div>
@@ -329,13 +340,13 @@ small.inline { display: inline; color: var(--apagado); font-size: 12px; }
   });
 })();
 </script>
-<script src="servidor.js?v=59"></script>
-<script src="config-online.js?v=59"></script>
-<script src="efeitos.js?v=59"></script>
-<script src="skins.js?v=59"></script>
-<script src="mapas.js?v=59"></script>
-<script src="rede.js?v=59"></script>
-<script src="jogo.js?v=59"></script>
-<script src="painel.js?v=59"></script>
+<script src="servidor.js?v=60"></script>
+<script src="config-online.js?v=60"></script>
+<script src="efeitos.js?v=60"></script>
+<script src="skins.js?v=60"></script>
+<script src="mapas.js?v=60"></script>
+<script src="rede.js?v=60"></script>
+<script src="jogo.js?v=60"></script>
+<script src="painel.js?v=60"></script>
 </body>
 </html>

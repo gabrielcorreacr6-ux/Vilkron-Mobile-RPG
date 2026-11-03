@@ -89,7 +89,7 @@ Se o arquivo ainda não foi enviado, o jogo mostra o modelo padrão.
 
 HERÓIS NOVOS (v57)
 ------------------
-Rodar uma vez no Supabase (SQL Editor): supabase_v57.sql e depois supabase_v58.sql
+Rodar uma vez no Supabase (SQL Editor): supabase_v60.sql (já inclui o v57 e o v58)
 
 LOJA DE HERÓIS (v58): todos os heróis são vendidos por 15.000 de ouro (CONFIG.lojaHerois no jogo.js;
 no servidor, o preço fica na função comprar_heroi do supabase_v58.sql — mude nos dois lugares).

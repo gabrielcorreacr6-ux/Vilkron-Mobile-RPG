@@ -16,10 +16,11 @@
     lentidaoAgua: 0.6,             // na água todos andam a 60% (barco e serpente não)
     respawnMob: 180,               // 3 minutos
     respawnHeroi: 45,        // segundos para voltar depois de cair (fora da arena)
-    // XP de cada estrela: no 1º elo, 50 × a estrela (1ª = 50, 2ª = 100 ... 50ª = 2500);
-    // do 2º elo em diante, 1000 × (elo − 1) × a estrela (2º elo: 1000, 2000...; 3º elo: 2000, 4000...).
-    // O último elo não tem limite de 50 estrelas.
-    xpPrimeiroElo: 50, xpPorEloAcima: 1000,
+    // XP de cada estrela (v60): 50 × o número da estrela, sem recomeçar a cada elo
+    // (1ª = 50, 2ª = 100, 3ª = 150 ... 50ª = 2500, 51ª = 2550 ...).
+    // As estrelas contam sem parar: o 1º elo vai da 1ª à 50ª, o 2º da 51ª à 100ª, e assim por diante.
+    // O último elo não tem limite.
+    xpPrimeiroElo: 50,
     temporadaMeses: 2, temporadaVolta: 2,   // a cada 2 meses a temporada vira e todos voltam 2 elos
     // cor de cada elo (Beginner ... Immortal God) acima da barra de vida
     coresElo: ['#b9c0c4', '#7dd38a', '#5aa9ff', '#3ad6c4', '#b58cff', '#ff9d3c', '#ff5a5a', '#ff6fd0', '#ffd34d'],
@@ -184,15 +185,16 @@
 
   /* ======================= PROGRESSÃO ======================= */
   const C = () => P.classes[P.classe] || { xp: 0, estrelas: 0 };
+  // elo pelas estrelas (contagem sem parar): Beginner 0 a 50, Apprentice 51 a 100, Junior 101 a 150...
+  // estrelas = total; dentro = quantas já tem neste elo (1 a 50); de/ate = primeira e última estrela do elo (ate = null no último)
   function rankInfo(estrelas) {
-    const i = Math.min(CONFIG.ranks.length - 1, Math.floor(estrelas / CONFIG.estrelasPorRank));
-    const dentro = i === CONFIG.ranks.length - 1 ? estrelas - i * CONFIG.estrelasPorRank : estrelas % CONFIG.estrelasPorRank;
-    return { indice: i, nome: CONFIG.ranks[i], estrelas: dentro };
+    const n = Math.max(0, Math.floor(estrelas || 0)), por = CONFIG.estrelasPorRank, ult = CONFIG.ranks.length - 1;
+    const i = Math.min(ult, n <= por ? 0 : Math.floor((n - 1) / por));
+    return { indice: i, nome: CONFIG.ranks[i], estrelas: n, dentro: n - i * por, de: i === 0 ? 0 : i * por + 1, ate: i === ult ? null : (i + 1) * por };
   }
-  // XP que falta para a próxima estrela, dado quantas estrelas a classe já tem
+  // XP para ganhar a próxima estrela: 50 × o número dela (a 1ª pede 50, a 2ª 100, a 51ª 2550...)
   function xpProximaEstrela(estrelas) {
-    const r = rankInfo(estrelas), n = r.estrelas + 1;
-    return r.indice === 0 ? CONFIG.xpPrimeiroElo * n : CONFIG.xpPorEloAcima * r.indice * n;
+    return CONFIG.xpPrimeiroElo * (Math.max(0, Math.floor(estrelas || 0)) + 1);
   }
   function subirEstrelas(c) {
     let subiu = 0;
@@ -213,7 +215,7 @@
       const c = perfil.classes[k], r = rankInfo(c.estrelas || 0);
       const elo = Math.max(0, r.indice - CONFIG.temporadaVolta * viradas);
       if (elo === r.indice) return;
-      c.estrelas = elo * CONFIG.estrelasPorRank + Math.min(r.estrelas, CONFIG.estrelasPorRank - 1);
+      c.estrelas = elo * CONFIG.estrelasPorRank + Math.max(elo === 0 ? 0 : 1, Math.min(r.dentro, CONFIG.estrelasPorRank));
       c.xp = 0;
     });
     perfil.temporada = atual;
@@ -1236,11 +1238,11 @@
   function selo(e, estrelas, comEstrelas) {
     if (estrelas === undefined || estrelas === null) return;
     const r = rankInfo(estrelas), ultimo = r.indice === CONFIG.ranks.length - 1;
-    const aura = ultimo && r.estrelas > 50;
+    const aura = ultimo && r.dentro > 50;
     const chave = r.indice + '|' + (comEstrelas ? r.estrelas : '-');
     if (e.seloChave === chave) return;
     e.seloChave = chave;
-    e.seloFumaca = aura && comEstrelas ? Math.floor((r.estrelas - 50) / 150) : 0;
+    e.seloFumaca = aura && comEstrelas ? Math.floor((r.dentro - 50) / 150) : 0;
     if (!temDOM) { e.seloSprite = e.seloSprite || { position: new THREE.Vector3(), visible: true }; return; }
     if (!e.seloSprite) {
       const c = document.createElement('canvas'); c.width = 256; c.height = 48;
@@ -5473,7 +5475,7 @@
     if (!temDOM || !P.classe) return;
     const c = C(), r = rankInfo(c.estrelas), h = E.heroi;
     $('hudMapa').textContent = E.def ? E.def.nome : '';
-    $('hudRank').innerHTML = `${nomeHeroi(P.classe, P.genero)} · <b style="color:${CONFIG.coresElo[r.indice]}">${r.nome}</b> ★ ${r.estrelas}${r.indice < CONFIG.ranks.length - 1 ? '/50' : ''}` +
+    $('hudRank').innerHTML = `${nomeHeroi(P.classe, P.genero)} · <b style="color:${CONFIG.coresElo[r.indice]}">${r.nome}</b> ★ ${r.estrelas}${r.ate ? '/' + r.ate : ''}` +
       ` · <small>${Math.floor(c.xp)}/${xpProximaEstrela(c.estrelas)} XP</small>` +
       (c.protecao ? ' · <span class="prot">proteção</span>' : '');
     $('hudOuro').textContent = Math.floor(P.ouro);
@@ -5483,6 +5485,26 @@
     $('bHab2').querySelector('span').textContent = cls.habs[1];
     $('bHab3').querySelector('span').textContent = cls.habs[2];
     if (h) $('hudVida').style.width = (100 * h.vida / h.vidaMax) + '%';
+    hudElos();
+  }
+  // painel do topo: tocar abre/fecha a lista de elos (qual é o seu, quantos existem e as estrelas de cada um)
+  function hudElos() {
+    const box = $('hudElos'); if (!box || box.hidden || !P.classe) return;
+    const c = C(), r = rankInfo(c.estrelas), por = CONFIG.estrelasPorRank, n = CONFIG.ranks.length;
+    const falta = r.ate ? r.ate - r.estrelas : 0;
+    box.innerHTML = `<div class="eloResumo">Seu elo: <b style="color:${CONFIG.coresElo[r.indice]}">${r.nome}</b> (${r.indice + 1}º de ${n}) · ★ ${r.estrelas}` +
+      (r.ate ? ` · faltam ${falta} estrela${falta === 1 ? '' : 's'} para ${CONFIG.ranks[r.indice + 1]}` : ' · último elo') + `</div>` +
+      CONFIG.ranks.map((nome, i) => {
+        const de = i === 0 ? 1 : i * por + 1, ate = i === n - 1 ? null : (i + 1) * por;
+        return `<div class="eloLinha${i === r.indice ? ' atual' : ''}"><i style="background:${CONFIG.coresElo[i]}"></i><span style="color:${CONFIG.coresElo[i]}">${nome}</span>` +
+          `<small>${ate ? '★ ' + de + ' a ' + ate + ' · ' + por + ' estrelas' : '★ ' + de + ' em diante · sem limite'}</small></div>`;
+      }).join('') +
+      `<div class="eloNota">Cada estrela pede 50 de XP a mais que a anterior (1ª: 50, 2ª: 100, 3ª: 150...). As estrelas contam sem recomeçar no elo novo.</div>`;
+  }
+  function ligarPainelElos() {
+    const painel = $('painel'), box = $('hudElos'); if (!painel || !box) return;
+    painel.addEventListener('pointerdown', ev => ev.stopPropagation());
+    painel.addEventListener('click', ev => { ev.stopPropagation(); box.hidden = !box.hidden; painel.classList.toggle('aberto', !box.hidden); hudElos(); });
   }
   function hudQuadro() {
     if (!temDOM || !E.heroi) return;
@@ -6099,6 +6121,7 @@
     if (voltou) setTimeout(() => aviso('A viagem acabou: você voltou para ' + voltou + ' (só a cidadania deixa ficar)'), 1500);
     if (temDOM) {
       ligarControles();
+      ligarPainelElos();
       $('carregando').hidden = true;
       relogio = new THREE.Clock();
       // herói que não é (mais) seu: vai para outro que você tem; sem nenhum, escolhe o primeiro
